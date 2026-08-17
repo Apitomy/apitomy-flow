@@ -1,0 +1,411 @@
+package io.apitomy.flow.engine;
+
+import io.apitomy.flow.model.*;
+import io.apitomy.flow.spi.*;
+import io.apitomy.flow.validation.ValidationProblem;
+import io.apitomy.flow.validation.WorkflowValidator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.time.Instant;
+import java.util.*;
+
+public class WorkflowEngine {
+
+    private static final Logger log = LoggerFactory.getLogger(WorkflowEngine.class);
+    private static final int MAX_TRANSITIONS = 100;
+
+    private final Map<String, NodeExecutor> executors;
+    private final List<WorkflowEventListener> listeners;
+    private final WorkflowErrorHandler errorHandler;
+    private final WorkflowValidator validator;
+    private final ConditionEvaluator conditionEvaluator;
+
+    public WorkflowEngine(List<NodeExecutor> executors, List<WorkflowEventListener> listeners,
+                          WorkflowErrorHandler errorHandler) {
+        this.executors = new HashMap<>();
+        for (NodeExecutor executor : executors) {
+            this.executors.put(executor.actionType(), executor);
+        }
+        this.listeners = listeners != null ? listeners : List.of();
+        this.errorHandler = errorHandler != null ? errorHandler : new DefaultErrorHandler();
+        this.validator = new WorkflowValidator();
+        this.conditionEvaluator = new ConditionEvaluator();
+    }
+
+    public WorkflowInstance startWorkflow(Workflow workflow, Map<String, Object> initialContext) {
+        return startWorkflow(workflow, initialContext, UUID.randomUUID().toString());
+    }
+
+    public WorkflowInstance startWorkflow(Workflow workflow, Map<String, Object> initialContext,
+                                          String instanceId) {
+        // Validate definition
+        List<ValidationProblem> problems = validator.validate(workflow);
+        if (validator.hasErrors(problems)) {
+            throw new WorkflowValidationException(problems);
+        }
+
+        // Find start node and validate inputs
+        WorkflowNode startNode = workflow.findStartNode();
+        validateInputs(startNode, initialContext);
+
+        // Create instance
+        Instant now = Instant.now();
+        WorkflowInstance instance = WorkflowInstance.builder()
+            .id(instanceId)
+            .workflowId(workflow.id())
+            .currentNodeId(startNode.id())
+            .status(InstanceStatus.RUNNING)
+            .context(new HashMap<>(initialContext))
+            .createdOn(now)
+            .updatedOn(now)
+            .build();
+
+        // Fire started event
+        WorkflowInstance startedInstance = instance;
+        fireEvent(l -> l.onWorkflowStarted(startedInstance));
+
+        // Enter start node, add to history
+        fireEvent(l -> l.onNodeEntered(startedInstance, startNode));
+        instance = instance.toBuilder()
+            .addHistory(new HistoryEntry(startNode.id(), startNode.name(),
+                null, null, now, now, Map.of()))
+            .build();
+
+        // Advance through the graph
+        return advance(workflow, instance);
+    }
+
+    public WorkflowInstance completeCurrentNode(Workflow workflow, WorkflowInstance instance,
+                                                 NodeResult result) {
+        if (instance.status() != InstanceStatus.WAITING) {
+            throw new IllegalStateException(
+                "Cannot complete node: instance is not in WAITING status (current: " + instance.status() + ")");
+        }
+
+        WorkflowNode currentNode = workflow.findNodeById(instance.currentNodeId());
+
+        // Merge result into context
+        WorkflowInstance updated = instance.toBuilder()
+            .mergeContext(result.output())
+            .status(InstanceStatus.RUNNING)
+            .updatedOn(Instant.now())
+            .build();
+
+        // Fire completed event
+        fireEvent(l -> l.onNodeCompleted(updated, currentNode, result));
+
+        // Advance
+        return advance(workflow, updated);
+    }
+
+    public WorkflowInstance cancelWorkflow(Workflow workflow, WorkflowInstance instance) {
+        if (instance.status() == InstanceStatus.COMPLETED
+                || instance.status() == InstanceStatus.FAILED
+                || instance.status() == InstanceStatus.CANCELLED) {
+            return instance;
+        }
+
+        WorkflowInstance cancelled = instance.toBuilder()
+            .status(InstanceStatus.CANCELLED)
+            .updatedOn(Instant.now())
+            .build();
+        fireEvent(l -> l.onWorkflowCancelled(cancelled));
+        return cancelled;
+    }
+
+    public boolean matchesEvent(Workflow workflow, WorkflowInstance instance, Map<String, Object> event) {
+        if (instance.status() != InstanceStatus.WAITING) {
+            return false;
+        }
+
+        WorkflowNode currentNode = workflow.findNodeById(instance.currentNodeId());
+        if (currentNode == null || currentNode.type() != NodeType.RECEIVE_EVENT) {
+            return false;
+        }
+
+        // Check event type
+        String expectedType = (String) currentNode.config().get("eventType");
+        if (expectedType == null) {
+            return false;
+        }
+        Object actualType = event.get("type");
+        if (!expectedType.equals(actualType)) {
+            return false;
+        }
+
+        // Check match expressions
+        Object matchConfig = currentNode.config().get("match");
+        if (matchConfig instanceof List<?> matchExpressions) {
+            for (Object expr : matchExpressions) {
+                if (expr instanceof String expression) {
+                    try {
+                        if (!conditionEvaluator.evaluate(expression, instance.context(), event)) {
+                            return false;
+                        }
+                    } catch (ConditionEvaluationException e) {
+                        log.warn("Event match expression failed: {}", e.getMessage());
+                        return false;
+                    }
+                }
+            }
+        }
+
+        return true;
+    }
+
+    private WorkflowInstance advance(Workflow workflow, WorkflowInstance instance) {
+        int transitions = 0;
+
+        while (true) {
+            if (transitions++ >= MAX_TRANSITIONS) {
+                return failWorkflow(instance,
+                    "Exceeded transition limit (" + MAX_TRANSITIONS + ") — possible infinite loop",
+                    null);
+            }
+
+            WorkflowNode currentNode = workflow.findNodeById(instance.currentNodeId());
+
+            // Check if we've entered the current node (has history entry)
+            // If no history entry exists for current node, we transitioned here via error handler
+            // and haven't entered the node yet - need to handle it directly
+            boolean hasEnteredCurrentNode = !instance.history().isEmpty() &&
+                instance.history().getLast().nodeId().equals(currentNode.id());
+
+            // Handle terminal/waiting nodes reached via error handler transition
+            // These nodes haven't been entered yet (no history entry)
+            if (!hasEnteredCurrentNode) {
+                switch (currentNode.type()) {
+                    case END -> {
+                        instance = instance.toBuilder()
+                            .status(InstanceStatus.COMPLETED)
+                            .updatedOn(Instant.now())
+                            .build();
+                        instance = completeCurrentHistoryEntry(instance, Instant.now());
+                        WorkflowInstance completedInstance = instance;
+                        fireEvent(l -> l.onWorkflowCompleted(completedInstance));
+                        return instance;
+                    }
+                    case HUMAN_TASK, RECEIVE_EVENT -> {
+                        instance = instance.toBuilder()
+                            .status(InstanceStatus.WAITING)
+                            .updatedOn(Instant.now())
+                            .build();
+                        return instance;
+                    }
+                }
+            }
+
+            // For START and ACTION nodes, or nodes we've already entered, continue with normal edge selection
+            WorkflowEdge selectedEdge = selectEdge(workflow, instance, currentNode);
+            if (selectedEdge == null) {
+                // No matching edge — call error handler
+                ErrorResolution resolution;
+                try {
+                    resolution = errorHandler.handleNoMatchingEdge(instance, currentNode);
+                } catch (Exception e) {
+                    return failWorkflow(instance, "Error handler threw: " + e.getMessage(), e);
+                }
+                instance = applyResolution(workflow, instance, currentNode, resolution);
+                if (instance.status() != InstanceStatus.RUNNING) return instance;
+                continue;
+            }
+
+            // Fire edge event
+            WorkflowInstance edgeInstance = instance;
+            fireEvent(l -> l.onEdgeFollowed(edgeInstance, selectedEdge));
+
+            // Transition to target node
+            WorkflowNode targetNode = workflow.findNodeById(selectedEdge.target());
+            Instant now = Instant.now();
+
+            // Mark current history entry as completed
+            instance = completeCurrentHistoryEntry(instance, now);
+
+            // Enter target node
+            instance = instance.toBuilder()
+                .currentNodeId(targetNode.id())
+                .updatedOn(now)
+                .addHistory(new HistoryEntry(targetNode.id(), targetNode.name(),
+                    selectedEdge.id(), selectedEdge.condition(), now, null, null))
+                .build();
+
+            WorkflowInstance enteredInstance = instance;
+            fireEvent(l -> l.onNodeEntered(enteredInstance, targetNode));
+
+            // Execute based on node type
+            switch (targetNode.type()) {
+                case ACTION -> {
+                    instance = executeActionNode(workflow, instance, targetNode);
+                    if (instance.status() != InstanceStatus.RUNNING) return instance;
+                }
+                case HUMAN_TASK, RECEIVE_EVENT -> {
+                    instance = instance.toBuilder()
+                        .status(InstanceStatus.WAITING)
+                        .updatedOn(Instant.now())
+                        .build();
+                    return instance;
+                }
+                case END -> {
+                    instance = instance.toBuilder()
+                        .status(InstanceStatus.COMPLETED)
+                        .updatedOn(Instant.now())
+                        .build();
+                    instance = completeCurrentHistoryEntry(instance, Instant.now());
+                    WorkflowInstance completedInstance = instance;
+                    fireEvent(l -> l.onWorkflowCompleted(completedInstance));
+                    return instance;
+                }
+                default -> {
+                    return failWorkflow(instance, "Unexpected node type: " + targetNode.type(), null);
+                }
+            }
+        }
+    }
+
+    private WorkflowInstance executeActionNode(Workflow workflow, WorkflowInstance instance,
+                                               WorkflowNode actionNode) {
+        String actionType = (String) actionNode.config().get("actionType");
+        NodeExecutor executor = executors.get(actionType);
+        if (executor == null) {
+            return failWorkflow(instance, "No executor found for action type: " + actionType, null);
+        }
+
+        while (true) {
+            NodeResult result;
+            try {
+                result = executor.execute(new NodeExecutionContext(
+                    actionNode, instance.context(), actionNode.config()));
+            } catch (Exception e) {
+                ErrorResolution resolution;
+                try {
+                    resolution = errorHandler.handleNodeError(instance, actionNode, null, e);
+                } catch (Exception handlerError) {
+                    return failWorkflow(instance, "Error handler threw: " + handlerError.getMessage(), handlerError);
+                }
+                if (resolution.action() == ErrorAction.RETRY) {
+                    continue;
+                }
+                return applyResolution(workflow, instance, actionNode, resolution);
+            }
+
+            if (result.status() == NodeResultStatus.FAILED) {
+                ErrorResolution resolution;
+                try {
+                    resolution = errorHandler.handleNodeError(instance, actionNode, result, null);
+                } catch (Exception handlerError) {
+                    return failWorkflow(instance, "Error handler threw: " + handlerError.getMessage(), handlerError);
+                }
+                if (resolution.action() == ErrorAction.RETRY) {
+                    continue;
+                }
+                return applyResolution(workflow, instance, actionNode, resolution);
+            }
+
+            // Success — merge output, fire completed, continue
+            instance = instance.toBuilder()
+                .mergeContext(result.output())
+                .updatedOn(Instant.now())
+                .build();
+
+            WorkflowInstance completedInstance = instance;
+            fireEvent(l -> l.onNodeCompleted(completedInstance, actionNode, result));
+
+            return instance;
+        }
+    }
+
+    private WorkflowEdge selectEdge(Workflow workflow, WorkflowInstance instance,
+                                     WorkflowNode node) {
+        List<WorkflowEdge> outgoing = workflow.getOutgoingEdges(node.id());
+        WorkflowEdge defaultEdge = null;
+
+        for (WorkflowEdge edge : outgoing) {
+            if (edge.isDefault()) {
+                defaultEdge = edge;
+                continue;
+            }
+            try {
+                if (conditionEvaluator.evaluate(edge.condition(), instance.context())) {
+                    return edge;
+                }
+            } catch (ConditionEvaluationException e) {
+                log.warn("Condition evaluation failed for edge {}: {}", edge.id(), e.getMessage());
+                // Treated as node error per spec
+                return null;
+            }
+        }
+
+        return defaultEdge;
+    }
+
+    private WorkflowInstance applyResolution(Workflow workflow, WorkflowInstance instance,
+                                             WorkflowNode node, ErrorResolution resolution) {
+        return switch (resolution.action()) {
+            case FAIL -> failWorkflow(instance, "Workflow failed at node: " + node.id(), null);
+            case RETRY -> instance;
+            case TRANSITION -> {
+                WorkflowNode target = workflow.findNodeById(resolution.targetNodeId());
+                if (target == null) {
+                    yield failWorkflow(instance,
+                        "Error handler TRANSITION target not found: " + resolution.targetNodeId(), null);
+                }
+                yield instance.toBuilder()
+                    .currentNodeId(target.id())
+                    .updatedOn(Instant.now())
+                    .build();
+            }
+        };
+    }
+
+    private WorkflowInstance failWorkflow(WorkflowInstance instance, String reason, Exception error) {
+        WorkflowInstance failed = instance.toBuilder()
+            .status(InstanceStatus.FAILED)
+            .failureReason(reason)
+            .updatedOn(Instant.now())
+            .build();
+        fireEvent(l -> l.onWorkflowFailed(failed, error));
+        return failed;
+    }
+
+    private WorkflowInstance completeCurrentHistoryEntry(WorkflowInstance instance, Instant completedOn) {
+        List<HistoryEntry> history = new ArrayList<>(instance.history());
+        if (!history.isEmpty()) {
+            HistoryEntry last = history.getLast();
+            if (last.completedOn() == null) {
+                history.set(history.size() - 1, new HistoryEntry(
+                    last.nodeId(), last.nodeName(), last.edgeId(), last.edgeCondition(),
+                    last.enteredOn(), completedOn, last.output()));
+            }
+        }
+        return instance.toBuilder().history(history).build();
+    }
+
+    private void fireEvent(java.util.function.Consumer<WorkflowEventListener> action) {
+        for (WorkflowEventListener listener : listeners) {
+            try {
+                action.accept(listener);
+            } catch (Exception e) {
+                log.warn("Event listener threw exception", e);
+            }
+        }
+    }
+
+    private void validateInputs(WorkflowNode startNode, Map<String, Object> initialContext) {
+        Object inputsDef = startNode.config().get("inputs");
+        if (inputsDef instanceof List<?> inputs) {
+            for (Object inputObj : inputs) {
+                if (inputObj instanceof Map<?, ?> input) {
+                    String name = (String) input.get("name");
+                    Object required = input.get("required");
+                    if (Boolean.TRUE.equals(required) && !initialContext.containsKey(name)) {
+                        throw new IllegalArgumentException("Missing required input: " + name);
+                    }
+                    if (Boolean.TRUE.equals(required) && initialContext.get(name) == null) {
+                        throw new IllegalArgumentException("Required input is null: " + name);
+                    }
+                }
+            }
+        }
+    }
+}
