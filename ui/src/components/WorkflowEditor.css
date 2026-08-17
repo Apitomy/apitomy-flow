@@ -4,6 +4,11 @@
   height: 100%;
   width: 100%;
 }
+.workflow-editor__body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
 .workflow-editor__canvas {
   flex: 1;
 }

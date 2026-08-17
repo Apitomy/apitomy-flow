@@ -1,4 +1,4 @@
-import { useCallback, useMemo, type DragEvent } from 'react';
+import { useCallback, useMemo, useState, type DragEvent } from 'react';
 import {
   ReactFlow,
   Background,
@@ -20,6 +20,7 @@ import { generateNodeId, generateEdgeId } from '../utils/id.ts';
 import { nodeTypes } from './nodes/nodeTypes.ts';
 import { edgeTypes } from './edges/edgeTypes.ts';
 import { NodePalette } from './panels/NodePalette.tsx';
+import { PropertiesPanel } from './panels/PropertiesPanel.tsx';
 import './WorkflowEditor.css';
 
 export interface WorkflowEditorProps {
@@ -36,6 +37,12 @@ function WorkflowEditorInner({ workflow, onChange, validationProblems }: Workflo
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const { screenToFlowPosition } = useReactFlow();
+
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+
+  const selectedNode = nodes.find(n => n.id === selectedNodeId);
+  const selectedEdge = edges.find(e => e.id === selectedEdgeId);
 
   const nodesWithValidation = useMemo(() => {
     if (!validationProblems?.length) return nodes;
@@ -113,27 +120,69 @@ function WorkflowEditorInner({ workflow, onChange, validationProblems }: Workflo
     event.dataTransfer.dropEffect = 'move';
   }, []);
 
+  const onNodeClick = useCallback((_: any, node: Node) => {
+    setSelectedNodeId(node.id);
+    setSelectedEdgeId(null);
+  }, []);
+
+  const onEdgeClick = useCallback((_: any, edge: Edge) => {
+    setSelectedEdgeId(edge.id);
+    setSelectedNodeId(null);
+  }, []);
+
+  const onPaneClick = useCallback(() => {
+    setSelectedNodeId(null);
+    setSelectedEdgeId(null);
+  }, []);
+
+  const onNodeDataChange = useCallback((id: string, dataUpdate: Partial<FlowNodeData>) => {
+    setNodes(nds => {
+      const updated = nds.map(n => n.id === id ? { ...n, data: { ...n.data, ...dataUpdate } } : n);
+      setTimeout(() => emitChange(updated, edges), 0);
+      return updated;
+    });
+  }, [setNodes, edges, emitChange]);
+
+  const onEdgeDataChange = useCallback((id: string, dataUpdate: Record<string, any>) => {
+    setEdges(eds => {
+      const updated = eds.map(e => e.id === id ? { ...e, data: { ...e.data, ...dataUpdate } } : e);
+      setTimeout(() => emitChange(nodes, updated), 0);
+      return updated;
+    });
+  }, [setEdges, nodes, emitChange]);
+
   return (
     <div className="workflow-editor">
       <NodePalette />
-      <div className="workflow-editor__canvas">
-        <ReactFlow
-          nodes={nodesWithValidation}
-          edges={edges}
-          onNodesChange={handleNodesChange}
-          onEdgesChange={handleEdgesChange}
-          onConnect={onConnect}
-          onDrop={onDrop}
-          onDragOver={onDragOver}
-          nodeTypes={nodeTypes}
-          edgeTypes={edgeTypes}
-          defaultEdgeOptions={{ type: 'conditional' }}
-          fitView
-        >
-          <Background />
-          <Controls />
-          <MiniMap />
-        </ReactFlow>
+      <div className="workflow-editor__body">
+        <div className="workflow-editor__canvas">
+          <ReactFlow
+            nodes={nodesWithValidation}
+            edges={edges}
+            onNodesChange={handleNodesChange}
+            onEdgesChange={handleEdgesChange}
+            onConnect={onConnect}
+            onDrop={onDrop}
+            onDragOver={onDragOver}
+            onNodeClick={onNodeClick}
+            onEdgeClick={onEdgeClick}
+            onPaneClick={onPaneClick}
+            nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
+            defaultEdgeOptions={{ type: 'conditional' }}
+            fitView
+          >
+            <Background />
+            <Controls />
+            <MiniMap />
+          </ReactFlow>
+        </div>
+        <PropertiesPanel
+          selectedNode={selectedNode}
+          selectedEdge={selectedEdge}
+          onNodeChange={onNodeDataChange}
+          onEdgeChange={onEdgeDataChange}
+        />
       </div>
     </div>
   );
