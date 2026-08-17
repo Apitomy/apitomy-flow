@@ -76,6 +76,44 @@ public class WorkflowEngine {
         return advance(workflow, instance);
     }
 
+    public WorkflowInstance completeCurrentNode(Workflow workflow, WorkflowInstance instance,
+                                                 NodeResult result) {
+        if (instance.status() != InstanceStatus.WAITING) {
+            throw new IllegalStateException(
+                "Cannot complete node: instance is not in WAITING status (current: " + instance.status() + ")");
+        }
+
+        WorkflowNode currentNode = workflow.findNodeById(instance.currentNodeId());
+
+        // Merge result into context
+        WorkflowInstance updated = instance.toBuilder()
+            .mergeContext(result.output())
+            .status(InstanceStatus.RUNNING)
+            .updatedOn(Instant.now())
+            .build();
+
+        // Fire completed event
+        fireEvent(l -> l.onNodeCompleted(updated, currentNode, result));
+
+        // Advance
+        return advance(workflow, updated);
+    }
+
+    public WorkflowInstance cancelWorkflow(Workflow workflow, WorkflowInstance instance) {
+        if (instance.status() == InstanceStatus.COMPLETED
+                || instance.status() == InstanceStatus.FAILED
+                || instance.status() == InstanceStatus.CANCELLED) {
+            return instance;
+        }
+
+        WorkflowInstance cancelled = instance.toBuilder()
+            .status(InstanceStatus.CANCELLED)
+            .updatedOn(Instant.now())
+            .build();
+        fireEvent(l -> l.onWorkflowCancelled(cancelled));
+        return cancelled;
+    }
+
     private WorkflowInstance advance(Workflow workflow, WorkflowInstance instance) {
         int transitions = 0;
 
