@@ -5,6 +5,7 @@ export interface FlowNodeData extends Record<string, unknown> {
   name: string;
   nodeType: WorkflowNode['type'];
   config: Record<string, any>;
+  validationSeverity?: 'error' | 'warning';
 }
 
 export function toReactFlowNodes(nodes: WorkflowNode[]): Node<FlowNodeData>[] {
