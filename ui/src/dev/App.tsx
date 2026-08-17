@@ -2,10 +2,14 @@ import { createRoot } from 'react-dom/client';
 import { useState } from 'react';
 import '@patternfly/patternfly/patternfly.css';
 import '@xyflow/react/dist/style.css';
+import { WorkflowEditor } from '../components/WorkflowEditor.tsx';
+import { cveTriage } from './sampleWorkflows.ts';
+import { type Workflow } from '../types/workflow.ts';
 import './App.css';
 
 function App() {
   const [tab, setTab] = useState<'editor' | 'viewer'>('editor');
+  const [workflow, setWorkflow] = useState<Workflow>(cveTriage);
 
   return (
     <div className="dev-app">
@@ -18,7 +22,9 @@ function App() {
         </button>
       </div>
       <div className="dev-app__content">
-        {tab === 'editor' && <div style={{ padding: 20 }}>WorkflowEditor will render here (Task 3)</div>}
+        {tab === 'editor' && (
+          <WorkflowEditor workflow={workflow} onChange={setWorkflow} />
+        )}
         {tab === 'viewer' && <div style={{ padding: 20 }}>WorkflowViewer will render here (Task 7)</div>}
       </div>
     </div>

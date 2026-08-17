@@ -1,0 +1,23 @@
+.node-palette {
+  display: flex;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--pf-t--global--background--color--secondary--default, #f0f0f0);
+  border-bottom: 1px solid var(--pf-t--global--border--color--default, #d2d2d2);
+  flex-wrap: wrap;
+}
+.node-palette__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--pf-t--global--border--color--default, #d2d2d2);
+  background: var(--pf-t--global--background--color--primary--default, #fff);
+  cursor: grab;
+  font-size: 13px;
+  user-select: none;
+}
+.node-palette__item:hover {
+  border-color: var(--pf-t--global--color--brand--default, #06c);
+}
