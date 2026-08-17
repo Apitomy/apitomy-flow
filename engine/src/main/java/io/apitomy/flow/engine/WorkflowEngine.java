@@ -126,7 +126,37 @@ public class WorkflowEngine {
 
             WorkflowNode currentNode = workflow.findNodeById(instance.currentNodeId());
 
-            // Find the next edge
+            // Check if we've entered the current node (has history entry)
+            // If no history entry exists for current node, we transitioned here via error handler
+            // and haven't entered the node yet - need to handle it directly
+            boolean hasEnteredCurrentNode = !instance.history().isEmpty() &&
+                instance.history().getLast().nodeId().equals(currentNode.id());
+
+            // Handle terminal/waiting nodes reached via error handler transition
+            // These nodes haven't been entered yet (no history entry)
+            if (!hasEnteredCurrentNode) {
+                switch (currentNode.type()) {
+                    case END -> {
+                        instance = instance.toBuilder()
+                            .status(InstanceStatus.COMPLETED)
+                            .updatedOn(Instant.now())
+                            .build();
+                        instance = completeCurrentHistoryEntry(instance, Instant.now());
+                        WorkflowInstance completedInstance = instance;
+                        fireEvent(l -> l.onWorkflowCompleted(completedInstance));
+                        return instance;
+                    }
+                    case HUMAN_TASK, RECEIVE_EVENT -> {
+                        instance = instance.toBuilder()
+                            .status(InstanceStatus.WAITING)
+                            .updatedOn(Instant.now())
+                            .build();
+                        return instance;
+                    }
+                }
+            }
+
+            // For START and ACTION nodes, or nodes we've already entered, continue with normal edge selection
             WorkflowEdge selectedEdge = selectEdge(workflow, instance, currentNode);
             if (selectedEdge == null) {
                 // No matching edge — call error handler
@@ -201,40 +231,48 @@ public class WorkflowEngine {
             return failWorkflow(instance, "No executor found for action type: " + actionType, null);
         }
 
-        NodeResult result;
-        try {
-            result = executor.execute(new NodeExecutionContext(
-                actionNode, instance.context(), actionNode.config()));
-        } catch (Exception e) {
-            ErrorResolution resolution;
+        while (true) {
+            NodeResult result;
             try {
-                resolution = errorHandler.handleNodeError(instance, actionNode, null, e);
-            } catch (Exception handlerError) {
-                return failWorkflow(instance, "Error handler threw: " + handlerError.getMessage(), handlerError);
+                result = executor.execute(new NodeExecutionContext(
+                    actionNode, instance.context(), actionNode.config()));
+            } catch (Exception e) {
+                ErrorResolution resolution;
+                try {
+                    resolution = errorHandler.handleNodeError(instance, actionNode, null, e);
+                } catch (Exception handlerError) {
+                    return failWorkflow(instance, "Error handler threw: " + handlerError.getMessage(), handlerError);
+                }
+                if (resolution.action() == ErrorAction.RETRY) {
+                    continue;
+                }
+                return applyResolution(workflow, instance, actionNode, resolution);
             }
-            return applyResolution(workflow, instance, actionNode, resolution);
-        }
 
-        if (result.status() == NodeResultStatus.FAILED) {
-            ErrorResolution resolution;
-            try {
-                resolution = errorHandler.handleNodeError(instance, actionNode, result, null);
-            } catch (Exception handlerError) {
-                return failWorkflow(instance, "Error handler threw: " + handlerError.getMessage(), handlerError);
+            if (result.status() == NodeResultStatus.FAILED) {
+                ErrorResolution resolution;
+                try {
+                    resolution = errorHandler.handleNodeError(instance, actionNode, result, null);
+                } catch (Exception handlerError) {
+                    return failWorkflow(instance, "Error handler threw: " + handlerError.getMessage(), handlerError);
+                }
+                if (resolution.action() == ErrorAction.RETRY) {
+                    continue;
+                }
+                return applyResolution(workflow, instance, actionNode, resolution);
             }
-            return applyResolution(workflow, instance, actionNode, resolution);
+
+            // Success — merge output, fire completed, continue
+            instance = instance.toBuilder()
+                .mergeContext(result.output())
+                .updatedOn(Instant.now())
+                .build();
+
+            WorkflowInstance completedInstance = instance;
+            fireEvent(l -> l.onNodeCompleted(completedInstance, actionNode, result));
+
+            return instance;
         }
-
-        // Success — merge output, fire completed, continue
-        instance = instance.toBuilder()
-            .mergeContext(result.output())
-            .updatedOn(Instant.now())
-            .build();
-
-        WorkflowInstance completedInstance = instance;
-        fireEvent(l -> l.onNodeCompleted(completedInstance, actionNode, result));
-
-        return instance;
     }
 
     private WorkflowEdge selectEdge(Workflow workflow, WorkflowInstance instance,
