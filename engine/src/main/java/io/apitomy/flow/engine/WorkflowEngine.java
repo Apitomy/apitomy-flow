@@ -114,6 +114,46 @@ public class WorkflowEngine {
         return cancelled;
     }
 
+    public boolean matchesEvent(Workflow workflow, WorkflowInstance instance, Map<String, Object> event) {
+        if (instance.status() != InstanceStatus.WAITING) {
+            return false;
+        }
+
+        WorkflowNode currentNode = workflow.findNodeById(instance.currentNodeId());
+        if (currentNode == null || currentNode.type() != NodeType.RECEIVE_EVENT) {
+            return false;
+        }
+
+        // Check event type
+        String expectedType = (String) currentNode.config().get("eventType");
+        if (expectedType == null) {
+            return false;
+        }
+        Object actualType = event.get("type");
+        if (!expectedType.equals(actualType)) {
+            return false;
+        }
+
+        // Check match expressions
+        Object matchConfig = currentNode.config().get("match");
+        if (matchConfig instanceof List<?> matchExpressions) {
+            for (Object expr : matchExpressions) {
+                if (expr instanceof String expression) {
+                    try {
+                        if (!conditionEvaluator.evaluate(expression, instance.context(), event)) {
+                            return false;
+                        }
+                    } catch (ConditionEvaluationException e) {
+                        log.warn("Event match expression failed: {}", e.getMessage());
+                        return false;
+                    }
+                }
+            }
+        }
+
+        return true;
+    }
+
     private WorkflowInstance advance(Workflow workflow, WorkflowInstance instance) {
         int transitions = 0;
 
