@@ -1,0 +1,7 @@
+.workflow-viewer {
+  height: 100%;
+  width: 100%;
+}
+.flow-node-visited { opacity: 1; }
+.flow-node-unvisited { opacity: 0.4; }
+.flow-node-current { box-shadow: 0 0 0 3px var(--pf-t--global--color--status--warning--default, #f0ab00); }

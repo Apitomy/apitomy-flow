@@ -3,7 +3,8 @@ import { useState } from 'react';
 import '@patternfly/patternfly/patternfly.css';
 import '@xyflow/react/dist/style.css';
 import { WorkflowEditor } from '../components/WorkflowEditor.tsx';
-import { cveTriage } from './sampleWorkflows.ts';
+import { WorkflowViewer } from '../components/WorkflowViewer.tsx';
+import { cveTriage, triageInstance } from './sampleWorkflows.ts';
 import { type Workflow } from '../types/workflow.ts';
 import './App.css';
 
@@ -25,7 +26,9 @@ function App() {
         {tab === 'editor' && (
           <WorkflowEditor workflow={workflow} onChange={setWorkflow} />
         )}
-        {tab === 'viewer' && <div style={{ padding: 20 }}>WorkflowViewer will render here (Task 7)</div>}
+        {tab === 'viewer' && (
+          <WorkflowViewer workflow={cveTriage} instance={triageInstance} />
+        )}
       </div>
     </div>
   );
