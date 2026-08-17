@@ -1,0 +1,23 @@
+.dev-app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+.dev-app__tabs {
+  padding: 8px 16px;
+  background: var(--pf-t--global--background--color--secondary--default, #f0f0f0);
+  border-bottom: 1px solid var(--pf-t--global--border--color--default, #d2d2d2);
+}
+.dev-app__tabs button {
+  margin-right: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.dev-app__tabs button.active {
+  font-weight: bold;
+  border-bottom: 2px solid var(--pf-t--global--color--brand--default, #06c);
+}
+.dev-app__content {
+  flex: 1;
+  overflow: hidden;
+}

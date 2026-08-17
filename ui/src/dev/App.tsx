@@ -1,0 +1,29 @@
+import { createRoot } from 'react-dom/client';
+import { useState } from 'react';
+import '@patternfly/patternfly/patternfly.css';
+import '@xyflow/react/dist/style.css';
+import './App.css';
+
+function App() {
+  const [tab, setTab] = useState<'editor' | 'viewer'>('editor');
+
+  return (
+    <div className="dev-app">
+      <div className="dev-app__tabs">
+        <button className={tab === 'editor' ? 'active' : ''} onClick={() => setTab('editor')}>
+          Editor
+        </button>
+        <button className={tab === 'viewer' ? 'active' : ''} onClick={() => setTab('viewer')}>
+          Viewer
+        </button>
+      </div>
+      <div className="dev-app__content">
+        {tab === 'editor' && <div style={{ padding: 20 }}>WorkflowEditor will render here (Task 3)</div>}
+        {tab === 'viewer' && <div style={{ padding: 20 }}>WorkflowViewer will render here (Task 7)</div>}
+      </div>
+    </div>
+  );
+}
+
+const root = createRoot(document.getElementById('root')!);
+root.render(<App />);
