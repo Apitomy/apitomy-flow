@@ -1,4 +1,4 @@
-import { type Workflow, type WorkflowNode, type WorkflowEdge } from '../types/workflow.ts';
+import { type Workflow, type WorkflowEdge } from '../types/workflow.ts';
 import { type ValidationProblem, type ValidationSeverity } from '../types/validation.ts';
 
 function problem(severity: ValidationSeverity, code: string, message: string, nodeId?: string, edgeId?: string): ValidationProblem {

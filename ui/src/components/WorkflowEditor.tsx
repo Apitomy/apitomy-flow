@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type DragEvent } from 'react';
+import { useCallback, useMemo, useState, useEffect, type DragEvent } from 'react';
 import {
   ReactFlow,
   Background,
@@ -17,10 +17,12 @@ import { type Workflow } from '../types/workflow.ts';
 import { type ValidationProblem } from '../types/validation.ts';
 import { type FlowNodeData, toReactFlowNodes, toReactFlowEdges, toWorkflow } from '../utils/conversion.ts';
 import { generateNodeId, generateEdgeId } from '../utils/id.ts';
+import { validateWorkflow } from '../validation/validateWorkflow.ts';
 import { nodeTypes } from './nodes/nodeTypes.ts';
 import { edgeTypes } from './edges/edgeTypes.ts';
 import { NodePalette } from './panels/NodePalette.tsx';
 import { PropertiesPanel } from './panels/PropertiesPanel.tsx';
+import { ProblemsPanel } from './panels/ProblemsPanel.tsx';
 import './WorkflowEditor.css';
 
 export interface WorkflowEditorProps {
@@ -30,19 +32,33 @@ export interface WorkflowEditorProps {
   onValidationChange?: (problems: ValidationProblem[]) => void;
 }
 
-function WorkflowEditorInner({ workflow, onChange, validationProblems }: WorkflowEditorProps) {
+function WorkflowEditorInner({ workflow, onChange, onValidationChange }: WorkflowEditorProps) {
   const initialNodes = useMemo(() => toReactFlowNodes(workflow.nodes), []);
   const initialEdges = useMemo(() => toReactFlowEdges(workflow.edges), []);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
-  const { screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition, fitView } = useReactFlow();
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
 
   const selectedNode = nodes.find(n => n.id === selectedNodeId);
   const selectedEdge = edges.find(e => e.id === selectedEdgeId);
+
+  const currentWorkflow = useMemo(
+    () => toWorkflow(workflow.id, workflow.name, nodes, edges),
+    [workflow.id, workflow.name, nodes, edges],
+  );
+
+  const validationProblems = useMemo(
+    () => validateWorkflow(currentWorkflow),
+    [currentWorkflow],
+  );
+
+  useEffect(() => {
+    onValidationChange?.(validationProblems);
+  }, [validationProblems, onValidationChange]);
 
   const nodesWithValidation = useMemo(() => {
     if (!validationProblems?.length) return nodes;
@@ -151,6 +167,20 @@ function WorkflowEditorInner({ workflow, onChange, validationProblems }: Workflo
     });
   }, [setEdges, nodes, emitChange]);
 
+  const onProblemClick = useCallback((problem: ValidationProblem) => {
+    if (problem.nodeId) {
+      setSelectedNodeId(problem.nodeId);
+      setSelectedEdgeId(null);
+      const node = nodes.find(n => n.id === problem.nodeId);
+      if (node) {
+        fitView({ nodes: [node], duration: 300 });
+      }
+    } else if (problem.edgeId) {
+      setSelectedEdgeId(problem.edgeId);
+      setSelectedNodeId(null);
+    }
+  }, [nodes, fitView]);
+
   return (
     <div className="workflow-editor">
       <NodePalette />
@@ -184,6 +214,7 @@ function WorkflowEditorInner({ workflow, onChange, validationProblems }: Workflo
           onEdgeChange={onEdgeDataChange}
         />
       </div>
+      <ProblemsPanel problems={validationProblems} onProblemClick={onProblemClick} />
     </div>
   );
 }
