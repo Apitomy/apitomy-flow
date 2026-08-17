@@ -1,0 +1,20 @@
+.edge-condition-badge {
+  background: var(--pf-t--global--background--color--primary--default, #fff);
+  border: 1px solid var(--pf-t--global--border--color--default, #d2d2d2);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 11px;
+  color: var(--pf-t--global--text--color--subtle, #6a6e73);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.edge-condition-badge.is-default {
+  background: var(--pf-t--global--color--status--info--default, #2b9af3);
+  color: white;
+  border-color: transparent;
+}
+.edge-condition-badge.has-error {
+  border-color: var(--pf-t--global--color--status--danger--default, #c9190b);
+}

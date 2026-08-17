@@ -1,0 +1,15 @@
+.flow-node-human-task {
+  padding: 10px 16px;
+  border-radius: 8px;
+  background: var(--pf-t--global--color--status--info--default, #2b9af3);
+  color: white;
+  border: 2px solid transparent;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  min-width: 120px;
+}
+.flow-node-human-task.has-error { border-color: var(--pf-t--global--color--status--danger--default, #c9190b); }
+.flow-node-human-task.has-warning { border-color: var(--pf-t--global--color--status--warning--default, #f0ab00); }
+.flow-node-human-task.selected { box-shadow: 0 0 0 2px var(--pf-t--global--color--brand--default, #06c); }

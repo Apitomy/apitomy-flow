@@ -31,3 +31,9 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Node.js
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
