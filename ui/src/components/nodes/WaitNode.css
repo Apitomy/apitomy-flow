@@ -1,0 +1,15 @@
+.flow-node-wait {
+  padding: 10px 16px;
+  border-radius: 8px;
+  background: #e8f5e9;
+  color: #1b5e20;
+  border: 2px solid #66bb6a;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  min-width: 120px;
+}
+.flow-node-wait.has-error { border-color: var(--pf-t--global--color--status--danger--default, #c9190b); }
+.flow-node-wait.has-warning { border-color: var(--pf-t--global--color--status--warning--default, #f0ab00); }
+.flow-node-wait.selected { box-shadow: 0 0 0 2px var(--pf-t--global--color--brand--default, #06c); }

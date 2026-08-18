@@ -1,5 +1,5 @@
 import { type DragEvent } from 'react';
-import { OutlinedCircleIcon, FlagCheckeredIcon, PlayIcon, UserIcon, EnvelopeIcon } from '@patternfly/react-icons';
+import { OutlinedCircleIcon, FlagCheckeredIcon, PlayIcon, UserIcon, EnvelopeIcon, OutlinedClockIcon } from '@patternfly/react-icons';
 import { type NodeType } from '../../types/workflow.ts';
 import './NodePalette.css';
 
@@ -8,6 +8,7 @@ const paletteItems: { type: NodeType; label: string; icon: React.ReactNode }[] =
   { type: 'action', label: 'Action', icon: <PlayIcon /> },
   { type: 'human-task', label: 'Human Task', icon: <UserIcon /> },
   { type: 'receive-event', label: 'Receive Event', icon: <EnvelopeIcon /> },
+  { type: 'wait', label: 'Wait', icon: <OutlinedClockIcon /> },
   { type: 'end', label: 'End', icon: <FlagCheckeredIcon /> },
 ];
 

@@ -154,7 +154,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange }: Workflo
       data: {
         name: nodeType.charAt(0).toUpperCase() + nodeType.slice(1).replace(/-/g, ' '),
         nodeType: nodeType as FlowNodeData['nodeType'],
-        config: nodeType === 'action' ? { actionType: '' } : {},
+        config: nodeType === 'action' ? { actionType: '' } : nodeType === 'wait' ? { duration: '' } : {},
       },
     };
 

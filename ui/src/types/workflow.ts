@@ -1,4 +1,4 @@
-export type NodeType = 'start' | 'end' | 'action' | 'human-task' | 'receive-event';
+export type NodeType = 'start' | 'end' | 'action' | 'human-task' | 'receive-event' | 'wait';
 
 export interface WorkflowInput {
   name: string;

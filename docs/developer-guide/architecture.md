@@ -19,7 +19,7 @@ The central class. Three categories of methods:
 | Lifecycle | `startWorkflow`, `completeCurrentNode`, `cancelWorkflow` |
 | Correlation | `matchesEvent` |
 | Expression | `resolveExpression` |
-| Introspection | `getHumanTaskInfo`, `getReceiveEventInfo` |
+| Introspection | `getHumanTaskInfo`, `getReceiveEventInfo`, `getWaitInfo` |
 | (Internal) | `advance`, `executeActionNode`, `selectEdge` |
 
 ### Transition Loop
@@ -58,12 +58,12 @@ Null or blank conditions evaluate to `true` (unconditional edges always match).
 
 ### Validation
 
-The `WorkflowValidator` runs 26 rules across four categories:
+The `WorkflowValidator` runs 27 rules across four categories:
 
 1. **Structural** (10 rules) — graph integrity (start/end nodes, edge references, duplicates)
 2. **Connectivity** (5 rules) — reachability, dead ends, isolated nodes
 3. **Edge/Condition** (4 rules) — default edges, duplicate priorities, EL syntax
-4. **Semantic** (7 rules) — event receivers, action types, input schemas, automated cycles
+4. **Semantic** (8 rules) — event receivers, action types, input schemas, wait durations, automated cycles
 
 `startWorkflow` runs the validator automatically and rejects definitions with ERROR-level problems.
 

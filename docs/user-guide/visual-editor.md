@@ -59,6 +59,7 @@ Each node type has a distinct visual style:
 | Action | Blue | Gear | Rounded rectangle |
 | Human Task | Light blue | User | Rounded rectangle |
 | Receive Event | Cyan | Bolt | Rounded rectangle |
+| Wait | Teal | Clock | Rounded rectangle |
 
 ### Custom Edges
 
@@ -78,6 +79,7 @@ A panel on the right side shows configuration fields for the selected node or ed
 - Action Type (action nodes)
 - Event Type (receive-event nodes)
 - Description, Inputs (label/expression pairs), Outputs (name, type dropdown, required checkbox per field) (human task nodes)
+- Duration (ISO 8601 string) (wait nodes)
 - Node ID (read-only)
 
 **Edge properties:**

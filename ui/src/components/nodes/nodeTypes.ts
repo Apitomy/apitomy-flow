@@ -4,6 +4,7 @@ import { EndNode } from './EndNode.tsx';
 import { ActionNode } from './ActionNode.tsx';
 import { HumanTaskNode } from './HumanTaskNode.tsx';
 import { ReceiveEventNode } from './ReceiveEventNode.tsx';
+import { WaitNode } from './WaitNode.tsx';
 
 export const nodeTypes: NodeTypes = {
   'start': StartNode,
@@ -11,4 +12,5 @@ export const nodeTypes: NodeTypes = {
   'action': ActionNode,
   'human-task': HumanTaskNode,
   'receive-event': ReceiveEventNode,
+  'wait': WaitNode,
 };

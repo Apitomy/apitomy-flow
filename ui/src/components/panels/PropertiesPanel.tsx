@@ -259,6 +259,19 @@ export function PropertiesPanel({ selectedNode, selectedEdge, onNodeChange, onEd
             </div>
           </>
         )}
+        {selectedNode.data.nodeType === 'wait' && (
+          <div className="properties-panel__field">
+            <label>Duration (ISO 8601)</label>
+            <input
+              type="text"
+              value={(selectedNode.data.config.duration as string) || ''}
+              placeholder="e.g. PT30M, PT2H, P1D"
+              onChange={(e) => onNodeChange(selectedNode.id, {
+                config: { ...selectedNode.data.config, duration: e.target.value },
+              })}
+            />
+          </div>
+        )}
         {selectedNode.data.nodeType === 'action' && (
           <div className="properties-panel__field">
             <label>Action Type</label>

@@ -7,5 +7,6 @@ public enum NodeType {
     @JsonProperty("end") END,
     @JsonProperty("action") ACTION,
     @JsonProperty("human-task") HUMAN_TASK,
-    @JsonProperty("receive-event") RECEIVE_EVENT
+    @JsonProperty("receive-event") RECEIVE_EVENT,
+    @JsonProperty("wait") WAIT
 }

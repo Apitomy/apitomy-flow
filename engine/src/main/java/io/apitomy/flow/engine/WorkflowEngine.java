@@ -7,6 +7,7 @@ import io.apitomy.flow.validation.WorkflowValidator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 
@@ -179,6 +180,27 @@ public class WorkflowEngine {
         return new ReceiveEventInfo(node.id(), node.name(), eventType, matchExpressions);
     }
 
+    public WaitInfo getWaitInfo(Workflow workflow, WorkflowInstance instance) {
+        if (instance.status() != InstanceStatus.WAITING) {
+            return null;
+        }
+        WorkflowNode node = workflow.findNodeById(instance.currentNodeId());
+        if (node == null || node.type() != NodeType.WAIT) {
+            return null;
+        }
+
+        Duration duration = null;
+        if (node.config().get("duration") instanceof String d) {
+            try {
+                duration = Duration.parse(d);
+            } catch (Exception e) {
+                log.warn("Invalid wait duration '{}': {}", d, e.getMessage());
+            }
+        }
+
+        return new WaitInfo(node.id(), node.name(), duration);
+    }
+
     public boolean matchesEvent(Workflow workflow, WorkflowInstance instance, Map<String, Object> event) {
         if (instance.status() != InstanceStatus.WAITING) {
             return false;
@@ -251,7 +273,7 @@ public class WorkflowEngine {
                         fireEvent(l -> l.onWorkflowCompleted(completedInstance));
                         return instance;
                     }
-                    case HUMAN_TASK, RECEIVE_EVENT -> {
+                    case HUMAN_TASK, RECEIVE_EVENT, WAIT -> {
                         instance = instance.toBuilder()
                             .status(InstanceStatus.WAITING)
                             .updatedOn(Instant.now())
@@ -304,7 +326,7 @@ public class WorkflowEngine {
                     instance = executeActionNode(workflow, instance, targetNode);
                     if (instance.status() != InstanceStatus.RUNNING) return instance;
                 }
-                case HUMAN_TASK, RECEIVE_EVENT -> {
+                case HUMAN_TASK, RECEIVE_EVENT, WAIT -> {
                     instance = instance.toBuilder()
                         .status(InstanceStatus.WAITING)
                         .updatedOn(Instant.now())

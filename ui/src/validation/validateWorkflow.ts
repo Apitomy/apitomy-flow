@@ -198,6 +198,12 @@ function validateSemantics(workflow: Workflow, problems: ValidationProblem[]) {
     }
   }
 
+  for (const node of workflow.nodes.filter(n => n.type === 'wait')) {
+    if (!node.config.duration) {
+      problems.push(problem('warning', 'MISSING_WAIT_DURATION', 'Wait node has no duration configured', node.id));
+    }
+  }
+
   const startNode = workflow.nodes.find(n => n.type === 'start');
   if (startNode && !startNode.config.inputs) {
     problems.push(problem('warning', 'MISSING_START_INPUTS', 'Start node has no inputs defined', startNode.id));

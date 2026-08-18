@@ -191,6 +191,15 @@ class WorkflowValidatorTest {
     }
 
     @Test
+    void missingWaitDuration() {
+        WorkflowNode waitNoDuration = new WorkflowNode("w", NodeType.WAIT, "Wait", Map.of(), new Position(0, 0));
+        Workflow w = new Workflow("w", "W", null,
+            List.of(startNode("start"), waitNoDuration, endNode("end")),
+            List.of(edge("e1", "start", "w"), edge("e2", "w", "end")));
+        assertTrue(hasCode(validate(w), "MISSING_WAIT_DURATION"));
+    }
+
+    @Test
     void missingStartInputs() {
         Workflow w = new Workflow("w", "W", null,
             List.of(startNode("start"), endNode("end")),

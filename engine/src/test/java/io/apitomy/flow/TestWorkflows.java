@@ -39,6 +39,11 @@ public class TestWorkflows {
             Map.of("eventType", eventType, "match", matchExpressions), new Position(200, 0));
     }
 
+    public static WorkflowNode waitNode(String id, String duration) {
+        return new WorkflowNode(id, NodeType.WAIT, id,
+            Map.of("duration", duration), new Position(200, 0));
+    }
+
     public static WorkflowNode endNode(String id) {
         return new WorkflowNode(id, NodeType.END, "End", Map.of(), new Position(300, 0));
     }

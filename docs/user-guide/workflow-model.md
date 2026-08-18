@@ -70,6 +70,13 @@ Blocks until a matching external event arrives.
 
 See [Event Correlation](event-correlation.md) for details.
 
+### Wait
+
+Blocks for a configured duration. The engine sets the instance to `WAITING` status.
+
+- **Config**: `duration` (String) — ISO 8601 duration (e.g. `PT30M`, `PT2H`, `P1D`). The validator emits `MISSING_WAIT_DURATION` if absent.
+- **Behavior**: The consuming application reads the duration via `getWaitInfo`, schedules a timer, and calls `completeCurrentNode` when it expires.
+
 ### End
 
 Terminal state. One or more per workflow.

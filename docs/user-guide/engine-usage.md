@@ -108,6 +108,22 @@ Returns a `ReceiveEventInfo` record when the instance is waiting at a receive-ev
 
 The `eventType` can be used to index waiting instances for efficient event matching — only instances waiting for a given event type need to be checked when an event arrives.
 
+## Getting Wait Info
+
+```java
+WaitInfo info = engine.getWaitInfo(definition, instance);
+```
+
+Returns a `WaitInfo` record when the instance is waiting at a wait node, `null` otherwise. The record contains:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `nodeId` | String | The wait node ID |
+| `nodeName` | String | The wait node name |
+| `duration` | Duration | The configured wait duration (parsed from ISO 8601) |
+
+The consuming application reads the duration, schedules a timer, and calls `completeCurrentNode` when the timer expires.
+
 ## Action Chaining
 
 When an action node completes, the engine immediately evaluates edges and transitions to the next node. If the next node is also an action, it executes that too — continuing until it reaches a wait state or end. A single call to `startWorkflow` or `completeCurrentNode` may execute multiple action nodes in sequence.

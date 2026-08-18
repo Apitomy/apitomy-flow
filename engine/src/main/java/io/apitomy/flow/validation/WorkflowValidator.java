@@ -261,6 +261,16 @@ public class WorkflowValidator {
                 }
             });
 
+        // Wait nodes missing duration
+        workflow.nodes().stream()
+            .filter(n -> n.type() == NodeType.WAIT)
+            .forEach(node -> {
+                if (!node.config().containsKey("duration")) {
+                    problems.add(ValidationProblem.warning("MISSING_WAIT_DURATION",
+                        "Wait node has no duration configured", node.id()));
+                }
+            });
+
         // Missing start inputs
         WorkflowNode start = workflow.findStartNode();
         if (start != null && !start.config().containsKey("inputs")) {

@@ -78,6 +78,7 @@ const hasErrors = problems.some(p => p.severity === 'error');
 | `MISSING_START_INPUTS` | Start node has no inputs defined |
 | `MISSING_TASK_DESCRIPTION` | Human task node has no description |
 | `MISSING_TASK_OUTPUTS` | Human task node has no outputs defined |
+| `MISSING_WAIT_DURATION` | Wait node has no duration configured |
 
 ## ValidationProblem
 
