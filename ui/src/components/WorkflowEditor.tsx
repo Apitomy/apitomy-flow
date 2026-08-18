@@ -33,7 +33,9 @@ export interface WorkflowEditorProps {
 }
 
 function WorkflowEditorInner({ workflow, onChange, onValidationChange }: WorkflowEditorProps) {
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: convert once on mount, React Flow manages state after
   const initialNodes = useMemo(() => toReactFlowNodes(workflow.nodes), []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const initialEdges = useMemo(() => toReactFlowEdges(workflow.edges), []);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
