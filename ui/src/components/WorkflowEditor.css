@@ -12,3 +12,26 @@
 .workflow-editor__canvas {
   flex: 1;
 }
+.workflow-editor__toolbar {
+  display: flex;
+  gap: 4px;
+}
+.workflow-editor__toolbar button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  font-size: 13px;
+  border: 1px solid var(--pf-t--global--border--color--default, #d2d2d2);
+  border-radius: 4px;
+  background: var(--pf-t--global--background--color--primary--default, #fff);
+  cursor: pointer;
+  color: var(--pf-t--global--text--color--regular, #151515);
+}
+.workflow-editor__toolbar button:hover:not(:disabled) {
+  background: var(--pf-t--global--background--color--primary--hover, #f0f0f0);
+}
+.workflow-editor__toolbar button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

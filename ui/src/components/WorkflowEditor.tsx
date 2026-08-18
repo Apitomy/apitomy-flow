@@ -1,17 +1,21 @@
-import { useCallback, useMemo, useState, useEffect, type DragEvent } from 'react';
+import { useCallback, useMemo, useState, useEffect, useRef, type DragEvent } from 'react';
 import {
   ReactFlow,
   Background,
   Controls,
+  Panel,
   useNodesState,
   useEdgesState,
   addEdge,
   type Connection,
   type Node,
   type Edge,
+  type NodeChange,
+  type EdgeChange,
   useReactFlow,
   ReactFlowProvider,
 } from '@xyflow/react';
+import { UndoIcon, RedoIcon } from '@patternfly/react-icons';
 import { type Workflow } from '../types/workflow.ts';
 import { type ValidationProblem } from '../types/validation.ts';
 import { type FlowNodeData, toReactFlowNodes, toReactFlowEdges, toWorkflow } from '../utils/conversion.ts';
@@ -23,6 +27,7 @@ import { NodePalette } from './panels/NodePalette.tsx';
 import { PropertiesPanel } from './panels/PropertiesPanel.tsx';
 import { ProblemsPanel } from './panels/ProblemsPanel.tsx';
 import { NodeContextMenu } from './NodeContextMenu.tsx';
+import { useUndoRedo } from '../hooks/useUndoRedo.ts';
 import './WorkflowEditor.css';
 
 export interface WorkflowEditorProps {
@@ -41,10 +46,32 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange }: Workflo
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const { screenToFlowPosition, fitView } = useReactFlow();
+  const { takeSnapshot, undo, redo, canUndo, canRedo } = useUndoRedo<FlowNodeData>();
+  const isRestoringRef = useRef(false);
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ node: Node<FlowNodeData>; position: { x: number; y: number } } | null>(null);
+  const snapshotNeededRef = useRef(false);
+
+  // Capture initial state as the first snapshot
+  const initializedRef = useRef(false);
+  useEffect(() => {
+    if (!initializedRef.current) {
+      initializedRef.current = true;
+      takeSnapshot(initialNodes, initialEdges);
+    }
+  }, [initialNodes, initialEdges, takeSnapshot]);
+
+  // Commit pending snapshots after render — coalesces multiple changes
+  // (e.g. node removal + edge removal) into a single undo step
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: runs every render to catch pending snapshots
+  useEffect(() => {
+    if (snapshotNeededRef.current) {
+      snapshotNeededRef.current = false;
+      takeSnapshot(nodes, edges);
+    }
+  });
 
   const selectedNode = nodes.find(n => n.id === selectedNodeId);
   const selectedEdge = edges.find(e => e.id === selectedEdgeId);
@@ -77,20 +104,24 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange }: Workflo
     onChange(toWorkflow(workflow.id, workflow.name, updatedNodes, updatedEdges));
   }, [workflow.id, workflow.name, onChange]);
 
-  const handleNodesChange: typeof onNodesChange = useCallback((changes) => {
+  const handleNodesChange = useCallback((changes: NodeChange<Node<FlowNodeData>>[]) => {
+    if (!isRestoringRef.current && changes.some(c => c.type === 'remove')) {
+      snapshotNeededRef.current = true;
+    }
     onNodesChange(changes);
     setNodes(current => {
-      const updated = current;
-      setTimeout(() => emitChange(updated, edges), 0);
+      setTimeout(() => emitChange(current, edges), 0);
       return current;
     });
   }, [onNodesChange, edges, emitChange, setNodes]);
 
-  const handleEdgesChange: typeof onEdgesChange = useCallback((changes) => {
+  const handleEdgesChange = useCallback((changes: EdgeChange[]) => {
+    if (!isRestoringRef.current && changes.some(c => c.type === 'remove')) {
+      snapshotNeededRef.current = true;
+    }
     onEdgesChange(changes);
     setEdges(current => {
-      const updated = current;
-      setTimeout(() => emitChange(nodes, updated), 0);
+      setTimeout(() => emitChange(nodes, current), 0);
       return current;
     });
   }, [onEdgesChange, nodes, emitChange, setEdges]);
@@ -103,6 +134,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange }: Workflo
       type: 'conditional',
       data: { condition: undefined, priority: 0, isDefault: false },
     };
+    snapshotNeededRef.current = true;
     setEdges(eds => {
       const updated = addEdge(newEdge, eds);
       setTimeout(() => emitChange(nodes, updated), 0);
@@ -127,6 +159,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange }: Workflo
       },
     };
 
+    snapshotNeededRef.current = true;
     setNodes(nds => {
       const updated = [...nds, newNode];
       setTimeout(() => emitChange(updated, edges), 0);
@@ -167,6 +200,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange }: Workflo
       position: { x: node.position.x + 40, y: node.position.y + 40 },
       data: { ...node.data, name: `${node.data.name} (copy)`, config: { ...node.data.config } },
     };
+    snapshotNeededRef.current = true;
     setNodes(nds => {
       const updated = [...nds, newNode];
       setTimeout(() => emitChange(updated, edges), 0);
@@ -175,6 +209,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange }: Workflo
   }, [setNodes, edges, emitChange]);
 
   const onDeleteNode = useCallback((nodeId: string) => {
+    snapshotNeededRef.current = true;
     setNodes(nds => {
       const updated = nds.filter(n => n.id !== nodeId);
       setEdges(eds => {
@@ -186,6 +221,10 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange }: Workflo
       return updated;
     });
   }, [setNodes, setEdges, emitChange, selectedNodeId]);
+
+  const onNodeDragStop = useCallback(() => {
+    snapshotNeededRef.current = true;
+  }, []);
 
   const onNodeDataChange = useCallback((id: string, dataUpdate: Partial<FlowNodeData>) => {
     setNodes(nds => {
@@ -202,6 +241,45 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange }: Workflo
       return updated;
     });
   }, [setEdges, nodes, emitChange]);
+
+  const handleUndo = useCallback(() => {
+    const snapshot = undo();
+    if (!snapshot) return;
+    isRestoringRef.current = true;
+    setNodes(snapshot.nodes);
+    setEdges(snapshot.edges);
+    setTimeout(() => {
+      emitChange(snapshot.nodes, snapshot.edges);
+      isRestoringRef.current = false;
+    }, 0);
+  }, [undo, setNodes, setEdges, emitChange]);
+
+  const handleRedo = useCallback(() => {
+    const snapshot = redo();
+    if (!snapshot) return;
+    isRestoringRef.current = true;
+    setNodes(snapshot.nodes);
+    setEdges(snapshot.edges);
+    setTimeout(() => {
+      emitChange(snapshot.nodes, snapshot.edges);
+      isRestoringRef.current = false;
+    }, 0);
+  }, [redo, setNodes, setEdges, emitChange]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        handleUndo();
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+        e.preventDefault();
+        handleRedo();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [handleUndo, handleRedo]);
 
   const onProblemClick = useCallback((problem: ValidationProblem) => {
     if (problem.nodeId) {
@@ -234,6 +312,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange }: Workflo
             onEdgeClick={onEdgeClick}
             onPaneClick={onPaneClick}
             onNodeContextMenu={onNodeContextMenu}
+            onNodeDragStop={onNodeDragStop}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             defaultEdgeOptions={{ type: 'conditional' }}
@@ -241,7 +320,16 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange }: Workflo
           >
             <Background />
             <Controls />
-
+            <Panel position="top-right">
+              <div className="workflow-editor__toolbar">
+                <button title="Undo (Ctrl+Z)" disabled={!canUndo} onClick={handleUndo}>
+                  <UndoIcon /> Undo
+                </button>
+                <button title="Redo (Ctrl+Y)" disabled={!canRedo} onClick={handleRedo}>
+                  <RedoIcon /> Redo
+                </button>
+              </div>
+            </Panel>
           </ReactFlow>
           {contextMenu && (
             <NodeContextMenu
