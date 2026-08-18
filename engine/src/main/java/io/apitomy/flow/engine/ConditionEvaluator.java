@@ -42,6 +42,19 @@ public class ConditionEvaluator {
         }
     }
 
+    public Object resolve(String expression, Map<String, Object> context) {
+        if (expression == null || expression.isBlank()) {
+            return null;
+        }
+        try {
+            ELProcessor processor = createProcessor();
+            processor.defineBean("context", context);
+            return processor.eval(expression);
+        } catch (Exception e) {
+            throw new ConditionEvaluationException(expression, e);
+        }
+    }
+
     public boolean isValid(String expression) {
         try {
             ELProcessor processor = createProcessor();

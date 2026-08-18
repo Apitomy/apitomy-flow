@@ -95,6 +95,33 @@ class ConditionEvaluatorTest {
     }
 
     @Test
+    void resolveReturnsValue() {
+        Map<String, Object> context = Map.of("name", "Alice", "score", 95);
+        assertEquals("Alice", evaluator.resolve("context.name", context));
+        assertEquals(95, evaluator.resolve("context.score", context));
+    }
+
+    @Test
+    void resolveNestedValue() {
+        Map<String, Object> context = Map.of("loan", Map.of("amount", 50000, "currency", "USD"));
+        assertEquals(50000, evaluator.resolve("context.loan.amount", context));
+        assertEquals("USD", evaluator.resolve("context.loan.currency", context));
+    }
+
+    @Test
+    void resolveNullOrBlankReturnsNull() {
+        assertNull(evaluator.resolve(null, Map.of()));
+        assertNull(evaluator.resolve("", Map.of()));
+        assertNull(evaluator.resolve("   ", Map.of()));
+    }
+
+    @Test
+    void resolveInvalidExpressionThrows() {
+        assertThrows(ConditionEvaluationException.class, () ->
+            evaluator.resolve("this is not valid !!!", Map.of()));
+    }
+
+    @Test
     void jacksonObjectNodeNestedAccess() throws Exception {
         ObjectMapper mapper = new ObjectMapper();
         JsonNode payload = mapper.readTree("""

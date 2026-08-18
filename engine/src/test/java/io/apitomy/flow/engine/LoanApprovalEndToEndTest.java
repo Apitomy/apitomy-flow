@@ -130,6 +130,20 @@ class LoanApprovalEndToEndTest {
         assertEquals(240, instance.context().get("creditScore"));
         assertEquals(0.42, instance.context().get("debtToIncomeRatio"));
 
+        // Simulate inbox: get human task info with resolved inputs
+        HumanTaskInfo taskInfo = engine.getHumanTaskInfo(workflow, instance);
+        assertNotNull(taskInfo);
+        assertEquals("manual-review", taskInfo.nodeId());
+        assertEquals("Review the applicant's credit data and approve or reject the loan.", taskInfo.description());
+        assertEquals("Alice Johnson", taskInfo.inputs().get("Applicant"));
+        assertEquals(50000, taskInfo.inputs().get("Loan Amount"));
+        assertEquals(240, taskInfo.inputs().get("Credit Score"));
+        assertEquals(0.42, taskInfo.inputs().get("Debt-to-Income Ratio"));
+        assertEquals(3, taskInfo.outputs().size());
+        assertEquals("approved", taskInfo.outputs().get(0).name());
+        assertEquals("boolean", taskInfo.outputs().get(0).type());
+        assertTrue(taskInfo.outputs().get(0).required());
+
         // Simulate loan officer approving the loan and assigning a loan ID
         NodeResult reviewResult = new NodeResult(NodeResultStatus.COMPLETED, Map.of(
             "approved", true,
@@ -230,5 +244,32 @@ class LoanApprovalEndToEndTest {
         Workflow workflow = loanApprovalWorkflow();
         assertThrows(IllegalArgumentException.class, () ->
             engine.startWorkflow(workflow, Map.of("applicantName", "Test")));
+    }
+
+    @Test
+    void getHumanTaskInfoReturnsNullForNonHumanTask() {
+        Workflow workflow = loanApprovalWorkflow();
+        WorkflowInstance instance = engine.startWorkflow(workflow, Map.of(
+            "applicantName", "Test", "loanAmount", 1000, "annualIncome", 50000));
+
+        // Complete the human task so it advances to the receive-event node
+        instance = engine.completeCurrentNode(workflow, instance,
+            new NodeResult(NodeResultStatus.COMPLETED, Map.of("approved", true, "loanId", "L-1")));
+        assertEquals("await-funding", instance.currentNodeId());
+
+        // getHumanTaskInfo should return null — waiting on a receive-event, not a human task
+        assertNull(engine.getHumanTaskInfo(workflow, instance));
+    }
+
+    @Test
+    void getHumanTaskInfoReturnsNullForCompletedInstance() {
+        Workflow workflow = loanApprovalWorkflow();
+        WorkflowInstance instance = engine.startWorkflow(workflow, Map.of(
+            "applicantName", "Test", "loanAmount", 1000, "annualIncome", 50000));
+        instance = engine.completeCurrentNode(workflow, instance,
+            new NodeResult(NodeResultStatus.COMPLETED, Map.of("approved", false)));
+        assertEquals(InstanceStatus.COMPLETED, instance.status());
+
+        assertNull(engine.getHumanTaskInfo(workflow, instance));
     }
 }

@@ -111,6 +111,52 @@ public class WorkflowEngine {
         return cancelled;
     }
 
+    public Object resolveExpression(String expression, Map<String, Object> context) {
+        return conditionEvaluator.resolve(expression, context);
+    }
+
+    public HumanTaskInfo getHumanTaskInfo(Workflow workflow, WorkflowInstance instance) {
+        if (instance.status() != InstanceStatus.WAITING) {
+            return null;
+        }
+        WorkflowNode node = workflow.findNodeById(instance.currentNodeId());
+        if (node == null || node.type() != NodeType.HUMAN_TASK) {
+            return null;
+        }
+
+        String description = node.config().get("description") instanceof String d ? d : null;
+
+        Map<String, Object> resolvedInputs = new LinkedHashMap<>();
+        if (node.config().get("inputs") instanceof Map<?, ?> inputExprs) {
+            for (Map.Entry<?, ?> entry : inputExprs.entrySet()) {
+                String label = String.valueOf(entry.getKey());
+                String expression = String.valueOf(entry.getValue());
+                try {
+                    resolvedInputs.put(label, conditionEvaluator.resolve(expression, instance.context()));
+                } catch (Exception e) {
+                    log.warn("Failed to resolve human task input '{}': {}", label, e.getMessage());
+                    resolvedInputs.put(label, null);
+                }
+            }
+        }
+
+        List<HumanTaskInfo.OutputDefinition> outputs = List.of();
+        if (node.config().get("outputs") instanceof List<?> outputDefs) {
+            outputs = outputDefs.stream()
+                .filter(Map.class::isInstance)
+                .map(o -> (Map<?, ?>) o)
+                .map(o -> new HumanTaskInfo.OutputDefinition(
+                    String.valueOf(o.get("name")),
+                    o.get("type") != null ? String.valueOf(o.get("type")) : "string",
+                    Boolean.TRUE.equals(o.get("required"))
+                ))
+                .toList();
+        }
+
+        return new HumanTaskInfo(node.id(), node.name(), description,
+            Collections.unmodifiableMap(resolvedInputs), outputs);
+    }
+
     public boolean matchesEvent(Workflow workflow, WorkflowInstance instance, Map<String, Object> event) {
         if (instance.status() != InstanceStatus.WAITING) {
             return false;
