@@ -1,0 +1,74 @@
+site_name: Apitomy Flow
+site_description: Lightweight visual workflow engine for long-running project lifecycles
+site_author: Apitomy
+site_url: https://www.apitomy.io/projects/flow/docs/
+
+repo_name: Apitomy/apitomy-flow
+repo_url: https://github.com/Apitomy/apitomy-flow
+use_directory_urls: false
+
+theme:
+  name: material
+  custom_dir: docs/theme
+  palette:
+    - scheme: default
+      primary: custom
+      accent: custom
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.highlight
+    - search.share
+    - search.suggest
+    - content.code.copy
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - admonition
+  - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
+  - attr_list
+  - md_in_html
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Installation: getting-started/installation.md
+    - Quick Start: getting-started/quick-start.md
+  - User Guide:
+    - Workflow Model: user-guide/workflow-model.md
+    - Engine Usage: user-guide/engine-usage.md
+    - Node Executors: user-guide/node-executors.md
+    - Event Correlation: user-guide/event-correlation.md
+    - Error Handling: user-guide/error-handling.md
+    - Validation: user-guide/validation.md
+    - Visual Editor: user-guide/visual-editor.md
+    - Workflow Viewer: user-guide/workflow-viewer.md
+  - Developer Guide:
+    - Building: developer-guide/building.md
+    - Architecture: developer-guide/architecture.md
+    - Contributing: developer-guide/contributing.md
+
+docs_dir: ./docs
+site_dir: ./site
+
+plugins:
+  - search
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/Apitomy/apitomy-flow
+
+extra_css:
+  - theme/css/project-colors.css
+  - theme/css/apitomy-base.css

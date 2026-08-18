@@ -29,6 +29,9 @@ bin/
 .DS_Store
 Thumbs.db
 
+# MkDocs
+site/
+
 # Logs
 *.log
 
