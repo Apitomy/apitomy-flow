@@ -53,7 +53,12 @@ Automated work delegated to a `NodeExecutor` provided by the host application.
 
 Blocks until a human responds. The engine sets the instance to `WAITING` status.
 
-- **Config**: Pass-through — the engine does not interpret it. The consuming application defines the schema (e.g. title, description, form fields).
+- **Config**: The engine interprets three keys:
+    - `description` (String) — instructions for the person completing the task
+    - `inputs` (Map<String, String>) — map of display label to EL expression, resolved against the workflow context at render time (e.g. `{"Credit Score": "context.creditScore"}`)
+    - `outputs` (List of `{name, type, required}`) — defines the form schema for task completion
+
+  The validator emits `MISSING_TASK_DESCRIPTION` and `MISSING_TASK_OUTPUTS` warnings when these are absent.
 - **Behavior**: Completes when the consuming application calls `completeCurrentNode` with the human's response.
 
 ### Receive Event

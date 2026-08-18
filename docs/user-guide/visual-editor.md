@@ -77,6 +77,7 @@ A panel on the right side shows configuration fields for the selected node or ed
 - Name (all node types)
 - Action Type (action nodes)
 - Event Type (receive-event nodes)
+- Description, Inputs (label/expression pairs), Outputs (name, type dropdown, required checkbox per field) (human task nodes)
 - Node ID (read-only)
 
 **Edge properties:**

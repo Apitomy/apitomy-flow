@@ -26,7 +26,7 @@ cd engine
 mvn clean install
 ```
 
-Runs all 63 JUnit 5 tests covering workflow execution, validation, error handling, and event correlation.
+Runs all 76 JUnit 5 tests covering workflow execution, validation, error handling, and event correlation.
 
 ## UI Only
 

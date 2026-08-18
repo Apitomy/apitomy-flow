@@ -91,6 +91,6 @@ If the target node ID doesn't exist in the workflow, the engine fails the workfl
 | Executor returns `NodeResult(FAILED, ...)` | `handleNodeError(instance, node, result, null)` | Handler decides |
 | Executor throws exception | `handleNodeError(instance, node, null, error)` | Handler decides |
 | No outgoing edge matches | `handleNoMatchingEdge(instance, node)` | Handler decides |
-| Condition evaluation fails (bad EL) | `handleNodeError(instance, node, null, error)` | Handler decides |
+| Condition evaluation fails (bad EL) | `handleNoMatchingEdge(instance, node)` | Handler decides |
 | Error handler itself throws | — | Engine fails the workflow |
 | `TRANSITION` to nonexistent node | — | Engine fails the workflow |

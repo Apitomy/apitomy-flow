@@ -65,6 +65,49 @@ boolean matches = engine.matchesEvent(definition, instance, eventPayload);
 
 See [Event Correlation](event-correlation.md) for details.
 
+## Resolving Expressions
+
+```java
+Object value = engine.resolveExpression("context.creditScore", instance.context());
+```
+
+Evaluates a Jakarta EL expression against a workflow context and returns the resolved value. Useful for rendering human task input values — for example, resolving display labels to their current context values. Supports nested map access and Jackson `JsonNode` navigation.
+
+## Getting Human Task Info
+
+```java
+HumanTaskInfo info = engine.getHumanTaskInfo(definition, instance);
+```
+
+Returns a `HumanTaskInfo` record when the instance is waiting at a human-task node, `null` otherwise. The record contains:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `nodeId` | String | The human-task node ID |
+| `nodeName` | String | The human-task node name |
+| `description` | String | Instructions for the person completing the task |
+| `inputs` | Map<String, Object> | Display labels as keys, resolved context values as values |
+| `outputs` | List<OutputDefinition> | Expected outputs, each with `name`, `type`, and `required` |
+
+Input EL expressions (from the node's config) are evaluated against the instance context automatically — the caller receives fully resolved values.
+
+## Getting Receive Event Info
+
+```java
+ReceiveEventInfo info = engine.getReceiveEventInfo(definition, instance);
+```
+
+Returns a `ReceiveEventInfo` record when the instance is waiting at a receive-event node, `null` otherwise. The record contains:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `nodeId` | String | The receive-event node ID |
+| `nodeName` | String | The receive-event node name |
+| `eventType` | String | The event type this node is waiting for |
+| `matchExpressions` | List<String> | Raw EL expressions used for event correlation |
+
+The `eventType` can be used to index waiting instances for efficient event matching — only instances waiting for a given event type need to be checked when an event arrives.
+
 ## Action Chaining
 
 When an action node completes, the engine immediately evaluates edges and transitions to the next node. If the next node is also an action, it executes that too — continuing until it reaches a wait state or end. A single call to `startWorkflow` or `completeCurrentNode` may execute multiple action nodes in sequence.

@@ -76,6 +76,8 @@ const hasErrors = problems.some(p => p.severity === 'error');
 | `UNCONDITIONAL_MULTIPLE_EDGES` | Node has multiple outgoing edges with no conditions |
 | `AUTOMATED_CYCLE` | Cycle containing only action nodes (could cause infinite execution) |
 | `MISSING_START_INPUTS` | Start node has no inputs defined |
+| `MISSING_TASK_DESCRIPTION` | Human task node has no description |
+| `MISSING_TASK_OUTPUTS` | Human task node has no outputs defined |
 
 ## ValidationProblem
 

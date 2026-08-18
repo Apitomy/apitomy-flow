@@ -13,7 +13,7 @@ Workflow workflow = new Workflow("my-workflow", "Review Process", null,
             Map.of("inputs", List.of(Map.of("name", "itemId", "type", "string", "required", true))),
             new Position(0, 100)),
         new WorkflowNode("review", NodeType.HUMAN_TASK, "Review Item",
-            Map.of("title", "Please review this item"),
+            Map.of("description", "Please review this item"),
             new Position(250, 100)),
         new WorkflowNode("end-approved", NodeType.END, "Approved",
             Map.of("outcome", "approved"),
@@ -31,6 +31,8 @@ Workflow workflow = new Workflow("my-workflow", "Review Process", null,
     )
 );
 ```
+
+Human task nodes can also define `inputs` (a map of label to EL expression, evaluated from the workflow context) and `outputs` (a form schema describing the fields a human should fill in). See [Workflow Model](../user-guide/workflow-model.md) for details.
 
 ## Start the Engine
 

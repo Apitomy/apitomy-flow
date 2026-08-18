@@ -23,6 +23,16 @@ Returns `true` if all three conditions are met:
 
 Returns `false` in all other cases (wrong status, wrong node type, type mismatch, match expression failure).
 
+## Introspection
+
+`getReceiveEventInfo(workflow, instance)` returns the `eventType` and match expressions for a waiting receive-event node. Consumers can use this to index waiting instances by `eventType`, enabling efficient event dispatch without loading and checking every waiting instance.
+
+```java
+ReceiveEventInfo info = engine.getReceiveEventInfo(definition, instance);
+// info.eventType()   → "pr-merged"
+// info.match()       → ["event.repository == context.repository", ...]
+```
+
 ## Receive-Event Node Config
 
 ```json
@@ -60,6 +70,8 @@ event.action == 'closed' && event.pull_request.merged == true
 ```
 
 Dot notation navigates nested maps: `event.pull_request.number` resolves through `event.get("pull_request").get("number")`.
+
+EL expressions in match conditions also support Jackson `JsonNode` objects in addition to nested `Map`s, thanks to a built-in `JsonNodeELResolver`. This means webhook payloads parsed with Jackson's `readTree` can be used directly as the event payload without converting to maps first.
 
 ## Complete Example
 

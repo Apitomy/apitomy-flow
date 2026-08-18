@@ -12,7 +12,7 @@ Designed as a standalone library that integrates into Apitomy products (starting
 - Executes workflows through a stateless engine (state in, state out)
 - Supports human-in-the-loop tasks and external event correlation
 - Provides a visual drag-and-drop editor and read-only instance viewer
-- Validates workflow definitions with 24 structural and semantic rules
+- Validates workflow definitions with 26 structural and semantic rules
 
 ## Architecture
 
@@ -37,7 +37,7 @@ for UI chrome.
 |------|---------|
 | **Start** | Entry point with input schema. Supports conditional routing based on initial context. |
 | **Action** | Automated work. Delegates to a `NodeExecutor` provided by the host application. |
-| **Human Task** | Blocks until a human responds. Config is pass-through for the host app. |
+| **Human Task** | Blocks until a human responds. Engine interprets `description`, `inputs` (label-to-expression map), and `outputs` (form schema) from config. |
 | **Receive Event** | Blocks until a matching external event arrives. Supports EL-based correlation. |
 | **End** | Terminal state with outcome metadata. |
 
@@ -116,14 +116,14 @@ instance = engine.cancelWorkflow(workflowDefinition, instance);
 ```
 engine/                  Java workflow engine library
   src/main/java/io/apitomy/flow/
-    model/               Workflow, WorkflowNode, WorkflowEdge, WorkflowInstance
-    engine/              WorkflowEngine, ConditionEvaluator
+    model/               Workflow, WorkflowNode, WorkflowEdge, WorkflowInstance, HumanTaskInfo, ReceiveEventInfo
+    engine/              WorkflowEngine, ConditionEvaluator, JsonNodeELResolver
     spi/                 NodeExecutor, WorkflowEventListener, WorkflowErrorHandler
-    validation/          WorkflowValidator (24 rules)
+    validation/          WorkflowValidator (26 rules)
 ui/                      React visual editor components
   src/
     components/          WorkflowEditor, WorkflowViewer, custom nodes/edges, panels
-    validation/          TypeScript workflow validator (23 rules)
+    validation/          TypeScript workflow validator (25 rules)
     types/               TypeScript types mirroring the Java model
 ```
 
