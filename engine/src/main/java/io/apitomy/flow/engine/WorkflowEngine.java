@@ -157,6 +157,28 @@ public class WorkflowEngine {
             Collections.unmodifiableMap(resolvedInputs), outputs);
     }
 
+    public ReceiveEventInfo getReceiveEventInfo(Workflow workflow, WorkflowInstance instance) {
+        if (instance.status() != InstanceStatus.WAITING) {
+            return null;
+        }
+        WorkflowNode node = workflow.findNodeById(instance.currentNodeId());
+        if (node == null || node.type() != NodeType.RECEIVE_EVENT) {
+            return null;
+        }
+
+        String eventType = node.config().get("eventType") instanceof String et ? et : null;
+
+        List<String> matchExpressions = List.of();
+        if (node.config().get("match") instanceof List<?> matchList) {
+            matchExpressions = matchList.stream()
+                .filter(String.class::isInstance)
+                .map(String.class::cast)
+                .toList();
+        }
+
+        return new ReceiveEventInfo(node.id(), node.name(), eventType, matchExpressions);
+    }
+
     public boolean matchesEvent(Workflow workflow, WorkflowInstance instance, Map<String, Object> event) {
         if (instance.status() != InstanceStatus.WAITING) {
             return false;

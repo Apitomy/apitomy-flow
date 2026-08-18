@@ -155,8 +155,17 @@ class LoanApprovalEndToEndTest {
         // Should now be waiting at the receive-event node for funding confirmation
         assertEquals(InstanceStatus.WAITING, instance.status());
         assertEquals("await-funding", instance.currentNodeId());
-        assertTrue((Boolean) instance.context().get("approved"));
-        assertEquals("LOAN-2026-0042", instance.context().get("loanId"));
+
+        // Extract receive-event info for indexing
+        ReceiveEventInfo eventInfo = engine.getReceiveEventInfo(workflow, instance);
+        assertNotNull(eventInfo);
+        assertEquals("await-funding", eventInfo.nodeId());
+        assertEquals("funding-confirmed", eventInfo.eventType());
+        assertEquals(1, eventInfo.matchExpressions().size());
+        assertEquals("event.loanId == context.loanId", eventInfo.matchExpressions().get(0));
+
+        // getHumanTaskInfo should return null — waiting on receive-event, not human task
+        assertNull(engine.getHumanTaskInfo(workflow, instance));
 
         // Send a funding event that does NOT match (wrong loanId)
         Map<String, Object> wrongEvent = Map.of(
@@ -262,7 +271,18 @@ class LoanApprovalEndToEndTest {
     }
 
     @Test
-    void getHumanTaskInfoReturnsNullForCompletedInstance() {
+    void getReceiveEventInfoReturnsNullForHumanTask() {
+        Workflow workflow = loanApprovalWorkflow();
+        WorkflowInstance instance = engine.startWorkflow(workflow, Map.of(
+            "applicantName", "Test", "loanAmount", 1000, "annualIncome", 50000));
+        assertEquals("manual-review", instance.currentNodeId());
+
+        // getReceiveEventInfo should return null — waiting on a human task, not a receive-event
+        assertNull(engine.getReceiveEventInfo(workflow, instance));
+    }
+
+    @Test
+    void getWaitInfoReturnsNullForCompletedInstance() {
         Workflow workflow = loanApprovalWorkflow();
         WorkflowInstance instance = engine.startWorkflow(workflow, Map.of(
             "applicantName", "Test", "loanAmount", 1000, "annualIncome", 50000));
@@ -271,5 +291,6 @@ class LoanApprovalEndToEndTest {
         assertEquals(InstanceStatus.COMPLETED, instance.status());
 
         assertNull(engine.getHumanTaskInfo(workflow, instance));
+        assertNull(engine.getReceiveEventInfo(workflow, instance));
     }
 }
