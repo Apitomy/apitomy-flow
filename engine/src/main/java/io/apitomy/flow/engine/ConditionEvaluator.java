@@ -5,12 +5,20 @@ import java.util.Map;
 
 public class ConditionEvaluator {
 
+    private final JsonNodeELResolver jsonNodeResolver = new JsonNodeELResolver();
+
+    private ELProcessor createProcessor() {
+        ELProcessor processor = new ELProcessor();
+        processor.getELManager().addELResolver(jsonNodeResolver);
+        return processor;
+    }
+
     public boolean evaluate(String expression, Map<String, Object> context) {
         if (expression == null || expression.isBlank()) {
             return true;
         }
         try {
-            ELProcessor processor = new ELProcessor();
+            ELProcessor processor = createProcessor();
             processor.defineBean("context", context);
             Object result = processor.eval(expression);
             return Boolean.TRUE.equals(result);
@@ -24,7 +32,7 @@ public class ConditionEvaluator {
             return true;
         }
         try {
-            ELProcessor processor = new ELProcessor();
+            ELProcessor processor = createProcessor();
             processor.defineBean("context", context);
             processor.defineBean("event", event);
             Object result = processor.eval(expression);
@@ -36,7 +44,7 @@ public class ConditionEvaluator {
 
     public boolean isValid(String expression) {
         try {
-            ELProcessor processor = new ELProcessor();
+            ELProcessor processor = createProcessor();
             processor.defineBean("context", Map.of());
             processor.getELManager().getExpressionFactory()
                 .createValueExpression(processor.getELManager().getELContext(),

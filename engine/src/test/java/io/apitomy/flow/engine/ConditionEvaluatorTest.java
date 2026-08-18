@@ -1,5 +1,7 @@
 package io.apitomy.flow.engine;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -90,5 +92,27 @@ class ConditionEvaluatorTest {
         Map<String, Object> context = Map.of("prNumber", 42);
         Map<String, Object> event = Map.of("pull_request", Map.of("number", 42));
         assertTrue(evaluator.evaluate("event.pull_request.number == context.prNumber", context, event));
+    }
+
+    @Test
+    void jacksonObjectNodeNestedAccess() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        JsonNode payload = mapper.readTree("""
+            {
+                "repository": "apitomy/flow",
+                "pull_request": {
+                    "number": 42,
+                    "author": { "login": "alice" },
+                    "merged": true
+                },
+                "labels": ["bug", "urgent"]
+            }
+            """);
+        Map<String, Object> context = Map.of("eventPayload", payload);
+
+        assertTrue(evaluator.evaluate("context.eventPayload.repository == 'apitomy/flow'", context));
+        assertTrue(evaluator.evaluate("context.eventPayload.pull_request.number == 42", context));
+        assertTrue(evaluator.evaluate("context.eventPayload.pull_request.author.login == 'alice'", context));
+        assertTrue(evaluator.evaluate("context.eventPayload.pull_request.merged", context));
     }
 }
