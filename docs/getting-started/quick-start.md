@@ -39,9 +39,9 @@ Workflow workflow = new Workflow("my-workflow", "Review Process", null,
 // (this example has no action nodes, so none needed)
 
 WorkflowEngine engine = new WorkflowEngine(
-    List.of(),    // no action executors
-    List.of(),    // no event listeners
-    null          // default error handler
+    NodeExecutorProvider.fromList(),  // no action executors
+    List.of(),                        // no event listeners
+    null                              // default error handler
 );
 
 // Start the workflow with initial context

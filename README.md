@@ -92,9 +92,9 @@ NodeExecutor analyzeExecutor = new NodeExecutor() {
 
 // Build the engine
 WorkflowEngine engine = new WorkflowEngine(
-    List.of(analyzeExecutor),     // node executors
-    List.of(myEventListener),     // event listeners
-    myErrorHandler                // error handler (optional)
+    NodeExecutorProvider.fromList(analyzeExecutor),  // node executor provider
+    List.of(myEventListener),                        // event listeners
+    myErrorHandler                                   // error handler (optional)
 );
 
 // Start a workflow

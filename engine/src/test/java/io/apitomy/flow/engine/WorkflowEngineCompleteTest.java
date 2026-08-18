@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class WorkflowEngineCompleteTest {
 
     private WorkflowEngine engine(NodeExecutor... executors) {
-        return new WorkflowEngine(List.of(executors), List.of(), null);
+        return new WorkflowEngine(NodeExecutorProvider.fromList(executors), List.of(), null);
     }
 
     @Test
@@ -76,7 +76,7 @@ class WorkflowEngineCompleteTest {
         WorkflowEventListener listener = new WorkflowEventListener() {
             public void onWorkflowCancelled(WorkflowInstance i) { events.add("cancelled"); }
         };
-        WorkflowEngine engine = new WorkflowEngine(List.of(), List.of(listener), null);
+        WorkflowEngine engine = new WorkflowEngine(NodeExecutorProvider.fromList(), List.of(listener), null);
         Workflow workflow = simpleHumanTaskWorkflow();
         WorkflowInstance waiting = engine.startWorkflow(workflow, Map.of());
 

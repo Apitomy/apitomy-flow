@@ -65,7 +65,6 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange }: Workflo
 
   // Commit pending snapshots after render — coalesces multiple changes
   // (e.g. node removal + edge removal) into a single undo step
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: runs every render to catch pending snapshots
   useEffect(() => {
     if (snapshotNeededRef.current) {
       snapshotNeededRef.current = false;

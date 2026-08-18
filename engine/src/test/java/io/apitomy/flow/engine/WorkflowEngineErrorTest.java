@@ -38,7 +38,7 @@ class WorkflowEngineErrorTest {
 
     @Test
     void defaultHandlerFailsWorkflowOnNodeError() {
-        WorkflowEngine engine = new WorkflowEngine(List.of(failingExecutor("test")), List.of(), null);
+        WorkflowEngine engine = new WorkflowEngine(NodeExecutorProvider.fromList(failingExecutor("test")), List.of(), null);
         Workflow workflow = simpleActionWorkflow("test");
         WorkflowInstance result = engine.startWorkflow(workflow, Map.of());
         assertEquals(InstanceStatus.FAILED, result.status());
@@ -47,7 +47,7 @@ class WorkflowEngineErrorTest {
 
     @Test
     void defaultHandlerFailsWorkflowOnException() {
-        WorkflowEngine engine = new WorkflowEngine(List.of(throwingExecutor("test")), List.of(), null);
+        WorkflowEngine engine = new WorkflowEngine(NodeExecutorProvider.fromList(throwingExecutor("test")), List.of(), null);
         Workflow workflow = simpleActionWorkflow("test");
         WorkflowInstance result = engine.startWorkflow(workflow, Map.of());
         assertEquals(InstanceStatus.FAILED, result.status());
@@ -77,7 +77,7 @@ class WorkflowEngineErrorTest {
             }
         };
 
-        WorkflowEngine engine = new WorkflowEngine(List.of(retryableExecutor), List.of(), retryHandler);
+        WorkflowEngine engine = new WorkflowEngine(NodeExecutorProvider.fromList(retryableExecutor), List.of(), retryHandler);
         Workflow workflow = simpleActionWorkflow("test");
         WorkflowInstance result = engine.startWorkflow(workflow, Map.of());
 
@@ -102,7 +102,7 @@ class WorkflowEngineErrorTest {
             List.of(edge("e1", "start", "a"), edge("e2", "a", "end"), edge("e3", "a", "error-end")));
 
         WorkflowEngine engine = new WorkflowEngine(
-            List.of(failingExecutor("fail")), List.of(), transitionHandler);
+            NodeExecutorProvider.fromList(failingExecutor("fail")), List.of(), transitionHandler);
         WorkflowInstance result = engine.startWorkflow(workflow, Map.of());
 
         assertEquals(InstanceStatus.COMPLETED, result.status());
@@ -122,7 +122,7 @@ class WorkflowEngineErrorTest {
         };
 
         WorkflowEngine engine = new WorkflowEngine(
-            List.of(failingExecutor("test")), List.of(), badHandler);
+            NodeExecutorProvider.fromList(failingExecutor("test")), List.of(), badHandler);
         Workflow workflow = simpleActionWorkflow("test");
         WorkflowInstance result = engine.startWorkflow(workflow, Map.of());
 
@@ -143,7 +143,7 @@ class WorkflowEngineErrorTest {
         };
 
         WorkflowEngine engine = new WorkflowEngine(
-            List.of(failingExecutor("test")), List.of(), explodingHandler);
+            NodeExecutorProvider.fromList(failingExecutor("test")), List.of(), explodingHandler);
         Workflow workflow = simpleActionWorkflow("test");
         WorkflowInstance result = engine.startWorkflow(workflow, Map.of());
 
@@ -169,7 +169,7 @@ class WorkflowEngineErrorTest {
         };
 
         WorkflowEngine engine = new WorkflowEngine(
-            List.of(failingExecutor("test")), List.of(), capturingHandler);
+            NodeExecutorProvider.fromList(failingExecutor("test")), List.of(), capturingHandler);
         engine.startWorkflow(simpleActionWorkflow("test"), Map.of());
 
         assertNotNull(captured[0]);
@@ -195,7 +195,7 @@ class WorkflowEngineErrorTest {
         };
 
         WorkflowEngine engine = new WorkflowEngine(
-            List.of(throwingExecutor("test")), List.of(), capturingHandler);
+            NodeExecutorProvider.fromList(throwingExecutor("test")), List.of(), capturingHandler);
         engine.startWorkflow(simpleActionWorkflow("test"), Map.of());
 
         assertNull(captured[0]);

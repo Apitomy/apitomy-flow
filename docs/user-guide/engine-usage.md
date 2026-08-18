@@ -6,13 +6,13 @@ The `WorkflowEngine` is a stateless, synchronous Java class. All methods take st
 
 ```java
 WorkflowEngine engine = new WorkflowEngine(
-    List.of(executor1, executor2),   // NodeExecutor implementations
-    List.of(listener1, listener2),   // WorkflowEventListener implementations
-    myErrorHandler                   // WorkflowErrorHandler (optional, defaults to fail-on-error)
+    NodeExecutorProvider.fromList(executor1, executor2),  // NodeExecutorProvider
+    List.of(listener1, listener2),                        // WorkflowEventListener implementations
+    myErrorHandler                                        // WorkflowErrorHandler (optional, defaults to fail-on-error)
 );
 ```
 
-All dependencies are passed via constructor — no CDI, no service discovery.
+The `NodeExecutorProvider` is a functional interface — implement it directly for custom executor lookup (e.g. a service registry), or use the `fromList` convenience factory. All dependencies are passed via constructor — no CDI, no service discovery.
 
 ## Starting a Workflow
 

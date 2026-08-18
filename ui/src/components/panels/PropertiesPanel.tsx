@@ -34,6 +34,83 @@ export function PropertiesPanel({ selectedNode, selectedEdge, onNodeChange, onEd
             onChange={(e) => onNodeChange(selectedNode.id, { name: e.target.value })}
           />
         </div>
+        {selectedNode.data.nodeType === 'start' && (
+          <div className="properties-panel__field">
+            <label>Inputs</label>
+            <div className="properties-panel__inputs-list">
+              {((selectedNode.data.config.inputs as { name: string; type: string; required: boolean }[]) || []).map((input, i) => (
+                <div key={i} className="properties-panel__input-item">
+                  <div className="properties-panel__input-row">
+                    <input
+                      type="text"
+                      value={input.name}
+                      placeholder="Name"
+                      onChange={(e) => {
+                        const inputs = [...((selectedNode.data.config.inputs as any[]) || [])];
+                        inputs[i] = { ...inputs[i], name: e.target.value };
+                        onNodeChange(selectedNode.id, {
+                          config: { ...selectedNode.data.config, inputs },
+                        });
+                      }}
+                    />
+                    <select
+                      value={input.type}
+                      onChange={(e) => {
+                        const inputs = [...((selectedNode.data.config.inputs as any[]) || [])];
+                        inputs[i] = { ...inputs[i], type: e.target.value };
+                        onNodeChange(selectedNode.id, {
+                          config: { ...selectedNode.data.config, inputs },
+                        });
+                      }}
+                    >
+                      <option value="string">string</option>
+                      <option value="number">number</option>
+                      <option value="boolean">boolean</option>
+                      <option value="object">object</option>
+                    </select>
+                    <button
+                      className="properties-panel__match-remove"
+                      title="Remove input"
+                      onClick={() => {
+                        const inputs = ((selectedNode.data.config.inputs as any[]) || []).filter((_, j) => j !== i);
+                        onNodeChange(selectedNode.id, {
+                          config: { ...selectedNode.data.config, inputs },
+                        });
+                      }}
+                    >
+                      &times;
+                    </button>
+                  </div>
+                  <label className="properties-panel__input-required">
+                    <input
+                      type="checkbox"
+                      checked={input.required}
+                      onChange={(e) => {
+                        const inputs = [...((selectedNode.data.config.inputs as any[]) || [])];
+                        inputs[i] = { ...inputs[i], required: e.target.checked };
+                        onNodeChange(selectedNode.id, {
+                          config: { ...selectedNode.data.config, inputs },
+                        });
+                      }}
+                    />
+                    Required
+                  </label>
+                </div>
+              ))}
+              <button
+                className="properties-panel__match-add"
+                onClick={() => {
+                  const inputs = [...((selectedNode.data.config.inputs as any[]) || []), { name: '', type: 'string', required: true }];
+                  onNodeChange(selectedNode.id, {
+                    config: { ...selectedNode.data.config, inputs },
+                  });
+                }}
+              >
+                + Add input
+              </button>
+            </div>
+          </div>
+        )}
         {selectedNode.data.nodeType === 'action' && (
           <div className="properties-panel__field">
             <label>Action Type</label>

@@ -20,11 +20,11 @@ import static org.junit.jupiter.api.Assertions.*;
 class WorkflowEngineStartTest {
 
     private WorkflowEngine engine(NodeExecutor... executors) {
-        return new WorkflowEngine(List.of(executors), List.of(), null);
+        return new WorkflowEngine(NodeExecutorProvider.fromList(executors), List.of(), null);
     }
 
     private WorkflowEngine engine(List<NodeExecutor> executors, List<WorkflowEventListener> listeners) {
-        return new WorkflowEngine(executors, listeners, null);
+        return new WorkflowEngine(NodeExecutorProvider.fromList(executors), listeners, null);
     }
 
     private NodeExecutor echoExecutor(String actionType) {

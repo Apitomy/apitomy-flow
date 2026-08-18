@@ -62,17 +62,17 @@ public class AnalyzeCveExecutor implements NodeExecutor {
 
 ## Registration
 
-Executors are passed to the `WorkflowEngine` constructor:
+Executors are provided to the `WorkflowEngine` via a `NodeExecutorProvider`:
 
 ```java
 WorkflowEngine engine = new WorkflowEngine(
-    List.of(new AnalyzeCveExecutor(), new CreatePrExecutor()),
+    NodeExecutorProvider.fromList(new AnalyzeCveExecutor(), new CreatePrExecutor()),
     List.of(),
     null
 );
 ```
 
-The engine matches executors to action nodes by comparing `NodeExecutor.actionType()` against the node's `config.actionType` field. If no matching executor is found, the workflow fails.
+The `NodeExecutorProvider` is a functional interface with a single method `getExecutor(String actionType)`. The `fromList` factory creates a provider from a list of executors, keyed by their `actionType()`. You can also implement `NodeExecutorProvider` directly for custom lookup logic (e.g. service registry, dependency injection). If no matching executor is found, the workflow fails.
 
 ## Action Node Config
 

@@ -21,10 +21,16 @@ function cloneSnapshot<NodeData extends Record<string, unknown>>(
 export function useUndoRedo<NodeData extends Record<string, unknown> = Record<string, unknown>>() {
   const historyRef = useRef<Snapshot<NodeData>[]>([]);
   const pointerRef = useRef(-1);
-  const [, rerender] = useState(0);
+  const [pointer, setPointer] = useState(-1);
+  const [historyLength, setHistoryLength] = useState(0);
 
-  const canUndo = pointerRef.current > 0;
-  const canRedo = pointerRef.current < historyRef.current.length - 1;
+  const canUndo = pointer > 0;
+  const canRedo = pointer < historyLength - 1;
+
+  const syncState = useCallback(() => {
+    setPointer(pointerRef.current);
+    setHistoryLength(historyRef.current.length);
+  }, []);
 
   const takeSnapshot = useCallback((nodes: Node<NodeData>[], edges: Edge[]) => {
     historyRef.current = historyRef.current.slice(0, pointerRef.current + 1);
@@ -33,24 +39,24 @@ export function useUndoRedo<NodeData extends Record<string, unknown> = Record<st
       historyRef.current = historyRef.current.slice(historyRef.current.length - MAX_HISTORY);
     }
     pointerRef.current = historyRef.current.length - 1;
-    rerender(c => c + 1);
-  }, []);
+    syncState();
+  }, [syncState]);
 
   const undo = useCallback((): Snapshot<NodeData> | null => {
     if (pointerRef.current <= 0) return null;
     pointerRef.current -= 1;
-    rerender(c => c + 1);
+    syncState();
     const snapshot = historyRef.current[pointerRef.current];
     return cloneSnapshot(snapshot.nodes, snapshot.edges);
-  }, []);
+  }, [syncState]);
 
   const redo = useCallback((): Snapshot<NodeData> | null => {
     if (pointerRef.current >= historyRef.current.length - 1) return null;
     pointerRef.current += 1;
-    rerender(c => c + 1);
+    syncState();
     const snapshot = historyRef.current[pointerRef.current];
     return cloneSnapshot(snapshot.nodes, snapshot.edges);
-  }, []);
+  }, [syncState]);
 
   return { takeSnapshot, undo, redo, canUndo, canRedo };
 }

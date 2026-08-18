@@ -15,18 +15,15 @@ public class WorkflowEngine {
     private static final Logger log = LoggerFactory.getLogger(WorkflowEngine.class);
     private static final int MAX_TRANSITIONS = 100;
 
-    private final Map<String, NodeExecutor> executors;
+    private final NodeExecutorProvider executorProvider;
     private final List<WorkflowEventListener> listeners;
     private final WorkflowErrorHandler errorHandler;
     private final WorkflowValidator validator;
     private final ConditionEvaluator conditionEvaluator;
 
-    public WorkflowEngine(List<NodeExecutor> executors, List<WorkflowEventListener> listeners,
+    public WorkflowEngine(NodeExecutorProvider executorProvider, List<WorkflowEventListener> listeners,
                           WorkflowErrorHandler errorHandler) {
-        this.executors = new HashMap<>();
-        for (NodeExecutor executor : executors) {
-            this.executors.put(executor.actionType(), executor);
-        }
+        this.executorProvider = executorProvider != null ? executorProvider : actionType -> null;
         this.listeners = listeners != null ? listeners : List.of();
         this.errorHandler = errorHandler != null ? errorHandler : new DefaultErrorHandler();
         this.validator = new WorkflowValidator();
@@ -266,7 +263,7 @@ public class WorkflowEngine {
     private WorkflowInstance executeActionNode(Workflow workflow, WorkflowInstance instance,
                                                WorkflowNode actionNode) {
         String actionType = (String) actionNode.config().get("actionType");
-        NodeExecutor executor = executors.get(actionType);
+        NodeExecutor executor = executorProvider.getExecutor(actionType);
         if (executor == null) {
             return failWorkflow(instance, "No executor found for action type: " + actionType, null);
         }

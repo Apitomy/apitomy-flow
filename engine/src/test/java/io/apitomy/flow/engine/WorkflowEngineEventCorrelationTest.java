@@ -23,7 +23,7 @@ class WorkflowEngineEventCorrelationTest {
 
     @BeforeEach
     void setUp() {
-        engine = new WorkflowEngine(List.of(), List.of(), null);
+        engine = new WorkflowEngine(NodeExecutorProvider.fromList(), List.of(), null);
     }
 
     private Workflow receiveEventWorkflow(String eventType) {
