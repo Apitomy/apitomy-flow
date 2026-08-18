@@ -11,6 +11,11 @@ import java.util.Map;
 import static io.apitomy.flow.TestWorkflows.*;
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * Tests workflow completion and cancellation scenarios: advancing past human tasks,
+ * chaining action nodes after completion, rejecting completion on non-waiting instances,
+ * cancelling workflows, and verifying instance immutability.
+ */
 class WorkflowEngineCompleteTest {
 
     private WorkflowEngine engine(NodeExecutor... executors) {

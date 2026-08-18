@@ -7,6 +7,11 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * Tests the JUEL-based condition evaluator used for edge routing decisions,
+ * covering equality checks, nested map access, numeric comparisons, boolean
+ * logic, null-safe property access, invalid expressions, and event-based evaluation.
+ */
 class ConditionEvaluatorTest {
 
     private ConditionEvaluator evaluator;

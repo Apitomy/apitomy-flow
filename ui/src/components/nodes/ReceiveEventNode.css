@@ -1,9 +1,9 @@
 .flow-node-receive-event {
   padding: 10px 16px;
   border-radius: 8px;
-  background: var(--pf-t--global--color--status--custom--default, #73bcf7);
-  color: #151515;
-  border: 2px solid transparent;
+  background: #f0e6ff;
+  color: #2e1065;
+  border: 2px solid #8b5cf6;
   display: flex;
   align-items: center;
   gap: 8px;

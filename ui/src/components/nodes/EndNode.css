@@ -1,9 +1,9 @@
 .flow-node-end {
   padding: 10px 20px;
   border-radius: 20px;
-  background: var(--pf-t--global--color--status--danger--default, #c9190b);
-  color: white;
-  border: 2px solid transparent;
+  background: #fce4e4;
+  color: #7d1007;
+  border: 2px solid #c9190b;
   display: flex;
   align-items: center;
   gap: 8px;

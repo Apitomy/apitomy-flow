@@ -3,7 +3,6 @@ import {
   ReactFlow,
   Background,
   Controls,
-  MiniMap,
   useNodesState,
   useEdgesState,
   addEdge,
@@ -23,6 +22,7 @@ import { edgeTypes } from './edges/edgeTypes.ts';
 import { NodePalette } from './panels/NodePalette.tsx';
 import { PropertiesPanel } from './panels/PropertiesPanel.tsx';
 import { ProblemsPanel } from './panels/ProblemsPanel.tsx';
+import { NodeContextMenu } from './NodeContextMenu.tsx';
 import './WorkflowEditor.css';
 
 export interface WorkflowEditorProps {
@@ -44,6 +44,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange }: Workflo
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ node: Node<FlowNodeData>; position: { x: number; y: number } } | null>(null);
 
   const selectedNode = nodes.find(n => n.id === selectedNodeId);
   const selectedEdge = edges.find(e => e.id === selectedEdgeId);
@@ -151,7 +152,40 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange }: Workflo
   const onPaneClick = useCallback(() => {
     setSelectedNodeId(null);
     setSelectedEdgeId(null);
+    setContextMenu(null);
   }, []);
+
+  const onNodeContextMenu = useCallback((event: React.MouseEvent, node: Node<FlowNodeData>) => {
+    event.preventDefault();
+    setContextMenu({ node: node as Node<FlowNodeData>, position: { x: event.clientX, y: event.clientY } });
+  }, []);
+
+  const onCloneNode = useCallback((node: Node<FlowNodeData>) => {
+    const newNode: Node<FlowNodeData> = {
+      id: generateNodeId(node.data.nodeType),
+      type: node.type,
+      position: { x: node.position.x + 40, y: node.position.y + 40 },
+      data: { ...node.data, name: `${node.data.name} (copy)`, config: { ...node.data.config } },
+    };
+    setNodes(nds => {
+      const updated = [...nds, newNode];
+      setTimeout(() => emitChange(updated, edges), 0);
+      return updated;
+    });
+  }, [setNodes, edges, emitChange]);
+
+  const onDeleteNode = useCallback((nodeId: string) => {
+    setNodes(nds => {
+      const updated = nds.filter(n => n.id !== nodeId);
+      setEdges(eds => {
+        const updatedEdges = eds.filter(e => e.source !== nodeId && e.target !== nodeId);
+        setTimeout(() => emitChange(updated, updatedEdges), 0);
+        return updatedEdges;
+      });
+      if (selectedNodeId === nodeId) setSelectedNodeId(null);
+      return updated;
+    });
+  }, [setNodes, setEdges, emitChange, selectedNodeId]);
 
   const onNodeDataChange = useCallback((id: string, dataUpdate: Partial<FlowNodeData>) => {
     setNodes(nds => {
@@ -199,6 +233,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange }: Workflo
             onNodeClick={onNodeClick}
             onEdgeClick={onEdgeClick}
             onPaneClick={onPaneClick}
+            onNodeContextMenu={onNodeContextMenu}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             defaultEdgeOptions={{ type: 'conditional' }}
@@ -206,8 +241,17 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange }: Workflo
           >
             <Background />
             <Controls />
-            <MiniMap />
+
           </ReactFlow>
+          {contextMenu && (
+            <NodeContextMenu
+              node={contextMenu.node}
+              position={contextMenu.position}
+              onClone={onCloneNode}
+              onDelete={onDeleteNode}
+              onClose={() => setContextMenu(null)}
+            />
+          )}
         </div>
         <PropertiesPanel
           selectedNode={selectedNode}

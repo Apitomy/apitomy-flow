@@ -10,6 +10,12 @@ import java.util.Map;
 import static io.apitomy.flow.TestWorkflows.*;
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * Tests error handling in the workflow engine: default failure behavior for node errors
+ * and executor exceptions, retry resolution, transition-to-error-node resolution,
+ * invalid error transitions, error handler exceptions, and verification that the
+ * handler receives the correct result or exception.
+ */
 class WorkflowEngineErrorTest {
 
     private NodeExecutor failingExecutor(String actionType) {

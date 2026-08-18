@@ -58,6 +58,50 @@ export function PropertiesPanel({ selectedNode, selectedEdge, onNodeChange, onEd
                 })}
               />
             </div>
+            <div className="properties-panel__field">
+              <label>Match Expressions (EL)</label>
+              <div className="properties-panel__match-list">
+                {((selectedNode.data.config.match as string[]) || []).map((expr, i) => (
+                  <div key={i} className="properties-panel__match-item">
+                    <input
+                      type="text"
+                      value={expr}
+                      placeholder="e.g. event.repo == context.repo"
+                      onChange={(e) => {
+                        const match = [...((selectedNode.data.config.match as string[]) || [])];
+                        match[i] = e.target.value;
+                        onNodeChange(selectedNode.id, {
+                          config: { ...selectedNode.data.config, match },
+                        });
+                      }}
+                    />
+                    <button
+                      className="properties-panel__match-remove"
+                      title="Remove expression"
+                      onClick={() => {
+                        const match = ((selectedNode.data.config.match as string[]) || []).filter((_, j) => j !== i);
+                        onNodeChange(selectedNode.id, {
+                          config: { ...selectedNode.data.config, match },
+                        });
+                      }}
+                    >
+                      &times;
+                    </button>
+                  </div>
+                ))}
+                <button
+                  className="properties-panel__match-add"
+                  onClick={() => {
+                    const match = [...((selectedNode.data.config.match as string[]) || []), ''];
+                    onNodeChange(selectedNode.id, {
+                      config: { ...selectedNode.data.config, match },
+                    });
+                  }}
+                >
+                  + Add expression
+                </button>
+              </div>
+            </div>
           </>
         )}
         <div className="properties-panel__field">

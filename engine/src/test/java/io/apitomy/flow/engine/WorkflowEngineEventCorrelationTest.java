@@ -11,6 +11,12 @@ import java.util.Map;
 import static io.apitomy.flow.TestWorkflows.*;
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * Tests event correlation for receive-event nodes: matching events by type,
+ * matching with EL expressions against context and nested event data, rejecting
+ * events for non-waiting or non-receive-event nodes, wildcard matching with empty
+ * match lists, and merging event payloads into the workflow context on completion.
+ */
 class WorkflowEngineEventCorrelationTest {
 
     private WorkflowEngine engine;

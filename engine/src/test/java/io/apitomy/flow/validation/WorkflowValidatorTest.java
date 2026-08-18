@@ -10,6 +10,13 @@ import java.util.Map;
 import static io.apitomy.flow.TestWorkflows.*;
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * Tests workflow definition validation: structural rules (start/end node presence,
+ * edge references, duplicate IDs, start incoming/end outgoing constraints),
+ * connectivity checks (outgoing edges, disconnected nodes), edge condition rules
+ * (default edge requirements), semantic rules (missing action type, event type,
+ * start inputs), and that a valid workflow produces no errors.
+ */
 class WorkflowValidatorTest {
 
     private WorkflowValidator validator;

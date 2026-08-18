@@ -12,6 +12,12 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * Tests Jackson serialization and deserialization of workflow models: round-trip
+ * fidelity for workflows and instances, kebab-case enum serialization for node
+ * types and instance status, and workflow helper methods like findStartNode and
+ * getOutgoingEdges.
+ */
 class WorkflowSerializationTest {
 
     private ObjectMapper mapper;

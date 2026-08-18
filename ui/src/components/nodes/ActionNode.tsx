@@ -1,5 +1,5 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { CogIcon } from '@patternfly/react-icons';
+import { PlayIcon } from '@patternfly/react-icons';
 import { type FlowNodeData } from '../../utils/conversion.ts';
 import './ActionNode.css';
 
@@ -11,7 +11,7 @@ export function ActionNode({ data, selected }: NodeProps) {
   return (
     <div className={`flow-node-action ${validationClass} ${selected ? 'selected' : ''}`}>
       <Handle type="target" position={Position.Left} />
-      <CogIcon />
+      <PlayIcon />
       <span>{nodeData.name}</span>
       <Handle type="source" position={Position.Right} />
     </div>

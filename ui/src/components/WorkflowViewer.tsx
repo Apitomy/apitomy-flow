@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { ReactFlow, Background, Controls, MiniMap, ReactFlowProvider } from '@xyflow/react';
+import { ReactFlow, Background, Controls, ReactFlowProvider } from '@xyflow/react';
 import { type Workflow } from '../types/workflow.ts';
 import { type WorkflowInstance } from '../types/instance.ts';
 import { toReactFlowNodes, toReactFlowEdges } from '../utils/conversion.ts';
@@ -66,7 +66,7 @@ function WorkflowViewerInner({ workflow, instance }: WorkflowViewerProps) {
       >
         <Background />
         <Controls showInteractive={false} />
-        <MiniMap />
+
       </ReactFlow>
     </div>
   );

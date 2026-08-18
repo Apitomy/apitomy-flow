@@ -1,9 +1,9 @@
 .flow-node-human-task {
   padding: 10px 16px;
   border-radius: 8px;
-  background: var(--pf-t--global--color--status--info--default, #2b9af3);
-  color: white;
-  border: 2px solid transparent;
+  background: #fff3e0;
+  color: #5c3000;
+  border: 2px solid #e88a0c;
   display: flex;
   align-items: center;
   gap: 8px;

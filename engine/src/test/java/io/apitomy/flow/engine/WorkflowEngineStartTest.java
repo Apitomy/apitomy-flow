@@ -11,6 +11,12 @@ import java.util.Map;
 import static io.apitomy.flow.TestWorkflows.*;
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * Tests workflow startup behavior: reaching a human task wait state, chaining
+ * multiple action nodes, conditional edge routing, workflow and input validation,
+ * caller-provided instance IDs, lifecycle event listener notifications, safety
+ * limits for infinite loops, and history recording with edge info.
+ */
 class WorkflowEngineStartTest {
 
     private WorkflowEngine engine(NodeExecutor... executors) {

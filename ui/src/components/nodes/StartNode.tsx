@@ -1,5 +1,5 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { PlayIcon } from '@patternfly/react-icons';
+import { OutlinedCircleIcon } from '@patternfly/react-icons';
 import { type FlowNodeData } from '../../utils/conversion.ts';
 import './StartNode.css';
 
@@ -10,7 +10,7 @@ export function StartNode({ data, selected }: NodeProps) {
 
   return (
     <div className={`flow-node-start ${validationClass} ${selected ? 'selected' : ''}`}>
-      <PlayIcon />
+      <OutlinedCircleIcon />
       <span>{nodeData.name}</span>
       <Handle type="source" position={Position.Right} />
     </div>
