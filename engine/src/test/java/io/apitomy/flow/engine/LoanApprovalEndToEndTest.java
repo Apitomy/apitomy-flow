@@ -79,7 +79,20 @@ class LoanApprovalEndToEndTest {
                     inputDef("annualIncome", "number", true)
                 )),
                 actionNode("credit-check", "credit-check"),
-                humanTaskNode("manual-review"),
+                humanTaskNode("manual-review",
+                    "Review the applicant's credit data and approve or reject the loan.",
+                    Map.of(
+                        "Applicant", "context.applicantName",
+                        "Loan Amount", "context.loanAmount",
+                        "Credit Score", "context.creditScore",
+                        "Debt-to-Income Ratio", "context.debtToIncomeRatio"
+                    ),
+                    List.of(
+                        inputDef("approved", "boolean", true),
+                        inputDef("reviewNotes", "string", false),
+                        inputDef("loanId", "string", false)
+                    )
+                ),
                 receiveEventNode("await-funding", "funding-confirmed", List.of(
                     "event.loanId == context.loanId"
                 )),

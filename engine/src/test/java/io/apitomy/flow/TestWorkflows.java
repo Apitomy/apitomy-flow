@@ -22,6 +22,13 @@ public class TestWorkflows {
         return new WorkflowNode(id, NodeType.HUMAN_TASK, id, Map.of(), new Position(200, 0));
     }
 
+    public static WorkflowNode humanTaskNode(String id, String description,
+                                              Map<String, String> inputs, List<Map<String, Object>> outputs) {
+        return new WorkflowNode(id, NodeType.HUMAN_TASK, id,
+            Map.of("description", description, "inputs", inputs, "outputs", outputs),
+            new Position(200, 0));
+    }
+
     public static WorkflowNode receiveEventNode(String id, String eventType) {
         return new WorkflowNode(id, NodeType.RECEIVE_EVENT, id,
             Map.of("eventType", eventType), new Position(200, 0));

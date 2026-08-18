@@ -247,6 +247,20 @@ public class WorkflowValidator {
             }
         }
 
+        // Human task nodes missing description or outputs
+        workflow.nodes().stream()
+            .filter(n -> n.type() == NodeType.HUMAN_TASK)
+            .forEach(node -> {
+                if (!node.config().containsKey("description")) {
+                    problems.add(ValidationProblem.warning("MISSING_TASK_DESCRIPTION",
+                        "Human task node has no description", node.id()));
+                }
+                if (!node.config().containsKey("outputs")) {
+                    problems.add(ValidationProblem.warning("MISSING_TASK_OUTPUTS",
+                        "Human task node has no outputs defined", node.id()));
+                }
+            });
+
         // Missing start inputs
         WorkflowNode start = workflow.findStartNode();
         if (start != null && !start.config().containsKey("inputs")) {

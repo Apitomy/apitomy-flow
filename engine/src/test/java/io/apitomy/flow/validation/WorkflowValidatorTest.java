@@ -175,6 +175,22 @@ class WorkflowValidatorTest {
     }
 
     @Test
+    void missingTaskDescription() {
+        Workflow w = new Workflow("w", "W", null,
+            List.of(startNode("start"), humanTaskNode("ht"), endNode("end")),
+            List.of(edge("e1", "start", "ht"), edge("e2", "ht", "end")));
+        assertTrue(hasCode(validate(w), "MISSING_TASK_DESCRIPTION"));
+    }
+
+    @Test
+    void missingTaskOutputs() {
+        Workflow w = new Workflow("w", "W", null,
+            List.of(startNode("start"), humanTaskNode("ht"), endNode("end")),
+            List.of(edge("e1", "start", "ht"), edge("e2", "ht", "end")));
+        assertTrue(hasCode(validate(w), "MISSING_TASK_OUTPUTS"));
+    }
+
+    @Test
     void missingStartInputs() {
         Workflow w = new Workflow("w", "W", null,
             List.of(startNode("start"), endNode("end")),

@@ -189,6 +189,15 @@ function validateSemantics(workflow: Workflow, problems: ValidationProblem[]) {
     }
   }
 
+  for (const node of workflow.nodes.filter(n => n.type === 'human-task')) {
+    if (!node.config.description) {
+      problems.push(problem('warning', 'MISSING_TASK_DESCRIPTION', 'Human task node has no description', node.id));
+    }
+    if (!node.config.outputs) {
+      problems.push(problem('warning', 'MISSING_TASK_OUTPUTS', 'Human task node has no outputs defined', node.id));
+    }
+  }
+
   const startNode = workflow.nodes.find(n => n.type === 'start');
   if (startNode && !startNode.config.inputs) {
     problems.push(problem('warning', 'MISSING_START_INPUTS', 'Start node has no inputs defined', startNode.id));
