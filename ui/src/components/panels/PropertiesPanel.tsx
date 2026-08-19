@@ -1,5 +1,16 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { type Node, type Edge } from '@xyflow/react';
+import {
+  Select,
+  SelectOption,
+  SelectList,
+  MenuToggle,
+  TextInputGroup,
+  TextInputGroupMain,
+  TextInputGroupUtilities,
+  Button,
+} from '@patternfly/react-core';
+import { TimesIcon } from '@patternfly/react-icons';
 import { type FlowNodeData } from '../../utils/conversion.ts';
 import { type EditorSpi } from '../../types/spi.ts';
 import { type ActionTypeDescriptor } from '../../types/spi.ts';
@@ -471,16 +482,22 @@ function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading 
       <div className="properties-panel__field">
         <label>Action Type</label>
         {hasSpi ? (
-          <select
+          <ActionTypeSelect
             value={currentActionType}
-            disabled={actionTypesLoading}
-            onChange={(e) => onActionTypeSelected(e.target.value)}
-          >
-            <option value="">{actionTypesLoading ? 'Loading...' : '— Select action type —'}</option>
-            {actionTypes.map(at => (
-              <option key={at.value} value={at.value}>{at.label}</option>
-            ))}
-          </select>
+            actionTypes={actionTypes}
+            loading={actionTypesLoading}
+            onSelect={(value) => {
+              const match = actionTypes.find(at => at.value === value);
+              if (match) {
+                onActionTypeSelected(value);
+              } else {
+                onNodeChange(node.id, {
+                  config: { ...node.data.config, actionType: value },
+                });
+              }
+            }}
+            onClear={() => onActionTypeSelected('')}
+          />
         ) : (
           <input
             type="text"
@@ -693,3 +710,123 @@ function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading 
     </>
   );
 }
+
+function ActionTypeSelect({ value, actionTypes, loading, onSelect, onClear }: {
+  value: string;
+  actionTypes: ActionTypeDescriptor[];
+  loading: boolean;
+  onSelect: (value: string) => void;
+  onClear: () => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [filterText, setFilterText] = useState('');
+  const textInputRef = useRef<HTMLInputElement>(null);
+
+  const displayValue = useMemo(() => {
+    const match = actionTypes.find(at => at.value === value);
+    return match ? match.label : value;
+  }, [value, actionTypes]);
+
+  const inputValue = isOpen ? filterText : displayValue;
+
+  const filteredOptions = useMemo(() => {
+    if (!filterText) return actionTypes;
+    const lower = filterText.toLowerCase();
+    return actionTypes.filter(at =>
+      at.label.toLowerCase().includes(lower) || at.value.toLowerCase().includes(lower),
+    );
+  }, [filterText, actionTypes]);
+
+  const isCustom = isOpen && filterText && !actionTypes.some(at =>
+    at.value === filterText || at.label.toLowerCase() === filterText.toLowerCase(),
+  );
+
+  const onInputChange = (_event: React.FormEvent<HTMLInputElement>, val: string) => {
+    setFilterText(val);
+    if (!isOpen) setIsOpen(true);
+  };
+
+  const onOptionSelect = (_event: React.MouseEvent | undefined, val: string | number | undefined) => {
+    const selected = String(val);
+    if (selected.startsWith('__create__:')) {
+      const custom = selected.slice('__create__:'.length);
+      onSelect(custom);
+    } else {
+      onSelect(selected);
+    }
+    setFilterText('');
+    setIsOpen(false);
+    textInputRef.current?.focus();
+  };
+
+  const handleClear = () => {
+    setFilterText('');
+    onClear();
+    textInputRef.current?.focus();
+  };
+
+  const handleOpenChange = (open: boolean) => {
+    setIsOpen(open);
+    if (open) {
+      setFilterText('');
+    }
+  };
+
+  const toggle = (toggleRef: React.Ref<MenuToggleElement>) => (
+    <MenuToggle
+      ref={toggleRef}
+      variant="typeahead"
+      onClick={() => { handleOpenChange(!isOpen); textInputRef.current?.focus(); }}
+      isExpanded={isOpen}
+      isDisabled={loading}
+      isFullWidth
+    >
+      <TextInputGroup isPlain>
+        <TextInputGroupMain
+          value={inputValue}
+          onClick={() => { if (!isOpen) setIsOpen(true); }}
+          onChange={onInputChange}
+          innerRef={textInputRef}
+          placeholder={loading ? 'Loading...' : 'Select or type an action type'}
+          autoComplete="off"
+        />
+        {(value || inputValue) && (
+          <TextInputGroupUtilities>
+            <Button variant="plain" onClick={handleClear} aria-label="Clear action type">
+              <TimesIcon />
+            </Button>
+          </TextInputGroupUtilities>
+        )}
+      </TextInputGroup>
+    </MenuToggle>
+  );
+
+  return (
+    <Select
+      isOpen={isOpen}
+      selected={value}
+      onSelect={onOptionSelect}
+      onOpenChange={handleOpenChange}
+      toggle={toggle}
+      shouldFocusFirstItemOnOpen={false}
+    >
+      <SelectList>
+        {filteredOptions.map(at => (
+          <SelectOption key={at.value} value={at.value} description={at.description}>
+            {at.label}
+          </SelectOption>
+        ))}
+        {isCustom && (
+          <SelectOption value={`__create__:${inputValue}`}>
+            {`Use custom type "${inputValue}"`}
+          </SelectOption>
+        )}
+        {filteredOptions.length === 0 && !isCustom && (
+          <SelectOption isDisabled>No results found</SelectOption>
+        )}
+      </SelectList>
+    </Select>
+  );
+}
+
+type MenuToggleElement = HTMLButtonElement;
