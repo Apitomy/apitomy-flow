@@ -3,6 +3,7 @@
   flex-direction: column;
   height: 100%;
   width: 100%;
+  color: var(--flow-text, #151515);
 }
 .workflow-editor__body {
   display: flex;
@@ -22,14 +23,14 @@
   gap: 4px;
   padding: 6px 12px;
   font-size: 13px;
-  border: 1px solid var(--pf-t--global--border--color--default, #d2d2d2);
+  border: 1px solid var(--flow-border, #d2d2d2);
   border-radius: 4px;
-  background: var(--pf-t--global--background--color--primary--default, #fff);
+  background: var(--flow-bg-primary, #fff);
   cursor: pointer;
-  color: var(--pf-t--global--text--color--regular, #151515);
+  color: var(--flow-text, #151515);
 }
 .workflow-editor__toolbar button:hover:not(:disabled) {
-  background: var(--pf-t--global--background--color--primary--hover, #f0f0f0);
+  background: var(--flow-bg-hover, #f0f0f0);
 }
 .workflow-editor__toolbar button:disabled {
   opacity: 0.4;
@@ -38,4 +39,4 @@
 .react-flow__node { transition: box-shadow 0.15s, filter 0.15s; cursor: pointer; }
 .react-flow__edge { cursor: pointer; }
 .react-flow__edge:hover .react-flow__edge-path { stroke-width: 3; }
-.react-flow__edge:hover .edge-condition-badge { box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15); }
+.react-flow__edge:hover .edge-condition-badge { box-shadow: 0 1px 4px var(--flow-shadow-heavy, rgba(0, 0, 0, 0.15)); }

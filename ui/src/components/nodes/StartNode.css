@@ -1,9 +1,9 @@
 .flow-node-start {
   padding: 10px 20px;
   border-radius: 20px;
-  background: #e6f5e4;
-  color: #1e4620;
-  border: 2px solid #3e8635;
+  background: var(--flow-node-start-bg, #e6f5e4);
+  color: var(--flow-node-start-text, #1e4620);
+  border: 2px solid var(--flow-node-start-border, #3e8635);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -11,7 +11,7 @@
   min-width: 100px;
   justify-content: center;
 }
-.flow-node-start:hover { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12); filter: brightness(0.97); }
-.flow-node-start.has-error { border-color: var(--pf-t--global--color--status--danger--default, #c9190b); }
-.flow-node-start.has-warning { border-color: var(--pf-t--global--color--status--warning--default, #f0ab00); }
-.flow-node-start.selected { box-shadow: 0 0 0 2px var(--pf-t--global--color--brand--default, #06c); }
+.flow-node-start:hover { box-shadow: 0 2px 8px var(--flow-shadow, rgba(0, 0, 0, 0.12)); filter: brightness(0.97); }
+.flow-node-start.has-error { border-color: var(--flow-status-danger, #c9190b); }
+.flow-node-start.has-warning { border-color: var(--flow-status-warning, #f0ab00); }
+.flow-node-start.selected { box-shadow: 0 0 0 2px var(--flow-brand, #06c); }

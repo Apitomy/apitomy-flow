@@ -1,16 +1,16 @@
 .flow-node-action {
   padding: 10px 16px;
   border-radius: 8px;
-  background: #e0ecff;
-  color: #002952;
-  border: 2px solid #06c;
+  background: var(--flow-node-action-bg, #e0ecff);
+  color: var(--flow-node-action-text, #002952);
+  border: 2px solid var(--flow-node-action-border, #06c);
   display: flex;
   align-items: center;
   gap: 8px;
   font-size: 13px;
   min-width: 120px;
 }
-.flow-node-action:hover { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12); filter: brightness(0.97); }
-.flow-node-action.has-error { border-color: var(--pf-t--global--color--status--danger--default, #c9190b); }
-.flow-node-action.has-warning { border-color: var(--pf-t--global--color--status--warning--default, #f0ab00); }
-.flow-node-action.selected { box-shadow: 0 0 0 2px var(--pf-t--global--color--brand--default, #06c); }
+.flow-node-action:hover { box-shadow: 0 2px 8px var(--flow-shadow, rgba(0, 0, 0, 0.12)); filter: brightness(0.97); }
+.flow-node-action.has-error { border-color: var(--flow-status-danger, #c9190b); }
+.flow-node-action.has-warning { border-color: var(--flow-status-warning, #f0ab00); }
+.flow-node-action.selected { box-shadow: 0 0 0 2px var(--flow-brand, #06c); }

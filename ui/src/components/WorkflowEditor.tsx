@@ -28,16 +28,20 @@ import { PropertiesPanel } from './panels/PropertiesPanel.tsx';
 import { ProblemsPanel } from './panels/ProblemsPanel.tsx';
 import { NodeContextMenu } from './NodeContextMenu.tsx';
 import { useUndoRedo } from '../hooks/useUndoRedo.ts';
+import './theme.css';
 import './WorkflowEditor.css';
+
+export type FlowTheme = 'light' | 'dark';
 
 export interface WorkflowEditorProps {
   workflow: Workflow;
   onChange: (workflow: Workflow) => void;
   validationProblems?: ValidationProblem[];
   onValidationChange?: (problems: ValidationProblem[]) => void;
+  theme?: FlowTheme;
 }
 
-function WorkflowEditorInner({ workflow, onChange, onValidationChange }: WorkflowEditorProps) {
+function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = 'light' }: WorkflowEditorProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: convert once on mount, React Flow manages state after
   const initialNodes = useMemo(() => toReactFlowNodes(workflow.nodes), []);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -295,7 +299,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange }: Workflo
   }, [nodes, fitView]);
 
   return (
-    <div className="workflow-editor">
+    <div className="workflow-editor" data-flow-theme={theme}>
       <NodePalette />
       <div className="workflow-editor__body">
         <div className="workflow-editor__canvas">
@@ -315,6 +319,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange }: Workflo
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             defaultEdgeOptions={{ type: 'conditional' }}
+            colorMode={theme}
             fitView
           >
             <Background />

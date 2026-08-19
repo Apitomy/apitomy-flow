@@ -6,10 +6,10 @@
 .node-context-menu {
   position: fixed;
   z-index: 100;
-  background: var(--pf-t--global--background--color--primary--default, #fff);
-  border: 1px solid var(--pf-t--global--border--color--default, #d2d2d2);
+  background: var(--flow-bg-primary, #fff);
+  border: 1px solid var(--flow-border, #d2d2d2);
   border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 12px var(--flow-shadow-heavy, rgba(0, 0, 0, 0.15));
   min-width: 140px;
   padding: 4px 0;
 }
@@ -22,14 +22,14 @@
   text-align: left;
   font-size: 13px;
   cursor: pointer;
-  color: var(--pf-t--global--text--color--regular, #151515);
+  color: var(--flow-text, #151515);
 }
 .node-context-menu button:hover {
-  background: var(--pf-t--global--background--color--primary--hover, #f0f0f0);
+  background: var(--flow-bg-hover, #f0f0f0);
 }
 .node-context-menu__danger {
-  color: var(--pf-t--global--color--status--danger--default, #c9190b) !important;
+  color: var(--flow-status-danger, #c9190b) !important;
 }
 .node-context-menu__danger:hover {
-  background: #fce4e4 !important;
+  background: var(--flow-danger-hover-bg, #fce4e4) !important;
 }

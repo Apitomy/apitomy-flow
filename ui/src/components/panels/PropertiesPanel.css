@@ -1,19 +1,20 @@
 .properties-panel {
   width: 320px;
-  border-left: 1px solid var(--pf-t--global--border--color--default, #d2d2d2);
-  background: var(--pf-t--global--background--color--primary--default, #fff);
+  border-left: 1px solid var(--flow-border, #d2d2d2);
+  background: var(--flow-bg-primary, #fff);
   overflow-y: auto;
   padding: 16px;
+  color: var(--flow-text, #151515);
 }
 .properties-panel__header {
   font-size: 16px;
   font-weight: 600;
   margin-bottom: 16px;
   padding-bottom: 8px;
-  border-bottom: 1px solid var(--pf-t--global--border--color--default, #d2d2d2);
+  border-bottom: 1px solid var(--flow-border, #d2d2d2);
 }
 .properties-panel__empty {
-  color: var(--pf-t--global--text--color--subtle, #6a6e73);
+  color: var(--flow-text-subtle, #6a6e73);
   font-size: 13px;
   padding: 20px;
   text-align: center;
@@ -31,9 +32,11 @@
 .properties-panel__field textarea {
   width: 100%;
   padding: 6px 8px;
-  border: 1px solid var(--pf-t--global--border--color--default, #d2d2d2);
+  border: 1px solid var(--flow-border, #d2d2d2);
   border-radius: 4px;
   font-size: 13px;
+  background: var(--flow-input-bg, #fff);
+  color: var(--flow-input-text, inherit);
 }
 .properties-panel__field input[type="checkbox"] {
   width: auto;
@@ -57,30 +60,30 @@
 }
 .properties-panel__match-remove {
   background: none;
-  border: 1px solid var(--pf-t--global--border--color--default, #d2d2d2);
+  border: 1px solid var(--flow-border, #d2d2d2);
   border-radius: 4px;
   cursor: pointer;
   font-size: 16px;
   line-height: 1;
   padding: 4px 8px;
-  color: var(--pf-t--global--text--color--subtle, #6a6e73);
+  color: var(--flow-text-subtle, #6a6e73);
 }
 .properties-panel__match-remove:hover {
-  color: var(--pf-t--global--color--status--danger--default, #c9190b);
-  border-color: var(--pf-t--global--color--status--danger--default, #c9190b);
+  color: var(--flow-status-danger, #c9190b);
+  border-color: var(--flow-status-danger, #c9190b);
 }
 .properties-panel__match-add {
   background: none;
-  border: 1px dashed var(--pf-t--global--border--color--default, #d2d2d2);
+  border: 1px dashed var(--flow-border, #d2d2d2);
   border-radius: 4px;
   cursor: pointer;
   font-size: 13px;
   padding: 6px 8px;
-  color: var(--pf-t--global--color--brand--default, #06c);
+  color: var(--flow-brand, #06c);
 }
 .properties-panel__match-add:hover {
-  border-color: var(--pf-t--global--color--brand--default, #06c);
-  background: var(--pf-t--global--background--color--primary--hover, #f0f0f0);
+  border-color: var(--flow-brand, #06c);
+  background: var(--flow-bg-hover, #f0f0f0);
 }
 .properties-panel__inputs-list {
   display: flex;
@@ -88,7 +91,7 @@
   gap: 8px;
 }
 .properties-panel__input-item {
-  border: 1px solid var(--pf-t--global--border--color--default, #d2d2d2);
+  border: 1px solid var(--flow-border, #d2d2d2);
   border-radius: 4px;
   padding: 8px;
 }
@@ -103,9 +106,11 @@
 }
 .properties-panel__input-row select {
   padding: 6px 4px;
-  border: 1px solid var(--pf-t--global--border--color--default, #d2d2d2);
+  border: 1px solid var(--flow-border, #d2d2d2);
   border-radius: 4px;
   font-size: 13px;
+  background: var(--flow-input-bg, #fff);
+  color: var(--flow-input-text, inherit);
 }
 .properties-panel__input-required {
   display: flex !important;
@@ -113,5 +118,5 @@
   font-weight: 400 !important;
   margin-top: 4px;
   font-size: 12px;
-  color: var(--pf-t--global--text--color--subtle, #6a6e73);
+  color: var(--flow-text-subtle, #6a6e73);
 }

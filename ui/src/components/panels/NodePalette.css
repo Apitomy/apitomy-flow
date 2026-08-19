@@ -2,8 +2,8 @@
   display: flex;
   gap: 8px;
   padding: 8px 16px;
-  background: var(--pf-t--global--background--color--secondary--default, #f0f0f0);
-  border-bottom: 1px solid var(--pf-t--global--border--color--default, #d2d2d2);
+  background: var(--flow-bg-secondary, #f0f0f0);
+  border-bottom: 1px solid var(--flow-border, #d2d2d2);
   flex-wrap: wrap;
 }
 .node-palette__item {
@@ -12,12 +12,13 @@
   gap: 6px;
   padding: 6px 12px;
   border-radius: 6px;
-  border: 1px solid var(--pf-t--global--border--color--default, #d2d2d2);
-  background: var(--pf-t--global--background--color--primary--default, #fff);
+  border: 1px solid var(--flow-border, #d2d2d2);
+  background: var(--flow-bg-primary, #fff);
   cursor: grab;
   font-size: 13px;
   user-select: none;
+  color: var(--flow-text, #151515);
 }
 .node-palette__item:hover {
-  border-color: var(--pf-t--global--color--brand--default, #06c);
+  border-color: var(--flow-brand, #06c);
 }

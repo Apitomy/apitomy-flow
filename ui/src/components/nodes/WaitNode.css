@@ -1,16 +1,16 @@
 .flow-node-wait {
   padding: 10px 16px;
   border-radius: 8px;
-  background: #ececec;
-  color: #3c3c3c;
-  border: 2px solid #8a8a8a;
+  background: var(--flow-node-wait-bg, #ececec);
+  color: var(--flow-node-wait-text, #3c3c3c);
+  border: 2px solid var(--flow-node-wait-border, #8a8a8a);
   display: flex;
   align-items: center;
   gap: 8px;
   font-size: 13px;
   min-width: 120px;
 }
-.flow-node-wait:hover { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12); filter: brightness(0.97); }
-.flow-node-wait.has-error { border-color: var(--pf-t--global--color--status--danger--default, #c9190b); }
-.flow-node-wait.has-warning { border-color: var(--pf-t--global--color--status--warning--default, #f0ab00); }
-.flow-node-wait.selected { box-shadow: 0 0 0 2px var(--pf-t--global--color--brand--default, #06c); }
+.flow-node-wait:hover { box-shadow: 0 2px 8px var(--flow-shadow, rgba(0, 0, 0, 0.12)); filter: brightness(0.97); }
+.flow-node-wait.has-error { border-color: var(--flow-status-danger, #c9190b); }
+.flow-node-wait.has-warning { border-color: var(--flow-status-warning, #f0ab00); }
+.flow-node-wait.selected { box-shadow: 0 0 0 2px var(--flow-brand, #06c); }

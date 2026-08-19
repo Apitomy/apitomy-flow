@@ -5,16 +5,19 @@ import { type HistoryEntry } from '../types/instance.ts';
 import { type Workflow } from '../types/workflow.ts';
 import { type WorkflowInstance } from '../types/instance.ts';
 import { toReactFlowNodes, toReactFlowEdges } from '../utils/conversion.ts';
+import { type FlowTheme } from './WorkflowEditor.tsx';
 import { nodeTypes } from './nodes/nodeTypes.ts';
 import { edgeTypes } from './edges/edgeTypes.ts';
+import './theme.css';
 import './WorkflowViewer.css';
 
 export interface WorkflowViewerProps {
   workflow: Workflow;
   instance: WorkflowInstance;
+  theme?: FlowTheme;
 }
 
-function WorkflowViewerInner({ workflow, instance }: WorkflowViewerProps) {
+function WorkflowViewerInner({ workflow, instance, theme = 'light' }: WorkflowViewerProps) {
   const visitedNodeIds = useMemo(
     () => new Set(instance.history.map(h => h.nodeId)),
     [instance.history],
@@ -45,7 +48,7 @@ function WorkflowViewerInner({ workflow, instance }: WorkflowViewerProps) {
         style: {
           ...edge.style,
           strokeWidth: isVisited ? 2.5 : 1,
-          stroke: isVisited ? 'var(--pf-t--global--color--status--success--default, #3e8635)' : undefined,
+          stroke: isVisited ? 'var(--flow-status-success, #3e8635)' : undefined,
           opacity: isVisited ? 1 : 0.3,
         },
         animated: edge.id === instance.history[instance.history.length - 1]?.edgeId,
@@ -100,7 +103,7 @@ function WorkflowViewerInner({ workflow, instance }: WorkflowViewerProps) {
   }, [panelWidth]);
 
   return (
-    <div className="workflow-viewer">
+    <div className="workflow-viewer" data-flow-theme={theme}>
       <div className="workflow-viewer__canvas">
         <ReactFlow
           nodes={nodes}
@@ -109,6 +112,7 @@ function WorkflowViewerInner({ workflow, instance }: WorkflowViewerProps) {
           edgeTypes={edgeTypes}
           nodesDraggable={false}
           nodesConnectable={false}
+          colorMode={theme}
           onNodeClick={onNodeClick}
           onPaneClick={onPaneClick}
           fitView

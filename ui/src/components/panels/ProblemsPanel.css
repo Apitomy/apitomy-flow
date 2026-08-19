@@ -1,6 +1,6 @@
 .problems-panel {
-  border-top: 1px solid var(--pf-t--global--border--color--default, #d2d2d2);
-  background: var(--pf-t--global--background--color--primary--default, #fff);
+  border-top: 1px solid var(--flow-border, #d2d2d2);
+  background: var(--flow-bg-primary, #fff);
   max-height: 200px;
   overflow-y: auto;
 }
@@ -11,20 +11,21 @@
   padding: 6px 16px;
   font-size: 13px;
   font-weight: 600;
-  background: var(--pf-t--global--background--color--secondary--default, #f0f0f0);
-  border-bottom: 1px solid var(--pf-t--global--border--color--default, #d2d2d2);
+  background: var(--flow-bg-secondary, #f0f0f0);
+  border-bottom: 1px solid var(--flow-border, #d2d2d2);
   cursor: pointer;
   user-select: none;
+  color: var(--flow-text, #151515);
 }
 .problems-panel__count {
   display: flex;
   gap: 8px;
 }
 .problems-panel__count-error {
-  color: var(--pf-t--global--color--status--danger--default, #c9190b);
+  color: var(--flow-status-danger, #c9190b);
 }
 .problems-panel__count-warning {
-  color: var(--pf-t--global--color--status--warning--default, #f0ab00);
+  color: var(--flow-status-warning, #f0ab00);
 }
 .problems-panel__list {
   list-style: none;
@@ -38,20 +39,21 @@
   padding: 4px 16px;
   font-size: 12px;
   cursor: pointer;
-  border-bottom: 1px solid var(--pf-t--global--border--color--default, #d2d2d2);
+  border-bottom: 1px solid var(--flow-border, #d2d2d2);
+  color: var(--flow-text, #151515);
 }
 .problems-panel__item:hover {
-  background: var(--pf-t--global--background--color--secondary--default, #f0f0f0);
+  background: var(--flow-bg-secondary, #f0f0f0);
 }
 .problems-panel__severity-error {
-  color: var(--pf-t--global--color--status--danger--default, #c9190b);
+  color: var(--flow-status-danger, #c9190b);
   font-weight: 600;
 }
 .problems-panel__severity-warning {
-  color: var(--pf-t--global--color--status--warning--default, #f0ab00);
+  color: var(--flow-status-warning, #f0ab00);
   font-weight: 600;
 }
 .problems-panel__code {
   font-family: monospace;
-  color: var(--pf-t--global--text--color--subtle, #6a6e73);
+  color: var(--flow-text-subtle, #6a6e73);
 }

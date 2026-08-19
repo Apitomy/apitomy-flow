@@ -1,0 +1,111 @@
+[data-flow-theme] {
+  --flow-bg-primary: #fff;
+  --flow-bg-secondary: #f0f0f0;
+  --flow-bg-hover: #f0f0f0;
+  --flow-border: #d2d2d2;
+  --flow-text: #151515;
+  --flow-text-subtle: #6a6e73;
+  --flow-brand: #06c;
+  --flow-shadow: rgba(0, 0, 0, 0.12);
+  --flow-shadow-heavy: rgba(0, 0, 0, 0.15);
+
+  --flow-status-danger: #c9190b;
+  --flow-status-warning: #f0ab00;
+  --flow-status-success: #3e8635;
+  --flow-status-info: #2b9af3;
+
+  --flow-node-start-bg: #e6f5e4;
+  --flow-node-start-text: #1e4620;
+  --flow-node-start-border: #3e8635;
+
+  --flow-node-end-bg: #fce4e4;
+  --flow-node-end-text: #7d1007;
+  --flow-node-end-border: #c9190b;
+
+  --flow-node-action-bg: #e0ecff;
+  --flow-node-action-text: #002952;
+  --flow-node-action-border: #06c;
+
+  --flow-node-human-task-bg: #fff3e0;
+  --flow-node-human-task-text: #5c3000;
+  --flow-node-human-task-border: #e88a0c;
+
+  --flow-node-receive-event-bg: #f0e6ff;
+  --flow-node-receive-event-text: #2e1065;
+  --flow-node-receive-event-border: #8b5cf6;
+
+  --flow-node-wait-bg: #ececec;
+  --flow-node-wait-text: #3c3c3c;
+  --flow-node-wait-border: #8a8a8a;
+
+  --flow-status-running-bg: #e0ecff;
+  --flow-status-running-text: #002952;
+  --flow-status-waiting-bg: #fff3e0;
+  --flow-status-waiting-text: #5c3000;
+  --flow-status-completed-bg: #e6f5e4;
+  --flow-status-completed-text: #1e4620;
+  --flow-status-failed-bg: #fce4e4;
+  --flow-status-failed-text: #7d1007;
+  --flow-status-cancelled-bg: #ececec;
+  --flow-status-cancelled-text: #3c3c3c;
+
+  --flow-danger-hover-bg: #fce4e4;
+  --flow-input-bg: #fff;
+  --flow-input-text: inherit;
+}
+
+[data-flow-theme="dark"] {
+  --flow-bg-primary: #1b1b1b;
+  --flow-bg-secondary: #2a2a2a;
+  --flow-bg-hover: #333;
+  --flow-border: #444;
+  --flow-text: #e0e0e0;
+  --flow-text-subtle: #999;
+  --flow-brand: #4d94ff;
+  --flow-shadow: rgba(0, 0, 0, 0.4);
+  --flow-shadow-heavy: rgba(0, 0, 0, 0.5);
+
+  --flow-status-danger: #e05050;
+  --flow-status-warning: #f0b830;
+  --flow-status-success: #50a050;
+  --flow-status-info: #50b0f0;
+
+  --flow-node-start-bg: #1a2e1a;
+  --flow-node-start-text: #8ed498;
+  --flow-node-start-border: #4da64d;
+
+  --flow-node-end-bg: #2e1a1a;
+  --flow-node-end-text: #e88080;
+  --flow-node-end-border: #d44040;
+
+  --flow-node-action-bg: #1a2640;
+  --flow-node-action-text: #80b3ff;
+  --flow-node-action-border: #4d94ff;
+
+  --flow-node-human-task-bg: #2e2210;
+  --flow-node-human-task-text: #e8b060;
+  --flow-node-human-task-border: #e89840;
+
+  --flow-node-receive-event-bg: #221a30;
+  --flow-node-receive-event-text: #b898e8;
+  --flow-node-receive-event-border: #9070e0;
+
+  --flow-node-wait-bg: #2a2a2a;
+  --flow-node-wait-text: #b0b0b0;
+  --flow-node-wait-border: #666;
+
+  --flow-status-running-bg: #1a2640;
+  --flow-status-running-text: #80b3ff;
+  --flow-status-waiting-bg: #2e2210;
+  --flow-status-waiting-text: #e8b060;
+  --flow-status-completed-bg: #1a2e1a;
+  --flow-status-completed-text: #8ed498;
+  --flow-status-failed-bg: #2e1a1a;
+  --flow-status-failed-text: #e88080;
+  --flow-status-cancelled-bg: #2a2a2a;
+  --flow-status-cancelled-text: #b0b0b0;
+
+  --flow-danger-hover-bg: #2e1a1a;
+  --flow-input-bg: #222;
+  --flow-input-text: #e0e0e0;
+}
