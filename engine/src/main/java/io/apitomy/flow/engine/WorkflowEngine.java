@@ -202,6 +202,36 @@ public class WorkflowEngine {
         return new WaitInfo(node.id(), node.name(), duration);
     }
 
+    public ActionInfo getActionInfo(Workflow workflow, WorkflowInstance instance) {
+        if (instance.status() != InstanceStatus.WAITING) {
+            return null;
+        }
+        WorkflowNode node = workflow.findNodeById(instance.currentNodeId());
+        if (node == null || node.type() != NodeType.ACTION) {
+            return null;
+        }
+
+        String actionType = node.config().get("actionType") instanceof String at ? at : null;
+
+        Map<String, Object> resolvedInputs = resolveNodeInputs(node, instance.context());
+
+        List<ActionInfo.OutputDefinition> expectedOutputs = List.of();
+        if (node.config().get("outputs") instanceof List<?> outputDefs) {
+            expectedOutputs = outputDefs.stream()
+                .filter(Map.class::isInstance)
+                .map(o -> (Map<?, ?>) o)
+                .map(o -> new ActionInfo.OutputDefinition(
+                    String.valueOf(o.get("name")),
+                    o.get("type") != null ? String.valueOf(o.get("type")) : "string",
+                    Boolean.TRUE.equals(o.get("required"))
+                ))
+                .toList();
+        }
+
+        return new ActionInfo(node.id(), node.name(), actionType,
+            resolvedInputs, expectedOutputs);
+    }
+
     public boolean matchesEvent(Workflow workflow, WorkflowInstance instance, Map<String, Object> event) {
         if (instance.status() != InstanceStatus.WAITING) {
             return false;
@@ -390,6 +420,18 @@ public class WorkflowEngine {
                     continue;
                 }
                 return applyResolution(workflow, instance, actionNode, resolution);
+            }
+
+            if (result.status() == NodeResultStatus.PENDING) {
+                if (result.output() != null && !result.output().isEmpty()) {
+                    instance = instance.toBuilder()
+                        .mergeContext(result.output())
+                        .build();
+                }
+                return instance.toBuilder()
+                    .status(InstanceStatus.WAITING)
+                    .updatedOn(Instant.now())
+                    .build();
             }
 
             // Validate output against declared schema

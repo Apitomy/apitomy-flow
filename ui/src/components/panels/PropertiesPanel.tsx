@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { type Node, type Edge } from '@xyflow/react';
 import { type FlowNodeData } from '../../utils/conversion.ts';
 import { type EditorSpi } from '../../types/spi.ts';
@@ -15,29 +15,29 @@ interface PropertiesPanelProps {
 }
 
 function useActionTypes(spi?: EditorSpi): { actionTypes: ActionTypeDescriptor[]; loading: boolean } {
-  const [resolved, setResolved] = useState<ActionTypeDescriptor[] | null>(null);
-  const [loading, setLoading] = useState(false);
   const provider = spi?.actionTypes;
+  const isAsync = typeof provider === 'function';
+
+  const staticTypes = useMemo(
+    () => (Array.isArray(provider) ? provider : []),
+    [provider],
+  );
+
+  const LOADING_SENTINEL: ActionTypeDescriptor[] = useMemo(() => [], []);
+  const [asyncTypes, setAsyncTypes] = useState<ActionTypeDescriptor[]>(LOADING_SENTINEL);
 
   useEffect(() => {
-    if (!provider) {
-      setResolved(null);
-      return;
-    }
-    if (Array.isArray(provider)) {
-      setResolved(provider);
-      return;
-    }
+    if (!isAsync) return;
     let cancelled = false;
-    setLoading(true);
-    provider().then(
-      (result) => { if (!cancelled) { setResolved(result); setLoading(false); } },
-      () => { if (!cancelled) { setResolved([]); setLoading(false); } },
+    (provider as () => Promise<ActionTypeDescriptor[]>)().then(
+      (result) => { if (!cancelled) setAsyncTypes(result); },
+      () => { if (!cancelled) setAsyncTypes([]); },
     );
     return () => { cancelled = true; };
-  }, [provider]);
+  }, [provider, isAsync]);
 
-  return { actionTypes: resolved ?? [], loading };
+  if (!isAsync) return { actionTypes: staticTypes, loading: false };
+  return { actionTypes: asyncTypes, loading: asyncTypes === LOADING_SENTINEL };
 }
 
 export function PropertiesPanel({ selectedNode, selectedEdge, onNodeChange, onNodeIdChange, onEdgeChange, spi }: PropertiesPanelProps) {
