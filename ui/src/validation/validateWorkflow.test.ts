@@ -152,6 +152,56 @@ describe('validateWorkflow', () => {
       );
       expect(hasProblem(validateWorkflow(w), 'MISSING_START_INPUTS')).toBe(true);
     });
+
+    it('EMPTY_ACTION_INPUT_EXPRESSION when action input has empty expression', () => {
+      const w = workflow(
+        [
+          node('start', 'start', { inputs: [{ name: 'x', type: 'string', required: true }] }),
+          node('a', 'action', { actionType: 'test', inputs: { url: '', method: 'context.method' }, outputs: [] }),
+          node('end', 'end'),
+        ],
+        [edge('e1', 'start', 'a'), edge('e2', 'a', 'end')],
+      );
+      const problems = validateWorkflow(w);
+      expect(hasProblem(problems, 'EMPTY_ACTION_INPUT_EXPRESSION')).toBe(true);
+      expect(problems.filter(p => p.code === 'EMPTY_ACTION_INPUT_EXPRESSION')).toHaveLength(1);
+    });
+
+    it('no EMPTY_ACTION_INPUT_EXPRESSION when all expressions filled', () => {
+      const w = workflow(
+        [
+          node('start', 'start', { inputs: [{ name: 'x', type: 'string', required: true }] }),
+          node('a', 'action', { actionType: 'test', inputs: { url: 'context.url', method: 'context.method' }, outputs: [] }),
+          node('end', 'end'),
+        ],
+        [edge('e1', 'start', 'a'), edge('e2', 'a', 'end')],
+      );
+      expect(hasProblem(validateWorkflow(w), 'EMPTY_ACTION_INPUT_EXPRESSION')).toBe(false);
+    });
+
+    it('EMPTY_TASK_INPUT_EXPRESSION when human task input has empty expression', () => {
+      const w = workflow(
+        [
+          node('start', 'start', { inputs: [{ name: 'x', type: 'string', required: true }] }),
+          node('t', 'human-task', { description: 'Do it', inputs: { score: '' }, outputs: [{ name: 'decision', type: 'string', required: true }] }),
+          node('end', 'end'),
+        ],
+        [edge('e1', 'start', 't'), edge('e2', 't', 'end')],
+      );
+      expect(hasProblem(validateWorkflow(w), 'EMPTY_TASK_INPUT_EXPRESSION')).toBe(true);
+    });
+
+    it('no EMPTY_TASK_INPUT_EXPRESSION when all expressions filled', () => {
+      const w = workflow(
+        [
+          node('start', 'start', { inputs: [{ name: 'x', type: 'string', required: true }] }),
+          node('t', 'human-task', { description: 'Do it', inputs: { score: 'context.score' }, outputs: [{ name: 'decision', type: 'string', required: true }] }),
+          node('end', 'end'),
+        ],
+        [edge('e1', 'start', 't'), edge('e2', 't', 'end')],
+      );
+      expect(hasProblem(validateWorkflow(w), 'EMPTY_TASK_INPUT_EXPRESSION')).toBe(false);
+    });
   });
 
   describe('valid workflows', () => {

@@ -71,6 +71,14 @@ function validateStructure(workflow: Workflow, problems: ValidationProblem[]) {
     }
     if (!action.config.inputs) {
       problems.push(problem('warning', 'MISSING_ACTION_INPUTS', 'Action node has no inputs defined', action.id));
+    } else {
+      const inputs = action.config.inputs as Record<string, string>;
+      for (const [name, expr] of Object.entries(inputs)) {
+        if (!expr || expr.trim() === '') {
+          problems.push(problem('warning', 'EMPTY_ACTION_INPUT_EXPRESSION',
+            `Action node input "${name}" has no EL expression`, action.id));
+        }
+      }
     }
     if (!action.config.outputs) {
       problems.push(problem('warning', 'MISSING_ACTION_OUTPUTS', 'Action node has no outputs defined', action.id));
@@ -198,6 +206,15 @@ function validateSemantics(workflow: Workflow, problems: ValidationProblem[]) {
   for (const node of workflow.nodes.filter(n => n.type === 'human-task')) {
     if (!node.config.description) {
       problems.push(problem('warning', 'MISSING_TASK_DESCRIPTION', 'Human task node has no description', node.id));
+    }
+    if (node.config.inputs) {
+      const inputs = node.config.inputs as Record<string, string>;
+      for (const [name, expr] of Object.entries(inputs)) {
+        if (!expr || expr.trim() === '') {
+          problems.push(problem('warning', 'EMPTY_TASK_INPUT_EXPRESSION',
+            `Human task input "${name}" has no EL expression`, node.id));
+        }
+      }
     }
     if (!node.config.outputs) {
       problems.push(problem('warning', 'MISSING_TASK_OUTPUTS', 'Human task node has no outputs defined', node.id));

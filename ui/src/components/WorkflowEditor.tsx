@@ -18,6 +18,7 @@ import {
 import { UndoIcon, RedoIcon } from '@patternfly/react-icons';
 import { type Workflow } from '../types/workflow.ts';
 import { type ValidationProblem } from '../types/validation.ts';
+import { type EditorSpi } from '../types/spi.ts';
 import { type FlowNodeData, toReactFlowNodes, toReactFlowEdges, toWorkflow } from '../utils/conversion.ts';
 import { generateNodeId, generateEdgeId } from '../utils/id.ts';
 import { validateWorkflow } from '../validation/validateWorkflow.ts';
@@ -39,9 +40,10 @@ export interface WorkflowEditorProps {
   validationProblems?: ValidationProblem[];
   onValidationChange?: (problems: ValidationProblem[]) => void;
   theme?: FlowTheme;
+  spi?: EditorSpi;
 }
 
-function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = 'light' }: WorkflowEditorProps) {
+function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = 'light', spi }: WorkflowEditorProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: convert once on mount, React Flow manages state after
   const initialNodes = useMemo(() => toReactFlowNodes(workflow.nodes), []);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -350,6 +352,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
           selectedEdge={selectedEdge}
           onNodeChange={onNodeDataChange}
           onEdgeChange={onEdgeDataChange}
+          spi={spi}
         />
       </div>
       <ProblemsPanel problems={validationProblems} onProblemClick={onProblemClick} />

@@ -29,7 +29,8 @@
   margin-bottom: 4px;
 }
 .properties-panel__field input,
-.properties-panel__field textarea {
+.properties-panel__field textarea,
+.properties-panel__field > select {
   width: 100%;
   padding: 6px 8px;
   border: 1px solid var(--flow-border, #d2d2d2);
@@ -119,4 +120,31 @@
   margin-top: 4px;
   font-size: 12px;
   color: var(--flow-text-subtle, #6a6e73);
+}
+.properties-panel__field-hint {
+  font-size: 12px;
+  color: var(--flow-text-subtle, #6a6e73);
+  margin-top: 4px;
+}
+.properties-panel__spi-field-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.properties-panel__spi-field-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+.properties-panel__spi-required {
+  color: var(--flow-status-danger, #c9190b);
+  margin-left: 2px;
+}
+.properties-panel__spi-field-type {
+  font-size: 11px;
+  font-family: monospace;
+  color: var(--flow-text-subtle, #6a6e73);
+  background: var(--flow-bg-secondary, #f5f5f5);
+  padding: 1px 5px;
+  border-radius: 3px;
 }
