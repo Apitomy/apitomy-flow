@@ -33,7 +33,7 @@ WorkflowInstance instance = engine.startWorkflow(definition, initialContext, "my
 5. Enters the start node and evaluates outgoing edges
 6. Chains through action nodes until a wait state or end is reached
 
-The returned instance is in `WAITING` (hit a human-task or receive-event), `COMPLETED` (reached an end node), or `FAILED` (error during execution).
+The returned instance is in `WAITING` (hit a human-task, receive-event, or wait node), `COMPLETED` (reached an end node), or `FAILED` (error during execution).
 
 ## Completing a Waiting Node
 
@@ -64,6 +64,42 @@ boolean matches = engine.matchesEvent(definition, instance, eventPayload);
 ```
 
 See [Event Correlation](event-correlation.md) for details.
+
+## Handling Wait States
+
+The engine is stateless and synchronous — when it reaches a node that requires external input (Human Task, Receive Event, or Wait), it sets the instance to `WAITING` and returns. The consuming application is responsible for detecting the wait, handling it, and resuming the workflow. All three wait-state node types follow the same pattern:
+
+1. **Detect** — after `startWorkflow` or `completeCurrentNode` returns, check `instance.status() == WAITING`
+2. **Introspect** — call the appropriate `get*Info` method to learn what the instance is waiting for
+3. **Handle** — perform the external work (present a task inbox, listen for events, schedule a timer)
+4. **Resume** — call `completeCurrentNode(workflow, instance, result)` with the outcome
+
+```java
+WorkflowInstance instance = engine.startWorkflow(workflow, inputs);
+
+if (instance.status() == InstanceStatus.WAITING) {
+    // Try each introspection method — exactly one will return non-null
+    HumanTaskInfo task = engine.getHumanTaskInfo(workflow, instance);
+    if (task != null) {
+        // Create an inbox item with task.description(), task.inputs(), task.outputs()
+        // When the human completes it, call completeCurrentNode with their response
+    }
+
+    ReceiveEventInfo event = engine.getReceiveEventInfo(workflow, instance);
+    if (event != null) {
+        // Index the instance by event.eventType() for efficient matching
+        // When a matching event arrives, call completeCurrentNode with the event payload
+    }
+
+    WaitInfo wait = engine.getWaitInfo(workflow, instance);
+    if (wait != null) {
+        // Schedule a timer for wait.duration()
+        // When it fires, call completeCurrentNode with an empty result
+    }
+}
+```
+
+The consuming application persists the instance and resumes it later when the external condition is met. The engine does not manage persistence, scheduling, or event subscriptions — those are the application's responsibility.
 
 ## Resolving Expressions
 
