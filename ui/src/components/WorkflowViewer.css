@@ -9,6 +9,9 @@
 .flow-node-visited { opacity: 1; }
 .flow-node-unvisited { opacity: 0.4; }
 .flow-node-current { box-shadow: 0 0 0 3px var(--pf-t--global--color--status--warning--default, #f0ab00); }
+.workflow-viewer .react-flow__node { transition: box-shadow 0.15s, filter 0.15s; cursor: pointer; }
+.workflow-viewer .react-flow__edge { cursor: pointer; }
+.workflow-viewer .react-flow__edge:hover .react-flow__edge-path { stroke-width: 3; }
 .workflow-viewer__context {
   position: relative;
   border-left: 1px solid var(--pf-t--global--border--color--default, #d2d2d2);

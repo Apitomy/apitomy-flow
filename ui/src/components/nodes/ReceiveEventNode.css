@@ -10,6 +10,7 @@
   font-size: 13px;
   min-width: 120px;
 }
+.flow-node-receive-event:hover { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12); filter: brightness(0.97); }
 .flow-node-receive-event.has-error { border-color: var(--pf-t--global--color--status--danger--default, #c9190b); }
 .flow-node-receive-event.has-warning { border-color: var(--pf-t--global--color--status--warning--default, #f0ab00); }
 .flow-node-receive-event.selected { box-shadow: 0 0 0 2px var(--pf-t--global--color--brand--default, #06c); }
