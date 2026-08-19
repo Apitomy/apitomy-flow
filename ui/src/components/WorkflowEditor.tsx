@@ -170,6 +170,8 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
       setTimeout(() => emitChange(updated, edges), 0);
       return updated;
     });
+    setSelectedNodeId(newNode.id);
+    setSelectedEdgeId(null);
   }, [screenToFlowPosition, setNodes, edges, emitChange]);
 
   const onDragOver = useCallback((event: DragEvent) => {
