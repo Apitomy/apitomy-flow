@@ -13,6 +13,7 @@ function MyWorkflowViewer() {
     <WorkflowViewer
       workflow={workflowDefinition}
       instance={workflowInstance}
+      theme="light"
     />
   );
 }
@@ -24,6 +25,7 @@ function MyWorkflowViewer() {
 |------|------|----------|-------------|
 | `workflow` | `Workflow` | Yes | The workflow definition (graph structure) |
 | `instance` | `WorkflowInstance` | Yes | The runtime state to visualize |
+| `theme` | `FlowTheme` | No | `'light'` or `'dark'` (default: `'light'`). Controls the color scheme of the viewer and React Flow canvas |
 
 ## Features
 

@@ -15,6 +15,7 @@ function MyWorkflowEditor() {
     <WorkflowEditor
       workflow={workflow}
       onChange={setWorkflow}
+      theme="light"
       onValidationChange={(problems) => {
         const hasErrors = problems.some(p => p.severity === 'error');
         setSaveDisabled(hasErrors);
@@ -30,6 +31,8 @@ function MyWorkflowEditor() {
 |------|------|----------|-------------|
 | `workflow` | `Workflow` | Yes | The workflow definition to edit |
 | `onChange` | `(workflow: Workflow) => void` | Yes | Called on every change with the updated definition |
+| `theme` | `FlowTheme` | No | `'light'` or `'dark'` (default: `'light'`). Controls the color scheme of the editor and React Flow canvas |
+| `validationProblems` | `ValidationProblem[]` | No | Externally-supplied validation problems to display alongside the editor's built-in validation |
 | `onValidationChange` | `(problems: ValidationProblem[]) => void` | No | Called when validation results change (e.g. to disable a Save button when errors exist) |
 
 ## Features

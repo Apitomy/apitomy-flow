@@ -70,15 +70,18 @@ System.out.println(completed.currentNodeId()); // end-approved
 
 ```tsx
 import { WorkflowEditor, WorkflowViewer } from '@apitomy/flow-ui';
+import type { FlowTheme } from '@apitomy/flow-ui';
 
 // Edit mode — drag-and-drop workflow builder
 function MyEditor() {
   const [workflow, setWorkflow] = useState(myWorkflow);
+  const theme: FlowTheme = 'light'; // or 'dark'
 
   return (
     <WorkflowEditor
       workflow={workflow}
       onChange={setWorkflow}
+      theme={theme}
       onValidationChange={(problems) => {
         console.log('Validation:', problems);
       }}
@@ -92,6 +95,7 @@ function MyViewer() {
     <WorkflowViewer
       workflow={myWorkflow}
       instance={myInstance}
+      theme="light"
     />
   );
 }
