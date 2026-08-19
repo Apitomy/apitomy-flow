@@ -71,7 +71,7 @@ class LoanApprovalEndToEndTest {
     }
 
     private Workflow loanApprovalWorkflow() {
-        return new Workflow("loan-wf", "Loan Approval", null,
+        return new Workflow("loan-wf", "Loan Approval", null, null,
             List.of(
                 startNode("start", List.of(
                     inputDef("applicantName", "string", true),

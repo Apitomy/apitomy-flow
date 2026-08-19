@@ -38,14 +38,14 @@ class WorkflowValidatorTest {
 
     @Test
     void noStartNode() {
-        Workflow w = new Workflow("w", "W", null,
+        Workflow w = new Workflow("w", "W", null, null,
             List.of(endNode("end")), List.of());
         assertTrue(hasCode(validate(w), "NO_START_NODE"));
     }
 
     @Test
     void multipleStartNodes() {
-        Workflow w = new Workflow("w", "W", null,
+        Workflow w = new Workflow("w", "W", null, null,
             List.of(startNode("s1"), startNode("s2"), endNode("end")),
             List.of(edge("e1", "s1", "end"), edge("e2", "s2", "end")));
         assertTrue(hasCode(validate(w), "MULTIPLE_START_NODES"));
@@ -53,7 +53,7 @@ class WorkflowValidatorTest {
 
     @Test
     void noEndNode() {
-        Workflow w = new Workflow("w", "W", null,
+        Workflow w = new Workflow("w", "W", null, null,
             List.of(startNode("start"), actionNode("a", "test")),
             List.of(edge("e1", "start", "a")));
         assertTrue(hasCode(validate(w), "NO_END_NODE"));
@@ -61,7 +61,7 @@ class WorkflowValidatorTest {
 
     @Test
     void invalidEdgeSource() {
-        Workflow w = new Workflow("w", "W", null,
+        Workflow w = new Workflow("w", "W", null, null,
             List.of(startNode("start"), endNode("end")),
             List.of(edge("e1", "nonexistent", "end")));
         assertTrue(hasCode(validate(w), "INVALID_EDGE_SOURCE"));
@@ -69,7 +69,7 @@ class WorkflowValidatorTest {
 
     @Test
     void invalidEdgeTarget() {
-        Workflow w = new Workflow("w", "W", null,
+        Workflow w = new Workflow("w", "W", null, null,
             List.of(startNode("start"), endNode("end")),
             List.of(edge("e1", "start", "nonexistent")));
         assertTrue(hasCode(validate(w), "INVALID_EDGE_TARGET"));
@@ -77,7 +77,7 @@ class WorkflowValidatorTest {
 
     @Test
     void duplicateNodeId() {
-        Workflow w = new Workflow("w", "W", null,
+        Workflow w = new Workflow("w", "W", null, null,
             List.of(startNode("dup"), endNode("dup")),
             List.of(edge("e1", "dup", "dup")));
         assertTrue(hasCode(validate(w), "DUPLICATE_NODE_ID"));
@@ -85,7 +85,7 @@ class WorkflowValidatorTest {
 
     @Test
     void duplicateEdgeId() {
-        Workflow w = new Workflow("w", "W", null,
+        Workflow w = new Workflow("w", "W", null, null,
             List.of(startNode("start"), endNode("end")),
             List.of(edge("dup", "start", "end"), edge("dup", "start", "end")));
         assertTrue(hasCode(validate(w), "DUPLICATE_EDGE_ID"));
@@ -93,7 +93,7 @@ class WorkflowValidatorTest {
 
     @Test
     void startHasIncoming() {
-        Workflow w = new Workflow("w", "W", null,
+        Workflow w = new Workflow("w", "W", null, null,
             List.of(startNode("start"), actionNode("a", "test"), endNode("end")),
             List.of(edge("e1", "start", "a"), edge("e2", "a", "start"), edge("e3", "a", "end")));
         assertTrue(hasCode(validate(w), "START_HAS_INCOMING"));
@@ -101,7 +101,7 @@ class WorkflowValidatorTest {
 
     @Test
     void endHasOutgoing() {
-        Workflow w = new Workflow("w", "W", null,
+        Workflow w = new Workflow("w", "W", null, null,
             List.of(startNode("start"), endNode("end"), actionNode("a", "test")),
             List.of(edge("e1", "start", "end"), edge("e2", "end", "a")));
         assertTrue(hasCode(validate(w), "END_HAS_OUTGOING"));
@@ -109,7 +109,7 @@ class WorkflowValidatorTest {
 
     @Test
     void missingActionInputs() {
-        Workflow w = new Workflow("w", "W", null,
+        Workflow w = new Workflow("w", "W", null, null,
             List.of(startNode("start"), actionNode("a", "test"), endNode("end")),
             List.of(edge("e1", "start", "a"), edge("e2", "a", "end")));
         assertTrue(hasCode(validate(w), "MISSING_ACTION_INPUTS"));
@@ -117,7 +117,7 @@ class WorkflowValidatorTest {
 
     @Test
     void missingActionOutputs() {
-        Workflow w = new Workflow("w", "W", null,
+        Workflow w = new Workflow("w", "W", null, null,
             List.of(startNode("start"), actionNode("a", "test"), endNode("end")),
             List.of(edge("e1", "start", "a"), edge("e2", "a", "end")));
         assertTrue(hasCode(validate(w), "MISSING_ACTION_OUTPUTS"));
@@ -126,7 +126,7 @@ class WorkflowValidatorTest {
     @Test
     void missingActionType() {
         WorkflowNode badAction = new WorkflowNode("a", NodeType.ACTION, "A", Map.of(), new Position(0, 0));
-        Workflow w = new Workflow("w", "W", null,
+        Workflow w = new Workflow("w", "W", null, null,
             List.of(startNode("start"), badAction, endNode("end")),
             List.of(edge("e1", "start", "a"), edge("e2", "a", "end")));
         assertTrue(hasCode(validate(w), "MISSING_ACTION_TYPE"));
@@ -136,7 +136,7 @@ class WorkflowValidatorTest {
 
     @Test
     void noOutgoingEdges() {
-        Workflow w = new Workflow("w", "W", null,
+        Workflow w = new Workflow("w", "W", null, null,
             List.of(startNode("start"), actionNode("a", "test"), endNode("end")),
             List.of(edge("e1", "start", "a")));
         assertTrue(hasCode(validate(w), "NO_OUTGOING_EDGES"));
@@ -144,7 +144,7 @@ class WorkflowValidatorTest {
 
     @Test
     void disconnectedNode() {
-        Workflow w = new Workflow("w", "W", null,
+        Workflow w = new Workflow("w", "W", null, null,
             List.of(startNode("start"), endNode("end"), actionNode("orphan", "test")),
             List.of(edge("e1", "start", "end")));
         assertTrue(hasCode(validate(w), "DISCONNECTED_NODE"));
@@ -154,14 +154,14 @@ class WorkflowValidatorTest {
 
     @Test
     void noDefaultEdge() {
-        Workflow w = new Workflow("w", "W", null,
+        Workflow w = new Workflow("w", "W", null, null,
             List.of(startNode("start"), endNode("e1"), endNode("e2")),
             List.of(
                 edge("edge1", "start", "e1", "context.x == 1", 1),
                 edge("edge2", "start", "e2", "context.x == 2", 2)));
         // Note: also triggers DUPLICATE_NODE_ID for end nodes — use different IDs
         // Fix: use proper unique IDs
-        Workflow w2 = new Workflow("w", "W", null,
+        Workflow w2 = new Workflow("w", "W", null, null,
             List.of(startNode("start"), actionNode("a1", "t"), actionNode("a2", "t"), endNode("end")),
             List.of(
                 edge("edge1", "start", "a1", "context.x == 1", 1),
@@ -173,7 +173,7 @@ class WorkflowValidatorTest {
 
     @Test
     void multipleDefaultEdges() {
-        Workflow w = new Workflow("w", "W", null,
+        Workflow w = new Workflow("w", "W", null, null,
             List.of(startNode("start"), endNode("end1"), endNode("end2")),
             List.of(defaultEdge("e1", "start", "end1"), defaultEdge("e2", "start", "end2")));
         assertTrue(hasCode(validate(w), "MULTIPLE_DEFAULT_EDGES"));
@@ -184,7 +184,7 @@ class WorkflowValidatorTest {
     @Test
     void missingEventType() {
         WorkflowNode badReceive = new WorkflowNode("r", NodeType.RECEIVE_EVENT, "R", Map.of(), new Position(0, 0));
-        Workflow w = new Workflow("w", "W", null,
+        Workflow w = new Workflow("w", "W", null, null,
             List.of(startNode("start"), badReceive, endNode("end")),
             List.of(edge("e1", "start", "r"), edge("e2", "r", "end")));
         assertTrue(hasCode(validate(w), "MISSING_EVENT_TYPE"));
@@ -192,7 +192,7 @@ class WorkflowValidatorTest {
 
     @Test
     void missingTaskDescription() {
-        Workflow w = new Workflow("w", "W", null,
+        Workflow w = new Workflow("w", "W", null, null,
             List.of(startNode("start"), humanTaskNode("ht"), endNode("end")),
             List.of(edge("e1", "start", "ht"), edge("e2", "ht", "end")));
         assertTrue(hasCode(validate(w), "MISSING_TASK_DESCRIPTION"));
@@ -200,7 +200,7 @@ class WorkflowValidatorTest {
 
     @Test
     void missingTaskOutputs() {
-        Workflow w = new Workflow("w", "W", null,
+        Workflow w = new Workflow("w", "W", null, null,
             List.of(startNode("start"), humanTaskNode("ht"), endNode("end")),
             List.of(edge("e1", "start", "ht"), edge("e2", "ht", "end")));
         assertTrue(hasCode(validate(w), "MISSING_TASK_OUTPUTS"));
@@ -209,7 +209,7 @@ class WorkflowValidatorTest {
     @Test
     void missingWaitDuration() {
         WorkflowNode waitNoDuration = new WorkflowNode("w", NodeType.WAIT, "Wait", Map.of(), new Position(0, 0));
-        Workflow w = new Workflow("w", "W", null,
+        Workflow w = new Workflow("w", "W", null, null,
             List.of(startNode("start"), waitNoDuration, endNode("end")),
             List.of(edge("e1", "start", "w"), edge("e2", "w", "end")));
         assertTrue(hasCode(validate(w), "MISSING_WAIT_DURATION"));
@@ -217,7 +217,7 @@ class WorkflowValidatorTest {
 
     @Test
     void missingStartInputs() {
-        Workflow w = new Workflow("w", "W", null,
+        Workflow w = new Workflow("w", "W", null, null,
             List.of(startNode("start"), endNode("end")),
             List.of(edge("e1", "start", "end")));
         assertTrue(hasCode(validate(w), "MISSING_START_INPUTS"));
@@ -227,7 +227,7 @@ class WorkflowValidatorTest {
 
     @Test
     void validWorkflowHasNoErrors() {
-        Workflow w = new Workflow("w", "W", null,
+        Workflow w = new Workflow("w", "W", null, null,
             List.of(
                 startNode("start", List.of(inputDef("input1", "string", true))),
                 actionNode("a", "test"),

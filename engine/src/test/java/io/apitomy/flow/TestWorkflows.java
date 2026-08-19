@@ -73,14 +73,14 @@ public class TestWorkflows {
 
     /** Start → Action → End */
     public static Workflow simpleActionWorkflow(String actionType) {
-        return new Workflow("wf-1", "Simple", null,
+        return new Workflow("wf-1", "Simple", null, null,
             List.of(startNode("start"), actionNode("action", actionType), endNode("end")),
             List.of(edge("e1", "start", "action"), edge("e2", "action", "end")));
     }
 
     /** Start → HumanTask → End */
     public static Workflow simpleHumanTaskWorkflow() {
-        return new Workflow("wf-2", "HumanTask", null,
+        return new Workflow("wf-2", "HumanTask", null, null,
             List.of(startNode("start"), humanTaskNode("task"), endNode("end")),
             List.of(edge("e1", "start", "task"), edge("e2", "task", "end")));
     }

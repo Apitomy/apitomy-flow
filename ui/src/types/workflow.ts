@@ -29,6 +29,7 @@ export interface Workflow {
   id: string;
   name: string;
   description?: string;
+  version?: number;
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
 }

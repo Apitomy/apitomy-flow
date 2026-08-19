@@ -97,7 +97,7 @@ class WorkflowEngineErrorTest {
             }
         };
 
-        Workflow workflow = new Workflow("w", "W", null,
+        Workflow workflow = new Workflow("w", "W", null, null,
             List.of(startNode("start", List.of()), actionNode("a", "fail"), endNode("end"), endNode("error-end")),
             List.of(edge("e1", "start", "a"), edge("e2", "a", "end"), edge("e3", "a", "error-end")));
 

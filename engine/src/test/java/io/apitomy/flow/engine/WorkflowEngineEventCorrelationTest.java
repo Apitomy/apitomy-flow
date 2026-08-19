@@ -27,13 +27,13 @@ class WorkflowEngineEventCorrelationTest {
     }
 
     private Workflow receiveEventWorkflow(String eventType) {
-        return new Workflow("w", "W", null,
+        return new Workflow("w", "W", null, null,
             List.of(startNode("start"), receiveEventNode("wait", eventType), endNode("end")),
             List.of(edge("e1", "start", "wait"), edge("e2", "wait", "end")));
     }
 
     private Workflow receiveEventWorkflowWithMatch(String eventType, List<String> match) {
-        return new Workflow("w", "W", null,
+        return new Workflow("w", "W", null, null,
             List.of(startNode("start"), receiveEventNode("wait", eventType, match), endNode("end")),
             List.of(edge("e1", "start", "wait"), edge("e2", "wait", "end")));
     }

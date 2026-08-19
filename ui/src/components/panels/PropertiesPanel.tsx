@@ -9,6 +9,7 @@ interface PropertiesPanelProps {
   selectedNode?: Node<FlowNodeData>;
   selectedEdge?: Edge;
   onNodeChange: (id: string, data: Partial<FlowNodeData>) => void;
+  onNodeIdChange: (oldId: string, newId: string) => void;
   onEdgeChange: (id: string, data: Record<string, any>) => void;
   spi?: EditorSpi;
 }
@@ -39,7 +40,7 @@ function useActionTypes(spi?: EditorSpi): { actionTypes: ActionTypeDescriptor[];
   return { actionTypes: resolved ?? [], loading };
 }
 
-export function PropertiesPanel({ selectedNode, selectedEdge, onNodeChange, onEdgeChange, spi }: PropertiesPanelProps) {
+export function PropertiesPanel({ selectedNode, selectedEdge, onNodeChange, onNodeIdChange, onEdgeChange, spi }: PropertiesPanelProps) {
   const { actionTypes, loading: actionTypesLoading } = useActionTypes(spi);
 
   if (!selectedNode && !selectedEdge) {
@@ -57,6 +58,14 @@ export function PropertiesPanel({ selectedNode, selectedEdge, onNodeChange, onEd
       <div className="properties-panel">
         <div className="properties-panel__header">
           {selectedNode.data.nodeType} Node
+        </div>
+        <div className="properties-panel__field">
+          <label>Node ID</label>
+          <input
+            type="text"
+            value={selectedNode.id}
+            onChange={(e) => onNodeIdChange(selectedNode.id, e.target.value)}
+          />
         </div>
         <div className="properties-panel__field">
           <label>Name</label>
@@ -370,10 +379,6 @@ export function PropertiesPanel({ selectedNode, selectedEdge, onNodeChange, onEd
             </div>
           </>
         )}
-        <div className="properties-panel__field">
-          <label>Node ID</label>
-          <input type="text" value={selectedNode.id} disabled />
-        </div>
       </div>
     );
   }

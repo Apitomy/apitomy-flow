@@ -5,6 +5,7 @@ export const cveTriage: Workflow = {
   id: 'cve-triage',
   name: 'CVE Triage',
   description: 'Analyze and triage CVE vulnerabilities',
+  version: 1,
   nodes: [
     {
       id: 'start', type: 'start', name: 'Start',

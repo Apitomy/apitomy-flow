@@ -45,7 +45,7 @@ class WorkflowEngineCompleteTest {
             }
         };
         WorkflowEngine engine = engine(executor);
-        Workflow workflow = new Workflow("w", "W", null,
+        Workflow workflow = new Workflow("w", "W", null, null,
             List.of(startNode("start"), humanTaskNode("task"), actionNode("process", "process"), endNode("end")),
             List.of(edge("e1", "start", "task"), edge("e2", "task", "process"), edge("e3", "process", "end")));
 

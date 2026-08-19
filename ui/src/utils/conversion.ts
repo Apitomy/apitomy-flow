@@ -58,10 +58,12 @@ export function toWorkflowEdges(edges: Edge[]): WorkflowEdge[] {
   }));
 }
 
-export function toWorkflow(id: string, name: string, nodes: Node<FlowNodeData>[], edges: Edge[]): Workflow {
+export function toWorkflow(base: Pick<Workflow, 'id' | 'name' | 'description' | 'version'>, nodes: Node<FlowNodeData>[], edges: Edge[]): Workflow {
   return {
-    id,
-    name,
+    id: base.id,
+    name: base.name,
+    description: base.description,
+    version: base.version,
     nodes: toWorkflowNodes(nodes),
     edges: toWorkflowEdges(edges),
   };

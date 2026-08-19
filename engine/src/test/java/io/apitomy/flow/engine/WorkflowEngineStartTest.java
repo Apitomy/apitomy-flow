@@ -51,7 +51,7 @@ class WorkflowEngineStartTest {
     @Test
     void startWorkflowChainsActionNodes() {
         WorkflowEngine engine = engine(echoExecutor("step1"), echoExecutor("step2"));
-        Workflow workflow = new Workflow("w", "W", null,
+        Workflow workflow = new Workflow("w", "W", null, null,
             List.of(startNode("start"), actionNode("a1", "step1"), actionNode("a2", "step2"), endNode("end")),
             List.of(edge("e1", "start", "a1"), edge("e2", "a1", "a2"), edge("e3", "a2", "end")));
 
@@ -65,7 +65,7 @@ class WorkflowEngineStartTest {
     @Test
     void startWorkflowWithConditionalEdges() {
         WorkflowEngine engine = engine(echoExecutor("left"), echoExecutor("right"));
-        Workflow workflow = new Workflow("w", "W", null,
+        Workflow workflow = new Workflow("w", "W", null, null,
             List.of(
                 startNode("start", List.of(inputDef("branch", "string", true))),
                 actionNode("left", "left"), actionNode("right", "right"), endNode("end")),
@@ -84,7 +84,7 @@ class WorkflowEngineStartTest {
     @Test
     void startWorkflowValidatesDefinition() {
         WorkflowEngine engine = engine();
-        Workflow invalid = new Workflow("w", "W", null,
+        Workflow invalid = new Workflow("w", "W", null, null,
             List.of(actionNode("orphan", "test")), List.of());
         assertThrows(Exception.class, () -> engine.startWorkflow(invalid, Map.of()));
     }
@@ -92,7 +92,7 @@ class WorkflowEngineStartTest {
     @Test
     void startWorkflowValidatesRequiredInputs() {
         WorkflowEngine engine = engine();
-        Workflow workflow = new Workflow("w", "W", null,
+        Workflow workflow = new Workflow("w", "W", null, null,
             List.of(
                 startNode("start", List.of(inputDef("required", "string", true))),
                 endNode("end")),
@@ -141,7 +141,7 @@ class WorkflowEngineStartTest {
         };
         WorkflowEngine engine = engine(loopExecutor);
         // Create a workflow with a conditional loop that always evaluates to true
-        Workflow workflow = new Workflow("w", "W", null,
+        Workflow workflow = new Workflow("w", "W", null, null,
             List.of(startNode("start"), actionNode("a", "loop"), endNode("end")),
             List.of(edge("e1", "start", "a"),
                     edge("e2", "a", "a", "context.count < 200", 0),

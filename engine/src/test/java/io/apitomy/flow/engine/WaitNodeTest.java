@@ -22,7 +22,7 @@ class WaitNodeTest {
         NodeExecutorProvider.fromList(), List.of(), null);
 
     private Workflow waitWorkflow(String duration) {
-        return new Workflow("w", "W", null,
+        return new Workflow("w", "W", null, null,
             List.of(
                 startNode("start", List.of(inputDef("input", "string", true))),
                 waitNode("delay", duration),
@@ -63,7 +63,7 @@ class WaitNodeTest {
 
     @Test
     void getWaitInfoReturnsNullForHumanTask() {
-        Workflow workflow = new Workflow("w", "W", null,
+        Workflow workflow = new Workflow("w", "W", null, null,
             List.of(startNode("start"), humanTaskNode("ht"), endNode("end")),
             List.of(edge("e1", "start", "ht"), edge("e2", "ht", "end")));
         WorkflowInstance instance = engine.startWorkflow(workflow, Map.of());
@@ -92,7 +92,7 @@ class WaitNodeTest {
         WorkflowEngine eng = new WorkflowEngine(
             NodeExecutorProvider.fromList(executor), List.of(), null);
 
-        Workflow workflow = new Workflow("w", "W", null,
+        Workflow workflow = new Workflow("w", "W", null, null,
             List.of(
                 startNode("start", List.of(inputDef("input", "string", true))),
                 actionNode("act", "process"),

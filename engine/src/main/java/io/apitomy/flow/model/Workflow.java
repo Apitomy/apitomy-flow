@@ -7,6 +7,7 @@ public record Workflow(
     String id,
     String name,
     String description,
+    Integer version,
     List<WorkflowNode> nodes,
     List<WorkflowEdge> edges
 ) {

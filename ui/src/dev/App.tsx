@@ -1,5 +1,6 @@
 import { createRoot } from 'react-dom/client';
 import { useState } from 'react';
+import Editor from '@monaco-editor/react';
 import '@patternfly/patternfly/patternfly.css';
 import '@xyflow/react/dist/style.css';
 import { WorkflowEditor } from '../components/WorkflowEditor.tsx';
@@ -77,7 +78,7 @@ const spi: EditorSpi = {
 };
 
 function App() {
-  const [tab, setTab] = useState<'editor' | 'viewer'>('editor');
+  const [tab, setTab] = useState<'editor' | 'viewer' | 'json'>('editor');
   const [workflow, setWorkflow] = useState<Workflow>(cveTriage);
   const [theme, setTheme] = useState<FlowTheme>('light');
 
@@ -90,6 +91,9 @@ function App() {
           </button>
           <button className={tab === 'viewer' ? 'active' : ''} onClick={() => setTab('viewer')}>
             Viewer
+          </button>
+          <button className={tab === 'json' ? 'active' : ''} onClick={() => setTab('json')}>
+            JSON
           </button>
         </div>
         <label className="dev-app__theme-toggle">
@@ -107,6 +111,14 @@ function App() {
         )}
         {tab === 'viewer' && (
           <WorkflowViewer workflow={cveTriage} instance={triageInstance} theme={theme} />
+        )}
+        {tab === 'json' && (
+          <Editor
+            language="json"
+            value={JSON.stringify(workflow, null, 2)}
+            theme={theme === 'dark' ? 'vs-dark' : 'light'}
+            options={{ readOnly: true, minimap: { enabled: false }, scrollBeyondLastLine: false }}
+          />
         )}
       </div>
     </div>

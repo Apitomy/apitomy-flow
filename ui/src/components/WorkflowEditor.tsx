@@ -82,8 +82,8 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
   const selectedEdge = edges.find(e => e.id === selectedEdgeId);
 
   const currentWorkflow = useMemo(
-    () => toWorkflow(workflow.id, workflow.name, nodes, edges),
-    [workflow.id, workflow.name, nodes, edges],
+    () => toWorkflow(workflow, nodes, edges),
+    [workflow, nodes, edges],
   );
 
   const validationProblems = useMemo(
@@ -106,8 +106,8 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
   }, [nodes, validationProblems]);
 
   const emitChange = useCallback((updatedNodes: Node<FlowNodeData>[], updatedEdges: Edge[]) => {
-    onChange(toWorkflow(workflow.id, workflow.name, updatedNodes, updatedEdges));
-  }, [workflow.id, workflow.name, onChange]);
+    onChange(toWorkflow(workflow, updatedNodes, updatedEdges));
+  }, [workflow, onChange]);
 
   const handleNodesChange = useCallback((changes: NodeChange<Node<FlowNodeData>>[]) => {
     if (!isRestoringRef.current && changes.some(c => c.type === 'remove')) {
@@ -239,6 +239,24 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
     });
   }, [setNodes, edges, emitChange]);
 
+  const onNodeIdChange = useCallback((oldId: string, newId: string) => {
+    setNodes(nds => {
+      if (nds.some(n => n.id === newId)) return nds;
+      const updatedNodes = nds.map(n => n.id === oldId ? { ...n, id: newId } : n);
+      setEdges(eds => {
+        const updatedEdges = eds.map(e => ({
+          ...e,
+          source: e.source === oldId ? newId : e.source,
+          target: e.target === oldId ? newId : e.target,
+        }));
+        setTimeout(() => emitChange(updatedNodes, updatedEdges), 0);
+        return updatedEdges;
+      });
+      if (selectedNodeId === oldId) setSelectedNodeId(newId);
+      return updatedNodes;
+    });
+  }, [setNodes, setEdges, emitChange, selectedNodeId]);
+
   const onEdgeDataChange = useCallback((id: string, dataUpdate: Record<string, any>) => {
     setEdges(eds => {
       const updated = eds.map(e => e.id === id ? { ...e, data: { ...e.data, ...dataUpdate } } : e);
@@ -351,6 +369,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
           selectedNode={selectedNode}
           selectedEdge={selectedEdge}
           onNodeChange={onNodeDataChange}
+          onNodeIdChange={onNodeIdChange}
           onEdgeChange={onEdgeDataChange}
           spi={spi}
         />
