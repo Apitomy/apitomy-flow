@@ -1,8 +1,28 @@
 {
   "name": "@apitomy/flow-ui",
   "version": "1.0.0-SNAPSHOT",
+  "description": "Reusable React component for visual workflow editing and instance viewing",
   "type": "module",
-  "private": true,
+  "license": "Apache-2.0",
+  "author": "Apitomy",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Apitomy/apitomy-flow.git",
+    "directory": "ui"
+  },
+  "homepage": "https://github.com/Apitomy/apitomy-flow#readme",
+  "bugs": {
+    "url": "https://github.com/Apitomy/apitomy-flow/issues"
+  },
+  "keywords": [
+    "workflow",
+    "flow",
+    "editor",
+    "react",
+    "component",
+    "apitomy",
+    "visual-editor"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "tsc -p tsconfig.lib.json && vite build",
