@@ -1,6 +1,7 @@
 import { useMemo, useState, useCallback, useRef } from 'react';
-import { ReactFlow, Background, Controls, ReactFlowProvider } from '@xyflow/react';
+import { ReactFlow, Background, Controls, ReactFlowProvider, type Node } from '@xyflow/react';
 import { AngleDoubleRightIcon, AngleDoubleLeftIcon } from '@patternfly/react-icons';
+import { type HistoryEntry } from '../types/instance.ts';
 import { type Workflow } from '../types/workflow.ts';
 import { type WorkflowInstance } from '../types/instance.ts';
 import { toReactFlowNodes, toReactFlowEdges } from '../utils/conversion.ts';
@@ -32,7 +33,6 @@ function WorkflowViewerInner({ workflow, instance }: WorkflowViewerProps) {
         ...node,
         className: isCurrent ? 'flow-node-current' : isVisited ? 'flow-node-visited' : 'flow-node-unvisited',
         draggable: false,
-        selectable: false,
       };
     });
   }, [workflow.nodes, instance.currentNodeId, visitedNodeIds]);
@@ -55,7 +55,27 @@ function WorkflowViewerInner({ workflow, instance }: WorkflowViewerProps) {
 
   const [collapsed, setCollapsed] = useState(false);
   const [panelWidth, setPanelWidth] = useState(320);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const isResizing = useRef(false);
+
+  const selectedNodeHistory = useMemo(() => {
+    if (!selectedNodeId) return null;
+    return instance.history.find(h => h.nodeId === selectedNodeId) ?? null;
+  }, [selectedNodeId, instance.history]);
+
+  const selectedWorkflowNode = useMemo(() => {
+    if (!selectedNodeId) return null;
+    return workflow.nodes.find(n => n.id === selectedNodeId) ?? null;
+  }, [selectedNodeId, workflow.nodes]);
+
+  const onNodeClick = useCallback((_: any, node: Node) => {
+    setSelectedNodeId(node.id);
+    if (collapsed) setCollapsed(false);
+  }, [collapsed]);
+
+  const onPaneClick = useCallback(() => {
+    setSelectedNodeId(null);
+  }, []);
 
   const onResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -89,7 +109,8 @@ function WorkflowViewerInner({ workflow, instance }: WorkflowViewerProps) {
           edgeTypes={edgeTypes}
           nodesDraggable={false}
           nodesConnectable={false}
-          elementsSelectable={false}
+          onNodeClick={onNodeClick}
+          onPaneClick={onPaneClick}
           fitView
         >
           <Background />
@@ -110,35 +131,125 @@ function WorkflowViewerInner({ workflow, instance }: WorkflowViewerProps) {
         <div className="workflow-viewer__context" style={{ width: panelWidth }}>
           <div className="workflow-viewer__resize-handle" onMouseDown={onResizeStart} />
           <div className="workflow-viewer__context-header">
-            Instance Context
+            {selectedNodeId ? (selectedWorkflowNode?.name ?? selectedNodeId) : 'Instance Context'}
             <div className="workflow-viewer__context-actions">
-              <span className={`workflow-viewer__status workflow-viewer__status--${instance.status}`}>
-                {instance.status}
-              </span>
+              {!selectedNodeId && (
+                <span className={`workflow-viewer__status workflow-viewer__status--${instance.status}`}>
+                  {instance.status}
+                </span>
+              )}
+              {selectedNodeId && (
+                <button
+                  className="workflow-viewer__collapse-btn"
+                  title="Back to instance context"
+                  onClick={() => setSelectedNodeId(null)}
+                >
+                  &times;
+                </button>
+              )}
               <button
                 className="workflow-viewer__collapse-btn"
-                title="Hide instance context"
+                title="Hide panel"
                 onClick={() => setCollapsed(true)}
               >
                 <AngleDoubleRightIcon />
               </button>
             </div>
           </div>
-          <div className="workflow-viewer__context-entries">
-            {Object.entries(instance.context).length === 0 ? (
-              <div className="workflow-viewer__context-empty">No context values</div>
-            ) : (
-              Object.entries(instance.context).map(([key, value]) => (
-                <div key={key} className="workflow-viewer__context-entry">
-                  <span className="workflow-viewer__context-key">{key}</span>
-                  <span className="workflow-viewer__context-value">
-                    {typeof value === 'object' ? JSON.stringify(value) : String(value)}
-                  </span>
-                </div>
-              ))
-            )}
-          </div>
+          {selectedNodeId ? (
+            <NodeDetail
+              node={selectedWorkflowNode}
+              history={selectedNodeHistory}
+              isCurrent={selectedNodeId === instance.currentNodeId}
+            />
+          ) : (
+            <div className="workflow-viewer__context-entries">
+              {Object.entries(instance.context).length === 0 ? (
+                <div className="workflow-viewer__context-empty">No context values</div>
+              ) : (
+                Object.entries(instance.context).map(([key, value]) => (
+                  <div key={key} className="workflow-viewer__context-entry">
+                    <span className="workflow-viewer__context-key">{key}</span>
+                    <span className="workflow-viewer__context-value">
+                      {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
         </div>
+      )}
+    </div>
+  );
+}
+
+function formatValue(value: unknown): string {
+  if (value === null || value === undefined) return '—';
+  if (typeof value === 'object') return JSON.stringify(value);
+  return String(value);
+}
+
+function NodeDetail({ node, history, isCurrent }: {
+  node: WorkflowViewerProps['workflow']['nodes'][number] | null;
+  history: HistoryEntry | null;
+  isCurrent: boolean;
+}) {
+  if (!node) {
+    return <div className="workflow-viewer__context-empty">Node not found</div>;
+  }
+
+  const wasVisited = !!history;
+
+  return (
+    <div className="workflow-viewer__node-detail">
+      <div className="workflow-viewer__context-entry">
+        <span className="workflow-viewer__context-key">Type</span>
+        <span className="workflow-viewer__context-value">{node.type}</span>
+      </div>
+      <div className="workflow-viewer__context-entry">
+        <span className="workflow-viewer__context-key">Node ID</span>
+        <span className="workflow-viewer__context-value">{node.id}</span>
+      </div>
+      <div className="workflow-viewer__context-entry">
+        <span className="workflow-viewer__context-key">Status</span>
+        <span className="workflow-viewer__context-value">
+          {isCurrent ? 'Current (waiting)' : wasVisited ? 'Completed' : 'Not yet reached'}
+        </span>
+      </div>
+      {history?.enteredOn && (
+        <div className="workflow-viewer__context-entry">
+          <span className="workflow-viewer__context-key">Entered</span>
+          <span className="workflow-viewer__context-value">{new Date(history.enteredOn).toLocaleString()}</span>
+        </div>
+      )}
+      {history?.completedOn && (
+        <div className="workflow-viewer__context-entry">
+          <span className="workflow-viewer__context-key">Completed</span>
+          <span className="workflow-viewer__context-value">{new Date(history.completedOn).toLocaleString()}</span>
+        </div>
+      )}
+      {history?.edgeId && (
+        <div className="workflow-viewer__context-entry">
+          <span className="workflow-viewer__context-key">Arrived via edge</span>
+          <span className="workflow-viewer__context-value">
+            {history.edgeCondition ? `${history.edgeId} (${history.edgeCondition})` : history.edgeId}
+          </span>
+        </div>
+      )}
+      {history?.output && Object.keys(history.output).length > 0 && (
+        <>
+          <div className="workflow-viewer__section-label">Outputs</div>
+          {Object.entries(history.output).map(([key, value]) => (
+            <div key={key} className="workflow-viewer__context-entry">
+              <span className="workflow-viewer__context-key">{key}</span>
+              <span className="workflow-viewer__context-value">{formatValue(value)}</span>
+            </div>
+          ))}
+        </>
+      )}
+      {wasVisited && (!history?.output || Object.keys(history.output).length === 0) && (
+        <div className="workflow-viewer__context-empty">No outputs recorded</div>
       )}
     </div>
   );

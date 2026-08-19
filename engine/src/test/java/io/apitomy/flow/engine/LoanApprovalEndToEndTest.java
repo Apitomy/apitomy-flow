@@ -202,6 +202,23 @@ class LoanApprovalEndToEndTest {
         assertEquals("Alice Johnson", instance.context().get("applicantName"));
         assertEquals("Good income-to-loan ratio, approved for standard terms",
             instance.context().get("reviewNotes"));
+
+        // Verify history entries recorded outputs for tracing
+        HistoryEntry creditCheckHistory = instance.history().stream()
+            .filter(h -> h.nodeId().equals("credit-check")).findFirst().orElseThrow();
+        assertNotNull(creditCheckHistory.output());
+        assertEquals(240, creditCheckHistory.output().get("creditScore"));
+
+        HistoryEntry reviewHistory = instance.history().stream()
+            .filter(h -> h.nodeId().equals("manual-review")).findFirst().orElseThrow();
+        assertNotNull(reviewHistory.output());
+        assertEquals(true, reviewHistory.output().get("approved"));
+        assertEquals("LOAN-2026-0042", reviewHistory.output().get("loanId"));
+
+        HistoryEntry disburseHistory = instance.history().stream()
+            .filter(h -> h.nodeId().equals("disburse-loan")).findFirst().orElseThrow();
+        assertNotNull(disburseHistory.output());
+        assertTrue(((String) disburseHistory.output().get("disbursementConfirmation")).contains("WIRE-12345"));
     }
 
     @Test

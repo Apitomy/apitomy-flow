@@ -112,3 +112,15 @@
   text-align: center;
   padding: 20px;
 }
+.workflow-viewer__node-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.workflow-viewer__section-label {
+  font-size: 13px;
+  font-weight: 600;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--pf-t--global--border--color--default, #d2d2d2);
+}

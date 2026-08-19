@@ -83,8 +83,9 @@ public class WorkflowEngine {
 
         WorkflowNode currentNode = workflow.findNodeById(instance.currentNodeId());
 
-        // Merge result into context
-        WorkflowInstance updated = instance.toBuilder()
+        // Record output on history, merge into context
+        WorkflowInstance withHistory = completeCurrentHistoryEntry(instance, Instant.now(), result.output());
+        WorkflowInstance updated = withHistory.toBuilder()
             .mergeContext(result.output())
             .status(InstanceStatus.RUNNING)
             .updatedOn(Instant.now())
@@ -389,7 +390,8 @@ public class WorkflowEngine {
                 return applyResolution(workflow, instance, actionNode, resolution);
             }
 
-            // Success — merge output, fire completed, continue
+            // Success — record output on history, merge into context, fire completed
+            instance = completeCurrentHistoryEntry(instance, Instant.now(), result.output());
             instance = instance.toBuilder()
                 .mergeContext(result.output())
                 .updatedOn(Instant.now())
@@ -456,13 +458,18 @@ public class WorkflowEngine {
     }
 
     private WorkflowInstance completeCurrentHistoryEntry(WorkflowInstance instance, Instant completedOn) {
+        return completeCurrentHistoryEntry(instance, completedOn, null);
+    }
+
+    private WorkflowInstance completeCurrentHistoryEntry(WorkflowInstance instance, Instant completedOn,
+                                                         Map<String, Object> output) {
         List<HistoryEntry> history = new ArrayList<>(instance.history());
         if (!history.isEmpty()) {
             HistoryEntry last = history.getLast();
             if (last.completedOn() == null) {
                 history.set(history.size() - 1, new HistoryEntry(
                     last.nodeId(), last.nodeName(), last.edgeId(), last.edgeCondition(),
-                    last.enteredOn(), completedOn, last.output()));
+                    last.enteredOn(), completedOn, output != null ? output : last.output()));
             }
         }
         return instance.toBuilder().history(history).build();
