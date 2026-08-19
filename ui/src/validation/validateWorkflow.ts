@@ -69,6 +69,12 @@ function validateStructure(workflow: Workflow, problems: ValidationProblem[]) {
     if (!action.config.actionType) {
       problems.push(problem('error', 'MISSING_ACTION_TYPE', 'Action node missing actionType in config', action.id));
     }
+    if (!action.config.inputs) {
+      problems.push(problem('warning', 'MISSING_ACTION_INPUTS', 'Action node has no inputs defined', action.id));
+    }
+    if (!action.config.outputs) {
+      problems.push(problem('warning', 'MISSING_ACTION_OUTPUTS', 'Action node has no outputs defined', action.id));
+    }
   }
 }
 

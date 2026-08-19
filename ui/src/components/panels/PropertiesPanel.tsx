@@ -273,16 +273,151 @@ export function PropertiesPanel({ selectedNode, selectedEdge, onNodeChange, onEd
           </div>
         )}
         {selectedNode.data.nodeType === 'action' && (
-          <div className="properties-panel__field">
-            <label>Action Type</label>
-            <input
-              type="text"
-              value={(selectedNode.data.config.actionType as string) || ''}
-              onChange={(e) => onNodeChange(selectedNode.id, {
-                config: { ...selectedNode.data.config, actionType: e.target.value },
-              })}
-            />
-          </div>
+          <>
+            <div className="properties-panel__field">
+              <label>Action Type</label>
+              <input
+                type="text"
+                value={(selectedNode.data.config.actionType as string) || ''}
+                onChange={(e) => onNodeChange(selectedNode.id, {
+                  config: { ...selectedNode.data.config, actionType: e.target.value },
+                })}
+              />
+            </div>
+            <div className="properties-panel__field">
+              <label>Inputs (values to pass to executor)</label>
+              <div className="properties-panel__inputs-list">
+                {Object.entries((selectedNode.data.config.inputs as Record<string, string>) || {}).map(([name, expr], i) => (
+                  <div key={i} className="properties-panel__input-item">
+                    <div className="properties-panel__input-row">
+                      <input
+                        type="text"
+                        value={name}
+                        placeholder="Label"
+                        onChange={(e) => {
+                          const entries = Object.entries((selectedNode.data.config.inputs as Record<string, string>) || {});
+                          entries[i] = [e.target.value, entries[i][1]];
+                          onNodeChange(selectedNode.id, {
+                            config: { ...selectedNode.data.config, inputs: Object.fromEntries(entries) },
+                          });
+                        }}
+                      />
+                      <button
+                        className="properties-panel__match-remove"
+                        title="Remove input"
+                        onClick={() => {
+                          const entries = Object.entries((selectedNode.data.config.inputs as Record<string, string>) || {}).filter((_, j) => j !== i);
+                          onNodeChange(selectedNode.id, {
+                            config: { ...selectedNode.data.config, inputs: Object.fromEntries(entries) },
+                          });
+                        }}
+                      >
+                        &times;
+                      </button>
+                    </div>
+                    <input
+                      type="text"
+                      value={expr}
+                      placeholder="e.g. context.loanAmount"
+                      onChange={(e) => {
+                        const entries = Object.entries((selectedNode.data.config.inputs as Record<string, string>) || {});
+                        entries[i] = [entries[i][0], e.target.value];
+                        onNodeChange(selectedNode.id, {
+                          config: { ...selectedNode.data.config, inputs: Object.fromEntries(entries) },
+                        });
+                      }}
+                    />
+                  </div>
+                ))}
+                <button
+                  className="properties-panel__match-add"
+                  onClick={() => {
+                    const inputs = { ...((selectedNode.data.config.inputs as Record<string, string>) || {}), '': '' };
+                    onNodeChange(selectedNode.id, {
+                      config: { ...selectedNode.data.config, inputs },
+                    });
+                  }}
+                >
+                  + Add input
+                </button>
+              </div>
+            </div>
+            <div className="properties-panel__field">
+              <label>Outputs (expected results)</label>
+              <div className="properties-panel__inputs-list">
+                {((selectedNode.data.config.outputs as { name: string; type: string; required: boolean }[]) || []).map((output, i) => (
+                  <div key={i} className="properties-panel__input-item">
+                    <div className="properties-panel__input-row">
+                      <input
+                        type="text"
+                        value={output.name}
+                        placeholder="Name"
+                        onChange={(e) => {
+                          const outputs = [...((selectedNode.data.config.outputs as any[]) || [])];
+                          outputs[i] = { ...outputs[i], name: e.target.value };
+                          onNodeChange(selectedNode.id, {
+                            config: { ...selectedNode.data.config, outputs },
+                          });
+                        }}
+                      />
+                      <select
+                        value={output.type}
+                        onChange={(e) => {
+                          const outputs = [...((selectedNode.data.config.outputs as any[]) || [])];
+                          outputs[i] = { ...outputs[i], type: e.target.value };
+                          onNodeChange(selectedNode.id, {
+                            config: { ...selectedNode.data.config, outputs },
+                          });
+                        }}
+                      >
+                        <option value="string">string</option>
+                        <option value="number">number</option>
+                        <option value="boolean">boolean</option>
+                        <option value="object">object</option>
+                      </select>
+                      <button
+                        className="properties-panel__match-remove"
+                        title="Remove output"
+                        onClick={() => {
+                          const outputs = ((selectedNode.data.config.outputs as any[]) || []).filter((_, j) => j !== i);
+                          onNodeChange(selectedNode.id, {
+                            config: { ...selectedNode.data.config, outputs },
+                          });
+                        }}
+                      >
+                        &times;
+                      </button>
+                    </div>
+                    <label className="properties-panel__input-required">
+                      <input
+                        type="checkbox"
+                        checked={output.required}
+                        onChange={(e) => {
+                          const outputs = [...((selectedNode.data.config.outputs as any[]) || [])];
+                          outputs[i] = { ...outputs[i], required: e.target.checked };
+                          onNodeChange(selectedNode.id, {
+                            config: { ...selectedNode.data.config, outputs },
+                          });
+                        }}
+                      />
+                      Required
+                    </label>
+                  </div>
+                ))}
+                <button
+                  className="properties-panel__match-add"
+                  onClick={() => {
+                    const outputs = [...((selectedNode.data.config.outputs as any[]) || []), { name: '', type: 'string', required: true }];
+                    onNodeChange(selectedNode.id, {
+                      config: { ...selectedNode.data.config, outputs },
+                    });
+                  }}
+                >
+                  + Add output
+                </button>
+              </div>
+            </div>
+          </>
         )}
         {selectedNode.data.nodeType === 'receive-event' && (
           <>

@@ -359,11 +359,13 @@ public class WorkflowEngine {
             return failWorkflow(instance, "No executor found for action type: " + actionType, null);
         }
 
+        Map<String, Object> resolvedInputs = resolveNodeInputs(actionNode, instance.context());
+
         while (true) {
             NodeResult result;
             try {
                 result = executor.execute(new NodeExecutionContext(
-                    actionNode, instance.context(), actionNode.config()));
+                    actionNode, resolvedInputs, actionNode.config()));
             } catch (Exception e) {
                 ErrorResolution resolution;
                 try {
@@ -378,6 +380,21 @@ public class WorkflowEngine {
             }
 
             if (result.status() == NodeResultStatus.FAILED) {
+                ErrorResolution resolution;
+                try {
+                    resolution = errorHandler.handleNodeError(instance, actionNode, result, null);
+                } catch (Exception handlerError) {
+                    return failWorkflow(instance, "Error handler threw: " + handlerError.getMessage(), handlerError);
+                }
+                if (resolution.action() == ErrorAction.RETRY) {
+                    continue;
+                }
+                return applyResolution(workflow, instance, actionNode, resolution);
+            }
+
+            // Validate output against declared schema
+            String outputError = validateNodeOutputs(actionNode, result.output());
+            if (outputError != null) {
                 ErrorResolution resolution;
                 try {
                     resolution = errorHandler.handleNodeError(instance, actionNode, result, null);
@@ -483,6 +500,42 @@ public class WorkflowEngine {
                 log.warn("Event listener threw exception", e);
             }
         }
+    }
+
+    private Map<String, Object> resolveNodeInputs(WorkflowNode node, Map<String, Object> context) {
+        Object inputConfig = node.config().get("inputs");
+        if (!(inputConfig instanceof Map<?, ?> inputExprs)) {
+            return Map.of();
+        }
+        Map<String, Object> resolved = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : inputExprs.entrySet()) {
+            String label = String.valueOf(entry.getKey());
+            String expression = String.valueOf(entry.getValue());
+            try {
+                resolved.put(label, conditionEvaluator.resolve(expression, context));
+            } catch (Exception e) {
+                log.warn("Failed to resolve action input '{}': {}", label, e.getMessage());
+                resolved.put(label, null);
+            }
+        }
+        return Collections.unmodifiableMap(resolved);
+    }
+
+    private String validateNodeOutputs(WorkflowNode node, Map<String, Object> output) {
+        Object outputConfig = node.config().get("outputs");
+        if (!(outputConfig instanceof List<?> outputDefs)) {
+            return null;
+        }
+        for (Object defObj : outputDefs) {
+            if (defObj instanceof Map<?, ?> def) {
+                String name = String.valueOf(def.get("name"));
+                boolean required = Boolean.TRUE.equals(def.get("required"));
+                if (required && (output == null || !output.containsKey(name) || output.get(name) == null)) {
+                    return "Missing required output: " + name;
+                }
+            }
+        }
+        return null;
     }
 
     private void validateInputs(WorkflowNode startNode, Map<String, Object> initialContext) {

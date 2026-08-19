@@ -97,6 +97,14 @@ public class WorkflowValidator {
                 problems.add(ValidationProblem.error("MISSING_ACTION_TYPE",
                     "Action node missing actionType in config", action.id()));
             }
+            if (!action.config().containsKey("inputs")) {
+                problems.add(ValidationProblem.warning("MISSING_ACTION_INPUTS",
+                    "Action node has no inputs defined", action.id()));
+            }
+            if (!action.config().containsKey("outputs")) {
+                problems.add(ValidationProblem.warning("MISSING_ACTION_OUTPUTS",
+                    "Action node has no outputs defined", action.id()));
+            }
         });
     }
 

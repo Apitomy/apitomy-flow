@@ -108,6 +108,22 @@ class WorkflowValidatorTest {
     }
 
     @Test
+    void missingActionInputs() {
+        Workflow w = new Workflow("w", "W", null,
+            List.of(startNode("start"), actionNode("a", "test"), endNode("end")),
+            List.of(edge("e1", "start", "a"), edge("e2", "a", "end")));
+        assertTrue(hasCode(validate(w), "MISSING_ACTION_INPUTS"));
+    }
+
+    @Test
+    void missingActionOutputs() {
+        Workflow w = new Workflow("w", "W", null,
+            List.of(startNode("start"), actionNode("a", "test"), endNode("end")),
+            List.of(edge("e1", "start", "a"), edge("e2", "a", "end")));
+        assertTrue(hasCode(validate(w), "MISSING_ACTION_OUTPUTS"));
+    }
+
+    @Test
     void missingActionType() {
         WorkflowNode badAction = new WorkflowNode("a", NodeType.ACTION, "A", Map.of(), new Position(0, 0));
         Workflow w = new Workflow("w", "W", null,

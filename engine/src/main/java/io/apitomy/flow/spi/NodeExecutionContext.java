@@ -5,6 +5,6 @@ import java.util.Map;
 
 public record NodeExecutionContext(
     WorkflowNode node,
-    Map<String, Object> workflowContext,
+    Map<String, Object> inputs,
     Map<String, Object> nodeConfig
 ) {}

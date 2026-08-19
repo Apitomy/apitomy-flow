@@ -18,6 +18,13 @@ public class TestWorkflows {
         return new WorkflowNode(id, NodeType.ACTION, id, Map.of("actionType", actionType), new Position(100, 0));
     }
 
+    public static WorkflowNode actionNode(String id, String actionType,
+                                           Map<String, String> inputs, List<Map<String, Object>> outputs) {
+        return new WorkflowNode(id, NodeType.ACTION, id,
+            Map.of("actionType", actionType, "inputs", inputs, "outputs", outputs),
+            new Position(100, 0));
+    }
+
     public static WorkflowNode humanTaskNode(String id) {
         return new WorkflowNode(id, NodeType.HUMAN_TASK, id, Map.of(), new Position(200, 0));
     }

@@ -29,8 +29,8 @@ class LoanApprovalEndToEndTest {
         creditCheckExecutor = new NodeExecutor() {
             public String actionType() { return "credit-check"; }
             public NodeResult execute(NodeExecutionContext ctx) {
-                Number loanAmount = (Number) ctx.workflowContext().get("loanAmount");
-                Number annualIncome = (Number) ctx.workflowContext().get("annualIncome");
+                Number loanAmount = (Number) ctx.inputs().get("Loan Amount");
+                Number annualIncome = (Number) ctx.inputs().get("Annual Income");
                 double ratio = annualIncome.doubleValue() / loanAmount.doubleValue();
                 int creditScore = (int) Math.min(ratio * 100, 850);
                 double dti = loanAmount.doubleValue() / annualIncome.doubleValue();
@@ -44,9 +44,9 @@ class LoanApprovalEndToEndTest {
         disburseLoanExecutor = new NodeExecutor() {
             public String actionType() { return "disburse-loan"; }
             public NodeResult execute(NodeExecutionContext ctx) {
-                String applicant = (String) ctx.workflowContext().get("applicantName");
-                Number amount = (Number) ctx.workflowContext().get("loanAmount");
-                String fundingRef = (String) ctx.workflowContext().get("fundingReference");
+                String applicant = (String) ctx.inputs().get("Applicant");
+                Number amount = (Number) ctx.inputs().get("Loan Amount");
+                String fundingRef = (String) ctx.inputs().get("Funding Reference");
                 String confirmation = "Disbursed $" + amount + " to " + applicant + " via " + fundingRef;
                 return new NodeResult(NodeResultStatus.COMPLETED, Map.of(
                     "disbursementConfirmation", confirmation
@@ -57,8 +57,8 @@ class LoanApprovalEndToEndTest {
         sendRejectionExecutor = new NodeExecutor() {
             public String actionType() { return "send-rejection"; }
             public NodeResult execute(NodeExecutionContext ctx) {
-                String applicant = (String) ctx.workflowContext().get("applicantName");
-                int creditScore = (int) ctx.workflowContext().get("creditScore");
+                String applicant = (String) ctx.inputs().get("Applicant");
+                int creditScore = (int) ctx.inputs().get("Credit Score");
                 return new NodeResult(NodeResultStatus.COMPLETED, Map.of(
                     "rejectionReason", applicant + " denied: credit score " + creditScore + " below threshold"
                 ));
@@ -78,7 +78,10 @@ class LoanApprovalEndToEndTest {
                     inputDef("loanAmount", "number", true),
                     inputDef("annualIncome", "number", true)
                 )),
-                actionNode("credit-check", "credit-check"),
+                actionNode("credit-check", "credit-check",
+                    Map.of("Loan Amount", "context.loanAmount", "Annual Income", "context.annualIncome"),
+                    List.of(inputDef("creditScore", "number", true), inputDef("debtToIncomeRatio", "number", true))
+                ),
                 humanTaskNode("manual-review",
                     "Review the applicant's credit data and approve or reject the loan.",
                     Map.of(
@@ -96,8 +99,15 @@ class LoanApprovalEndToEndTest {
                 receiveEventNode("await-funding", "funding-confirmed", List.of(
                     "event.loanId == context.loanId"
                 )),
-                actionNode("disburse-loan", "disburse-loan"),
-                actionNode("send-rejection", "send-rejection"),
+                actionNode("disburse-loan", "disburse-loan",
+                    Map.of("Applicant", "context.applicantName", "Loan Amount", "context.loanAmount",
+                           "Funding Reference", "context.fundingReference"),
+                    List.of(inputDef("disbursementConfirmation", "string", true))
+                ),
+                actionNode("send-rejection", "send-rejection",
+                    Map.of("Applicant", "context.applicantName", "Credit Score", "context.creditScore"),
+                    List.of(inputDef("rejectionReason", "string", true))
+                ),
                 endNode("approved"),
                 endNode("rejected")
             ),
@@ -309,5 +319,23 @@ class LoanApprovalEndToEndTest {
 
         assertNull(engine.getHumanTaskInfo(workflow, instance));
         assertNull(engine.getReceiveEventInfo(workflow, instance));
+    }
+
+    @Test
+    void missingRequiredOutputFailsWorkflow() {
+        NodeExecutor badExecutor = new NodeExecutor() {
+            public String actionType() { return "credit-check"; }
+            public NodeResult execute(NodeExecutionContext ctx) {
+                return new NodeResult(NodeResultStatus.COMPLETED, Map.of());
+            }
+        };
+        WorkflowEngine eng = new WorkflowEngine(
+            NodeExecutorProvider.fromList(badExecutor), List.of(), null);
+        Workflow workflow = loanApprovalWorkflow();
+
+        WorkflowInstance result = eng.startWorkflow(workflow, Map.of(
+            "applicantName", "Test", "loanAmount", 1000, "annualIncome", 50000));
+        assertEquals(InstanceStatus.FAILED, result.status());
+        assertTrue(result.failureReason().contains("credit-check"));
     }
 }

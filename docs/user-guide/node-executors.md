@@ -20,11 +20,13 @@ public interface NodeExecutor {
 
 ```java
 public record NodeExecutionContext(
-    WorkflowNode node,                   // the action node being executed
-    Map<String, Object> workflowContext, // accumulated context from prior nodes
-    Map<String, Object> nodeConfig       // the node's config map (includes actionType)
+    WorkflowNode node,                // the action node being executed
+    Map<String, Object> inputs,      // resolved input values (label → value)
+    Map<String, Object> nodeConfig   // the node's config map (includes actionType)
 ) {}
 ```
+
+The `inputs` map contains values resolved from the action node's input EL expressions. The executor receives only the declared inputs — it does not have access to the full workflow context.
 
 ## Result
 
@@ -35,7 +37,7 @@ public record NodeResult(
 ) {}
 ```
 
-On `COMPLETED`, the output map is merged into the workflow context. On `FAILED`, the error handler is invoked (see [Error Handling](error-handling.md)).
+On `COMPLETED`, the engine validates the output against the node's declared output schema (required fields must be present and non-null), then merges the output map into the workflow context. On `FAILED`, the error handler is invoked (see [Error Handling](error-handling.md)).
 
 ## Example
 
@@ -49,7 +51,7 @@ public class AnalyzeCveExecutor implements NodeExecutor {
 
     @Override
     public NodeResult execute(NodeExecutionContext context) {
-        String cveId = (String) context.workflowContext().get("cveId");
+        String cveId = (String) context.inputs().get("CVE ID");
 
         // Perform analysis...
         String severity = analyzeCve(cveId);
@@ -76,13 +78,23 @@ The `NodeExecutorProvider` is a functional interface with a single method `getEx
 
 ## Action Node Config
 
-Action nodes must include an `actionType` field in their config:
+Action nodes must include an `actionType` field and should declare `inputs` and `outputs`:
 
 ```json
 {
   "actionType": "analyze-cve",
-  "additionalParam": "value"
+  "inputs": {
+    "CVE ID": "context.cveId",
+    "Repository": "context.repository"
+  },
+  "outputs": [
+    { "name": "severity", "type": "string", "required": true },
+    { "name": "analyzed", "type": "boolean", "required": true }
+  ]
 }
 ```
 
-The full config map is passed to the executor as `nodeConfig`, so executors can read any additional parameters they need.
+- **`inputs`** — map of label to EL expression. Resolved against the workflow context before execution and passed to the executor as `context.inputs()`.
+- **`outputs`** — list of `{name, type, required}`. After execution, the engine validates that required outputs are present and non-null in the result. Missing required outputs are routed through the error handler.
+
+The validator emits `MISSING_ACTION_INPUTS` and `MISSING_ACTION_OUTPUTS` warnings when these are absent. The full config map is also available to the executor as `nodeConfig`.
