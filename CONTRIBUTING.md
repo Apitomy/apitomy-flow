@@ -44,7 +44,7 @@ cd ui && npm run dev
 
 ### Engine (Java)
 
-- Java 25, pure library (no framework dependencies)
+- Java 21, pure library (no framework dependencies)
 - Follow existing code patterns (records, immutable state)
 - Run `mvn test` before committing
 

@@ -32,7 +32,7 @@ and event listeners.
 
 ## Requirements
 
-- Java 25+
+- Java 21+
 
 ## License
 

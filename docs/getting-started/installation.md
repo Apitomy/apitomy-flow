@@ -14,7 +14,7 @@ Add the engine dependency to your Maven project:
 
 ### Requirements
 
-- Java 25+
+- Java 21+
 - No additional framework dependencies required
 
 The engine is a pure Java library. It works in any Java application — Quarkus, Spring, standalone, or otherwise.

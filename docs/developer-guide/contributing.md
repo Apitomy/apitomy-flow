@@ -6,7 +6,7 @@ See [CONTRIBUTING.md](https://github.com/Apitomy/apitomy-flow/blob/main/CONTRIBU
 
 ### Prerequisites
 
-- Java 25+
+- Java 21+
 - Maven 3.9+
 - Node.js 22+
 

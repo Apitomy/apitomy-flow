@@ -42,8 +42,8 @@
         <developer>
             <name>Eric Wittmann</name>
             <id>EricWittmann</id>
-            <email>eric.wittmann@redhat.com</email>
-            <organization>Red Hat</organization>
+            <email>eric.wittmann@ibm.com</email>
+            <organization>IBM</organization>
             <roles>
                 <role>Project Lead</role>
                 <role>Developer</role>
@@ -53,7 +53,7 @@
     </developers>
 
     <properties>
-        <maven.compiler.release>25</maven.compiler.release>
+        <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <jackson.version>2.22.2</jackson.version>
         <jakarta.el-api.version>6.0.1</jakarta.el-api.version>
@@ -149,7 +149,7 @@
                                     <goal>jar</goal>
                                 </goals>
                                 <configuration>
-                                    <source>25</source>
+                                    <source>21</source>
                                     <doclint>none</doclint>
                                 </configuration>
                             </execution>

@@ -20,7 +20,7 @@ Two independent components, side by side:
 
 | Component | Path | Technology | Purpose |
 |-----------|------|-----------|---------|
-| **Engine** | `engine/` | Java 25 / Maven | Stateless workflow execution library |
+| **Engine** | `engine/` | Java 21 / Maven | Stateless workflow execution library |
 | **Visual Editor** | `ui/` | React 19 / TypeScript / Vite | Editor and viewer components |
 
 The engine is a pure Java library with no framework dependencies (no Quarkus, CDI, JPA).
@@ -44,7 +44,7 @@ for UI chrome.
 
 ## Prerequisites
 
-- Java 25+
+- Java 21+
 - Maven 3.9+
 - Node.js 22+
 

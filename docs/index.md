@@ -17,7 +17,7 @@ Apitomy Flow is a standalone library designed to integrate into [Apitomy](https:
 
 | Component | Technology | Purpose |
 |-----------|-----------|---------|
-| **Engine** | Java 25, pure library | Workflow execution, validation, event correlation |
+| **Engine** | Java 21, pure library | Workflow execution, validation, event correlation |
 | **Visual Editor** | React 19, TypeScript | `WorkflowEditor` and `WorkflowViewer` components |
 
 The engine has no framework dependencies — it works in any Java application. The visual editor is a React component library that consuming applications import and render.

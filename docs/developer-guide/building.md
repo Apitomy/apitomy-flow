@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Java 25+
+- Java 21+
 - Maven 3.9+
 - Node.js 22+
 
