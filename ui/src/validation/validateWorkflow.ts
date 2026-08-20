@@ -16,17 +16,44 @@ export function validateWorkflow(workflow: Workflow): ValidationProblem[] {
 
 function validateStructure(workflow: Workflow, problems: ValidationProblem[]) {
   const { nodes, edges } = workflow;
-  const nodeIds = new Set<string>();
 
+  // Workflow identity
+  if (!workflow.id || workflow.id.trim() === '') {
+    problems.push(problem('error', 'MISSING_WORKFLOW_ID', 'Workflow has no ID'));
+  }
+  if (!workflow.name || workflow.name.trim() === '') {
+    problems.push(problem('error', 'MISSING_WORKFLOW_NAME', 'Workflow has no name'));
+  }
+
+  // Empty workflow
+  if (nodes.length === 0) {
+    problems.push(problem('error', 'EMPTY_WORKFLOW', 'Workflow has no nodes'));
+    return;
+  }
+
+  // Node ID validation
+  const nodeIds = new Set<string>();
   for (const node of nodes) {
+    if (!node.id || node.id.trim() === '') {
+      problems.push(problem('error', 'MISSING_NODE_ID', 'Node has no ID'));
+      continue;
+    }
+    if (!node.name || node.name.trim() === '') {
+      problems.push(problem('warning', 'MISSING_NODE_NAME', 'Node has no name', node.id));
+    }
     if (nodeIds.has(node.id)) {
       problems.push(problem('error', 'DUPLICATE_NODE_ID', `Duplicate node ID: ${node.id}`, node.id));
     }
     nodeIds.add(node.id);
   }
 
+  // Edge ID validation
   const edgeIds = new Set<string>();
   for (const edge of edges) {
+    if (!edge.id || edge.id.trim() === '') {
+      problems.push(problem('error', 'MISSING_EDGE_ID', 'Edge has no ID', undefined, undefined));
+      continue;
+    }
     if (edgeIds.has(edge.id)) {
       problems.push(problem('error', 'DUPLICATE_EDGE_ID', `Duplicate edge ID: ${edge.id}`, undefined, edge.id));
     }
@@ -45,11 +72,30 @@ function validateStructure(workflow: Workflow, problems: ValidationProblem[]) {
   }
 
   for (const edge of edges) {
-    if (!nodeIds.has(edge.source)) {
+    if (edge.source && !nodeIds.has(edge.source)) {
       problems.push(problem('error', 'INVALID_EDGE_SOURCE', `Edge ${edge.id} references nonexistent source: ${edge.source}`, undefined, edge.id));
     }
-    if (!nodeIds.has(edge.target)) {
+    if (edge.target && !nodeIds.has(edge.target)) {
       problems.push(problem('error', 'INVALID_EDGE_TARGET', `Edge ${edge.id} references nonexistent target: ${edge.target}`, undefined, edge.id));
+    }
+  }
+
+  // Self-loop edges
+  for (const edge of edges) {
+    if (edge.source && edge.source === edge.target) {
+      problems.push(problem('warning', 'SELF_LOOP_EDGE', `Edge connects a node to itself: ${edge.source}`, undefined, edge.id));
+    }
+  }
+
+  // Duplicate edges (same source and target)
+  const edgePairs = new Set<string>();
+  for (const edge of edges) {
+    if (edge.source && edge.target) {
+      const pair = `${edge.source}->${edge.target}`;
+      if (edgePairs.has(pair)) {
+        problems.push(problem('warning', 'DUPLICATE_EDGE', `Duplicate edge from ${edge.source} to ${edge.target}`, undefined, edge.id));
+      }
+      edgePairs.add(pair);
     }
   }
 
@@ -65,14 +111,22 @@ function validateStructure(workflow: Workflow, problems: ValidationProblem[]) {
     }
   }
 
+  // Action node config validation
   for (const action of nodes.filter(n => n.type === 'action')) {
-    if (!action.config.actionType) {
+    const actionTypeVal = action.config.actionType;
+    if (actionTypeVal === undefined || actionTypeVal === null) {
       problems.push(problem('error', 'MISSING_ACTION_TYPE', 'Action node missing actionType in config', action.id));
+    } else if (typeof actionTypeVal !== 'string' || actionTypeVal.trim() === '') {
+      problems.push(problem('error', 'INVALID_ACTION_TYPE_VALUE', 'Action node actionType must be a non-blank string', action.id));
     }
-    if (!action.config.inputs) {
+
+    const inputsVal = action.config.inputs;
+    if (inputsVal === undefined || inputsVal === null) {
       problems.push(problem('warning', 'MISSING_ACTION_INPUTS', 'Action node has no inputs defined', action.id));
+    } else if (typeof inputsVal !== 'object' || Array.isArray(inputsVal)) {
+      problems.push(problem('warning', 'INVALID_INPUTS_TYPE', 'Action node inputs must be a Map', action.id));
     } else {
-      const inputs = action.config.inputs as Record<string, string>;
+      const inputs = inputsVal as Record<string, string>;
       for (const [name, expr] of Object.entries(inputs)) {
         if (!expr || expr.trim() === '') {
           problems.push(problem('warning', 'EMPTY_ACTION_INPUT_EXPRESSION',
@@ -80,8 +134,14 @@ function validateStructure(workflow: Workflow, problems: ValidationProblem[]) {
         }
       }
     }
-    if (!action.config.outputs) {
+
+    const outputsVal = action.config.outputs;
+    if (outputsVal === undefined || outputsVal === null) {
       problems.push(problem('warning', 'MISSING_ACTION_OUTPUTS', 'Action node has no outputs defined', action.id));
+    } else if (!Array.isArray(outputsVal)) {
+      problems.push(problem('warning', 'INVALID_OUTPUTS_TYPE', 'Action node outputs must be a List', action.id));
+    } else {
+      validateOutputNames(outputsVal, action.id, problems);
     }
   }
 }
@@ -157,7 +217,23 @@ function validateEdgeConditions(workflow: Workflow, problems: ValidationProblem[
   }
 
   for (const [sourceId, outgoing] of edgesBySource) {
-    if (outgoing.length <= 1) continue;
+    // Default edge with condition (check all edges, even single)
+    for (const edge of outgoing) {
+      if (edge.isDefault && edge.condition && edge.condition.trim() !== '') {
+        problems.push(problem('warning', 'DEFAULT_EDGE_WITH_CONDITION',
+          'Default edge has a condition that will never be evaluated', undefined, edge.id));
+      }
+    }
+
+    // Single conditional edge with no fallback
+    if (outgoing.length === 1) {
+      const only = outgoing[0];
+      if (!only.isDefault && only.condition && only.condition.trim() !== '') {
+        problems.push(problem('warning', 'SINGLE_CONDITIONAL_EDGE',
+          'Node has a single outgoing edge with a condition but no fallback', sourceId));
+      }
+      continue;
+    }
 
     const defaults = outgoing.filter(e => e.isDefault);
     if (defaults.length > 1) {
@@ -180,16 +256,20 @@ function validateEdgeConditions(workflow: Workflow, problems: ValidationProblem[
     }
     for (const [priority, count] of priorityCounts) {
       if (count > 1) {
-        problems.push(problem('warning', 'DUPLICATE_EDGE_PRIORITY', `Multiple edges from node ${sourceId} share priority ${priority}`, undefined, sourceId));
+        problems.push(problem('warning', 'DUPLICATE_EDGE_PRIORITY', `Multiple edges from node ${sourceId} share priority ${priority}`, sourceId));
       }
     }
   }
 }
 
 function validateSemantics(workflow: Workflow, problems: ValidationProblem[]) {
+  // Event type validation on receive-event nodes
   for (const node of workflow.nodes.filter(n => n.type === 'receive-event')) {
-    if (!node.config.eventType) {
+    const eventTypeVal = node.config.eventType;
+    if (eventTypeVal === undefined || eventTypeVal === null) {
       problems.push(problem('warning', 'MISSING_EVENT_TYPE', 'Receive-event node has no eventType configured', node.id));
+    } else if (typeof eventTypeVal !== 'string' || eventTypeVal.trim() === '') {
+      problems.push(problem('warning', 'INVALID_EVENT_TYPE_VALUE', 'Receive-event node eventType must be a non-blank string', node.id));
     }
   }
 
@@ -203,11 +283,12 @@ function validateSemantics(workflow: Workflow, problems: ValidationProblem[]) {
     }
   }
 
+  // Human task node validation
   for (const node of workflow.nodes.filter(n => n.type === 'human-task')) {
     if (!node.config.description) {
       problems.push(problem('warning', 'MISSING_TASK_DESCRIPTION', 'Human task node has no description', node.id));
     }
-    if (node.config.inputs) {
+    if (node.config.inputs && typeof node.config.inputs === 'object' && !Array.isArray(node.config.inputs)) {
       const inputs = node.config.inputs as Record<string, string>;
       for (const [name, expr] of Object.entries(inputs)) {
         if (!expr || expr.trim() === '') {
@@ -216,23 +297,79 @@ function validateSemantics(workflow: Workflow, problems: ValidationProblem[]) {
         }
       }
     }
-    if (!node.config.outputs) {
+    const outputsVal = node.config.outputs;
+    if (outputsVal === undefined || outputsVal === null) {
       problems.push(problem('warning', 'MISSING_TASK_OUTPUTS', 'Human task node has no outputs defined', node.id));
+    } else if (Array.isArray(outputsVal)) {
+      validateOutputNames(outputsVal, node.id, problems);
     }
   }
 
+  // Wait node duration validation
   for (const node of workflow.nodes.filter(n => n.type === 'wait')) {
-    if (!node.config.duration) {
+    const durationVal = node.config.duration;
+    if (durationVal === undefined || durationVal === null) {
       problems.push(problem('warning', 'MISSING_WAIT_DURATION', 'Wait node has no duration configured', node.id));
+    } else if (typeof durationVal === 'string') {
+      if (!isValidIsoDuration(durationVal)) {
+        problems.push(problem('error', 'INVALID_WAIT_DURATION',
+          `Wait node duration is not valid ISO 8601: ${durationVal}`, node.id));
+      }
     }
   }
 
+  // Start node input validation
   const startNode = workflow.nodes.find(n => n.type === 'start');
-  if (startNode && !startNode.config.inputs) {
-    problems.push(problem('warning', 'MISSING_START_INPUTS', 'Start node has no inputs defined', startNode.id));
+  if (startNode) {
+    const inputsDef = startNode.config.inputs;
+    if (inputsDef === undefined || inputsDef === null) {
+      problems.push(problem('warning', 'MISSING_START_INPUTS', 'Start node has no inputs defined', startNode.id));
+    } else if (Array.isArray(inputsDef)) {
+      const inputNames = new Set<string>();
+      for (const input of inputsDef) {
+        if (typeof input === 'object' && input !== null) {
+          const nameVal = (input as Record<string, unknown>).name;
+          if (!nameVal || (typeof nameVal === 'string' && nameVal.trim() === '')) {
+            problems.push(problem('warning', 'INVALID_INPUT_DEFINITION',
+              'Start node input is missing a name', startNode.id));
+          } else {
+            const name = String(nameVal);
+            if (inputNames.has(name)) {
+              problems.push(problem('warning', 'DUPLICATE_INPUT_NAME',
+                `Start node has duplicate input name: ${name}`, startNode.id));
+            }
+            inputNames.add(name);
+          }
+        }
+      }
+    }
   }
 
   detectAutomatedCycles(workflow, problems);
+}
+
+function validateOutputNames(outputDefs: unknown[], nodeId: string, problems: ValidationProblem[]) {
+  const outputNames = new Set<string>();
+  for (const defObj of outputDefs) {
+    if (typeof defObj === 'object' && defObj !== null) {
+      const nameVal = (defObj as Record<string, unknown>).name;
+      if (nameVal !== undefined && nameVal !== null) {
+        const name = String(nameVal);
+        if (outputNames.has(name)) {
+          problems.push(problem('warning', 'DUPLICATE_OUTPUT_NAME',
+            `Duplicate output name: ${name}`, nodeId));
+        }
+        outputNames.add(name);
+      }
+    }
+  }
+}
+
+function isValidIsoDuration(value: string): boolean {
+  // Match java.time.Duration.parse() which only supports days-and-time (PnDTnHnMnS)
+  return /^P(?:\d+D)?(?:T(?:\d+H)?(?:\d+M)?(?:\d+(?:\.\d+)?S)?)?$/.test(value)
+    && value !== 'P' && value !== 'PT'
+    && !/T$/.test(value);
 }
 
 function detectAutomatedCycles(workflow: Workflow, problems: ValidationProblem[]) {

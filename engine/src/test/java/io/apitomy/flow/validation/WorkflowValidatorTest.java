@@ -154,13 +154,6 @@ class WorkflowValidatorTest {
 
     @Test
     void noDefaultEdge() {
-        Workflow w = new Workflow("w", "W", null, null,
-            List.of(startNode("start"), endNode("e1"), endNode("e2")),
-            List.of(
-                edge("edge1", "start", "e1", "context.x == 1", 1),
-                edge("edge2", "start", "e2", "context.x == 2", 2)));
-        // Note: also triggers DUPLICATE_NODE_ID for end nodes — use different IDs
-        // Fix: use proper unique IDs
         Workflow w2 = new Workflow("w", "W", null, null,
             List.of(startNode("start"), actionNode("a1", "t"), actionNode("a2", "t"), endNode("end")),
             List.of(
@@ -236,5 +229,316 @@ class WorkflowValidatorTest {
         List<ValidationProblem> errors = validate(w).stream()
             .filter(p -> p.severity() == ValidationSeverity.ERROR).toList();
         assertTrue(errors.isEmpty(), "Valid workflow should have no errors: " + errors);
+    }
+
+    // ==========================================================================
+    // New validation rules
+    // ==========================================================================
+
+    // --- Workflow identity ---
+
+    @Test
+    void missingWorkflowId() {
+        Workflow w = new Workflow(null, "W", null, null,
+            List.of(startNode("start"), endNode("end")),
+            List.of(edge("e1", "start", "end")));
+        assertTrue(hasCode(validate(w), "MISSING_WORKFLOW_ID"));
+    }
+
+    @Test
+    void blankWorkflowId() {
+        Workflow w = new Workflow("  ", "W", null, null,
+            List.of(startNode("start"), endNode("end")),
+            List.of(edge("e1", "start", "end")));
+        assertTrue(hasCode(validate(w), "MISSING_WORKFLOW_ID"));
+    }
+
+    @Test
+    void missingWorkflowName() {
+        Workflow w = new Workflow("w", null, null, null,
+            List.of(startNode("start"), endNode("end")),
+            List.of(edge("e1", "start", "end")));
+        assertTrue(hasCode(validate(w), "MISSING_WORKFLOW_NAME"));
+    }
+
+    @Test
+    void blankWorkflowName() {
+        Workflow w = new Workflow("w", "", null, null,
+            List.of(startNode("start"), endNode("end")),
+            List.of(edge("e1", "start", "end")));
+        assertTrue(hasCode(validate(w), "MISSING_WORKFLOW_NAME"));
+    }
+
+    // --- Empty workflow ---
+
+    @Test
+    void emptyWorkflow() {
+        Workflow w = new Workflow("w", "W", null, null, List.of(), List.of());
+        List<ValidationProblem> problems = validate(w);
+        assertTrue(hasCode(problems, "EMPTY_WORKFLOW"));
+        // Should not report NO_START_NODE/NO_END_NODE since EMPTY_WORKFLOW covers it
+        assertFalse(hasCode(problems, "NO_START_NODE"));
+        assertFalse(hasCode(problems, "NO_END_NODE"));
+    }
+
+    // --- Node identity ---
+
+    @Test
+    void missingNodeId() {
+        WorkflowNode noId = new WorkflowNode(null, NodeType.ACTION, "A",
+            Map.of("actionType", "test"), new Position(0, 0));
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), noId, endNode("end")),
+            List.of(edge("e1", "start", "end")));
+        assertTrue(hasCode(validate(w), "MISSING_NODE_ID"));
+    }
+
+    @Test
+    void missingNodeName() {
+        WorkflowNode noName = new WorkflowNode("a", NodeType.ACTION, null,
+            Map.of("actionType", "test"), new Position(0, 0));
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), noName, endNode("end")),
+            List.of(edge("e1", "start", "a"), edge("e2", "a", "end")));
+        assertTrue(hasCode(validate(w), "MISSING_NODE_NAME"));
+    }
+
+    // --- Edge identity ---
+
+    @Test
+    void missingEdgeId() {
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), endNode("end")),
+            List.of(new WorkflowEdge(null, "start", "end", null, 0, false, null)));
+        assertTrue(hasCode(validate(w), "MISSING_EDGE_ID"));
+    }
+
+    // --- Self-loop ---
+
+    @Test
+    void selfLoopEdge() {
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), actionNode("a", "test"), endNode("end")),
+            List.of(edge("e1", "start", "a"), edge("e2", "a", "a"), edge("e3", "a", "end")));
+        assertTrue(hasCode(validate(w), "SELF_LOOP_EDGE"));
+    }
+
+    // --- Duplicate edge ---
+
+    @Test
+    void duplicateEdge() {
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), endNode("end")),
+            List.of(edge("e1", "start", "end"), edge("e2", "start", "end")));
+        assertTrue(hasCode(validate(w), "DUPLICATE_EDGE"));
+    }
+
+    // --- Action type value ---
+
+    @Test
+    void invalidActionTypeValue() {
+        WorkflowNode badAction = new WorkflowNode("a", NodeType.ACTION, "A",
+            Map.of("actionType", 42), new Position(0, 0));
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), badAction, endNode("end")),
+            List.of(edge("e1", "start", "a"), edge("e2", "a", "end")));
+        assertTrue(hasCode(validate(w), "INVALID_ACTION_TYPE_VALUE"));
+    }
+
+    @Test
+    void blankActionTypeValue() {
+        WorkflowNode badAction = new WorkflowNode("a", NodeType.ACTION, "A",
+            Map.of("actionType", "  "), new Position(0, 0));
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), badAction, endNode("end")),
+            List.of(edge("e1", "start", "a"), edge("e2", "a", "end")));
+        assertTrue(hasCode(validate(w), "INVALID_ACTION_TYPE_VALUE"));
+    }
+
+    // --- Invalid inputs type ---
+
+    @Test
+    void invalidInputsType() {
+        WorkflowNode badAction = new WorkflowNode("a", NodeType.ACTION, "A",
+            Map.of("actionType", "test", "inputs", "not-a-map"), new Position(0, 0));
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), badAction, endNode("end")),
+            List.of(edge("e1", "start", "a"), edge("e2", "a", "end")));
+        assertTrue(hasCode(validate(w), "INVALID_INPUTS_TYPE"));
+    }
+
+    // --- Invalid outputs type ---
+
+    @Test
+    void invalidOutputsType() {
+        WorkflowNode badAction = new WorkflowNode("a", NodeType.ACTION, "A",
+            Map.of("actionType", "test", "outputs", "not-a-list"), new Position(0, 0));
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), badAction, endNode("end")),
+            List.of(edge("e1", "start", "a"), edge("e2", "a", "end")));
+        assertTrue(hasCode(validate(w), "INVALID_OUTPUTS_TYPE"));
+    }
+
+    // --- Empty action input expression (Java parity) ---
+
+    @Test
+    void emptyActionInputExpression() {
+        WorkflowNode actionWithEmptyInput = new WorkflowNode("a", NodeType.ACTION, "A",
+            Map.of("actionType", "test", "inputs", Map.of("url", "", "method", "context.method")),
+            new Position(0, 0));
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start", List.of(inputDef("x", "string", true))),
+                actionWithEmptyInput, endNode("end")),
+            List.of(edge("e1", "start", "a"), edge("e2", "a", "end")));
+        assertTrue(hasCode(validate(w), "EMPTY_ACTION_INPUT_EXPRESSION"));
+    }
+
+    // --- Empty task input expression (Java parity) ---
+
+    @Test
+    void emptyTaskInputExpression() {
+        WorkflowNode taskWithEmptyInput = new WorkflowNode("ht", NodeType.HUMAN_TASK, "HT",
+            Map.of("description", "Do it",
+                "inputs", Map.of("score", ""),
+                "outputs", List.of(Map.of("name", "decision", "type", "string", "required", true))),
+            new Position(0, 0));
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start", List.of(inputDef("x", "string", true))),
+                taskWithEmptyInput, endNode("end")),
+            List.of(edge("e1", "start", "ht"), edge("e2", "ht", "end")));
+        assertTrue(hasCode(validate(w), "EMPTY_TASK_INPUT_EXPRESSION"));
+    }
+
+    // --- Default edge with condition ---
+
+    @Test
+    void defaultEdgeWithCondition() {
+        WorkflowEdge badDefault = new WorkflowEdge("e1", "start", "end",
+            "context.x == 1", 0, true, null);
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), endNode("end")),
+            List.of(badDefault));
+        assertTrue(hasCode(validate(w), "DEFAULT_EDGE_WITH_CONDITION"));
+    }
+
+    // --- Single conditional edge ---
+
+    @Test
+    void singleConditionalEdge() {
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), endNode("end")),
+            List.of(edge("e1", "start", "end", "context.x == 1", 0)));
+        assertTrue(hasCode(validate(w), "SINGLE_CONDITIONAL_EDGE"));
+    }
+
+    @Test
+    void singleUnconditionalEdgeNoProblem() {
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start", List.of(inputDef("x", "string", true))), endNode("end")),
+            List.of(edge("e1", "start", "end")));
+        assertFalse(hasCode(validate(w), "SINGLE_CONDITIONAL_EDGE"));
+    }
+
+    // --- Invalid event type value ---
+
+    @Test
+    void invalidEventTypeValue() {
+        WorkflowNode badReceive = new WorkflowNode("r", NodeType.RECEIVE_EVENT, "R",
+            Map.of("eventType", 42), new Position(0, 0));
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), badReceive, endNode("end")),
+            List.of(edge("e1", "start", "r"), edge("e2", "r", "end")));
+        assertTrue(hasCode(validate(w), "INVALID_EVENT_TYPE_VALUE"));
+    }
+
+    @Test
+    void blankEventTypeValue() {
+        WorkflowNode badReceive = new WorkflowNode("r", NodeType.RECEIVE_EVENT, "R",
+            Map.of("eventType", "  "), new Position(0, 0));
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), badReceive, endNode("end")),
+            List.of(edge("e1", "start", "r"), edge("e2", "r", "end")));
+        assertTrue(hasCode(validate(w), "INVALID_EVENT_TYPE_VALUE"));
+    }
+
+    // --- Invalid wait duration ---
+
+    @Test
+    void invalidWaitDuration() {
+        WorkflowNode badWait = new WorkflowNode("w", NodeType.WAIT, "Wait",
+            Map.of("duration", "30 minutes"), new Position(0, 0));
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), badWait, endNode("end")),
+            List.of(edge("e1", "start", "w"), edge("e2", "w", "end")));
+        assertTrue(hasCode(validate(w), "INVALID_WAIT_DURATION"));
+    }
+
+    @Test
+    void validWaitDuration() {
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start", List.of(inputDef("x", "string", true))),
+                waitNode("wt", "PT30M"), endNode("end")),
+            List.of(edge("e1", "start", "wt"), edge("e2", "wt", "end")));
+        assertFalse(hasCode(validate(w), "INVALID_WAIT_DURATION"));
+    }
+
+    // --- Invalid input definition ---
+
+    @Test
+    void invalidInputDefinitionMissingName() {
+        WorkflowNode startWithBadInput = new WorkflowNode("start", NodeType.START, "Start",
+            Map.of("inputs", List.of(Map.of("type", "string", "required", true))),
+            new Position(0, 0));
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startWithBadInput, endNode("end")),
+            List.of(edge("e1", "start", "end")));
+        assertTrue(hasCode(validate(w), "INVALID_INPUT_DEFINITION"));
+    }
+
+    // --- Duplicate input name ---
+
+    @Test
+    void duplicateInputName() {
+        WorkflowNode startWithDupInput = new WorkflowNode("start", NodeType.START, "Start",
+            Map.of("inputs", List.of(
+                inputDef("x", "string", true),
+                inputDef("x", "number", false))),
+            new Position(0, 0));
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startWithDupInput, endNode("end")),
+            List.of(edge("e1", "start", "end")));
+        assertTrue(hasCode(validate(w), "DUPLICATE_INPUT_NAME"));
+    }
+
+    // --- Duplicate output name ---
+
+    @Test
+    void duplicateOutputName() {
+        WorkflowNode actionWithDupOutput = new WorkflowNode("a", NodeType.ACTION, "A",
+            Map.of("actionType", "test",
+                "outputs", List.of(
+                    Map.of("name", "result", "type", "string", "required", true),
+                    Map.of("name", "result", "type", "number", "required", false))),
+            new Position(0, 0));
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start", List.of(inputDef("x", "string", true))),
+                actionWithDupOutput, endNode("end")),
+            List.of(edge("e1", "start", "a"), edge("e2", "a", "end")));
+        assertTrue(hasCode(validate(w), "DUPLICATE_OUTPUT_NAME"));
+    }
+
+    @Test
+    void duplicateOutputNameOnHumanTask() {
+        WorkflowNode taskWithDupOutput = new WorkflowNode("ht", NodeType.HUMAN_TASK, "HT",
+            Map.of("description", "Do it",
+                "outputs", List.of(
+                    Map.of("name", "decision", "type", "string", "required", true),
+                    Map.of("name", "decision", "type", "boolean", "required", false))),
+            new Position(0, 0));
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start", List.of(inputDef("x", "string", true))),
+                taskWithDupOutput, endNode("end")),
+            List.of(edge("e1", "start", "ht"), edge("e2", "ht", "end")));
+        assertTrue(hasCode(validate(w), "DUPLICATE_OUTPUT_NAME"));
     }
 }

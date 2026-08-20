@@ -120,11 +120,11 @@ engine/                  Java workflow engine library
     model/               Workflow, WorkflowNode, WorkflowEdge, WorkflowInstance, HumanTaskInfo, ReceiveEventInfo
     engine/              WorkflowEngine, ConditionEvaluator, JsonNodeELResolver
     spi/                 NodeExecutor, WorkflowEventListener, WorkflowErrorHandler
-    validation/          WorkflowValidator (27 rules)
+    validation/          WorkflowValidator (47 rules)
 ui/                      React visual editor components
   src/
     components/          WorkflowEditor, WorkflowViewer, custom nodes/edges, panels
-    validation/          TypeScript workflow validator (26 rules)
+    validation/          TypeScript workflow validator (46 rules)
     types/               TypeScript types mirroring the Java model
 ```
 
