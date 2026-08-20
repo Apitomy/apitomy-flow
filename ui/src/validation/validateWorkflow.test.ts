@@ -218,4 +218,253 @@ describe('validateWorkflow', () => {
       expect(errors).toHaveLength(0);
     });
   });
+
+  // ========================================================================
+  // New validation rules
+  // ========================================================================
+
+  describe('workflow identity', () => {
+    it('MISSING_WORKFLOW_ID when id is empty', () => {
+      const w: Workflow = { id: '', name: 'Test', nodes: [node('start', 'start'), node('end', 'end')], edges: [edge('e1', 'start', 'end')] };
+      expect(hasProblem(validateWorkflow(w), 'MISSING_WORKFLOW_ID')).toBe(true);
+    });
+
+    it('MISSING_WORKFLOW_NAME when name is empty', () => {
+      const w: Workflow = { id: 'test', name: '', nodes: [node('start', 'start'), node('end', 'end')], edges: [edge('e1', 'start', 'end')] };
+      expect(hasProblem(validateWorkflow(w), 'MISSING_WORKFLOW_NAME')).toBe(true);
+    });
+  });
+
+  describe('empty workflow', () => {
+    it('EMPTY_WORKFLOW when no nodes', () => {
+      const w = workflow([], []);
+      const problems = validateWorkflow(w);
+      expect(hasProblem(problems, 'EMPTY_WORKFLOW')).toBe(true);
+      expect(hasProblem(problems, 'NO_START_NODE')).toBe(false);
+      expect(hasProblem(problems, 'NO_END_NODE')).toBe(false);
+    });
+  });
+
+  describe('node identity', () => {
+    it('MISSING_NODE_ID when id is empty', () => {
+      const w = workflow(
+        [{ id: '', type: 'action' as const, name: 'A', config: { actionType: 'x' }, position: { x: 0, y: 0 } },
+         node('start', 'start'), node('end', 'end')],
+        [edge('e1', 'start', 'end')],
+      );
+      expect(hasProblem(validateWorkflow(w), 'MISSING_NODE_ID')).toBe(true);
+    });
+
+    it('MISSING_NODE_NAME when name is empty', () => {
+      const w = workflow(
+        [node('start', 'start'), { id: 'a', type: 'action' as const, name: '', config: { actionType: 'x' }, position: { x: 0, y: 0 } }, node('end', 'end')],
+        [edge('e1', 'start', 'a'), edge('e2', 'a', 'end')],
+      );
+      expect(hasProblem(validateWorkflow(w), 'MISSING_NODE_NAME')).toBe(true);
+    });
+  });
+
+  describe('edge identity', () => {
+    it('MISSING_EDGE_ID when id is empty', () => {
+      const w = workflow(
+        [node('start', 'start'), node('end', 'end')],
+        [{ id: '', source: 'start', target: 'end', priority: 0, isDefault: false }],
+      );
+      expect(hasProblem(validateWorkflow(w), 'MISSING_EDGE_ID')).toBe(true);
+    });
+  });
+
+  describe('self-loop edge', () => {
+    it('SELF_LOOP_EDGE when source equals target', () => {
+      const w = workflow(
+        [node('start', 'start'), node('a', 'action', { actionType: 'x' }), node('end', 'end')],
+        [edge('e1', 'start', 'a'), edge('e2', 'a', 'a'), edge('e3', 'a', 'end')],
+      );
+      expect(hasProblem(validateWorkflow(w), 'SELF_LOOP_EDGE')).toBe(true);
+    });
+  });
+
+  describe('duplicate edge', () => {
+    it('DUPLICATE_EDGE when same source and target', () => {
+      const w = workflow(
+        [node('start', 'start'), node('end', 'end')],
+        [edge('e1', 'start', 'end'), edge('e2', 'start', 'end')],
+      );
+      expect(hasProblem(validateWorkflow(w), 'DUPLICATE_EDGE')).toBe(true);
+    });
+  });
+
+  describe('action type value', () => {
+    it('INVALID_ACTION_TYPE_VALUE when actionType is a number', () => {
+      const w = workflow(
+        [node('start', 'start'), node('a', 'action', { actionType: 42 }), node('end', 'end')],
+        [edge('e1', 'start', 'a'), edge('e2', 'a', 'end')],
+      );
+      expect(hasProblem(validateWorkflow(w), 'INVALID_ACTION_TYPE_VALUE')).toBe(true);
+    });
+
+    it('INVALID_ACTION_TYPE_VALUE when actionType is blank', () => {
+      const w = workflow(
+        [node('start', 'start'), node('a', 'action', { actionType: '  ' }), node('end', 'end')],
+        [edge('e1', 'start', 'a'), edge('e2', 'a', 'end')],
+      );
+      expect(hasProblem(validateWorkflow(w), 'INVALID_ACTION_TYPE_VALUE')).toBe(true);
+    });
+  });
+
+  describe('invalid inputs type', () => {
+    it('INVALID_INPUTS_TYPE when inputs is a string', () => {
+      const w = workflow(
+        [node('start', 'start'), node('a', 'action', { actionType: 'test', inputs: 'not-a-map' }), node('end', 'end')],
+        [edge('e1', 'start', 'a'), edge('e2', 'a', 'end')],
+      );
+      expect(hasProblem(validateWorkflow(w), 'INVALID_INPUTS_TYPE')).toBe(true);
+    });
+
+    it('INVALID_INPUTS_TYPE when inputs is an array', () => {
+      const w = workflow(
+        [node('start', 'start'), node('a', 'action', { actionType: 'test', inputs: ['a', 'b'] }), node('end', 'end')],
+        [edge('e1', 'start', 'a'), edge('e2', 'a', 'end')],
+      );
+      expect(hasProblem(validateWorkflow(w), 'INVALID_INPUTS_TYPE')).toBe(true);
+    });
+  });
+
+  describe('invalid outputs type', () => {
+    it('INVALID_OUTPUTS_TYPE when outputs is a string', () => {
+      const w = workflow(
+        [node('start', 'start'), node('a', 'action', { actionType: 'test', outputs: 'not-a-list' }), node('end', 'end')],
+        [edge('e1', 'start', 'a'), edge('e2', 'a', 'end')],
+      );
+      expect(hasProblem(validateWorkflow(w), 'INVALID_OUTPUTS_TYPE')).toBe(true);
+    });
+  });
+
+  describe('default edge with condition', () => {
+    it('DEFAULT_EDGE_WITH_CONDITION', () => {
+      const w = workflow(
+        [node('start', 'start'), node('end', 'end')],
+        [edge('e1', 'start', 'end', { isDefault: true, condition: 'context.x == 1' })],
+      );
+      expect(hasProblem(validateWorkflow(w), 'DEFAULT_EDGE_WITH_CONDITION')).toBe(true);
+    });
+  });
+
+  describe('single conditional edge', () => {
+    it('SINGLE_CONDITIONAL_EDGE when only edge has condition', () => {
+      const w = workflow(
+        [node('start', 'start'), node('end', 'end')],
+        [edge('e1', 'start', 'end', { condition: 'context.x == 1' })],
+      );
+      expect(hasProblem(validateWorkflow(w), 'SINGLE_CONDITIONAL_EDGE')).toBe(true);
+    });
+
+    it('no SINGLE_CONDITIONAL_EDGE when edge is unconditional', () => {
+      const w = workflow(
+        [node('start', 'start', { inputs: [{ name: 'x', type: 'string', required: true }] }), node('end', 'end')],
+        [edge('e1', 'start', 'end')],
+      );
+      expect(hasProblem(validateWorkflow(w), 'SINGLE_CONDITIONAL_EDGE')).toBe(false);
+    });
+  });
+
+  describe('invalid event type value', () => {
+    it('INVALID_EVENT_TYPE_VALUE when eventType is a number', () => {
+      const w = workflow(
+        [node('start', 'start'), node('r', 'receive-event', { eventType: 42 }), node('end', 'end')],
+        [edge('e1', 'start', 'r'), edge('e2', 'r', 'end')],
+      );
+      expect(hasProblem(validateWorkflow(w), 'INVALID_EVENT_TYPE_VALUE')).toBe(true);
+    });
+
+    it('INVALID_EVENT_TYPE_VALUE when eventType is blank', () => {
+      const w = workflow(
+        [node('start', 'start'), node('r', 'receive-event', { eventType: '  ' }), node('end', 'end')],
+        [edge('e1', 'start', 'r'), edge('e2', 'r', 'end')],
+      );
+      expect(hasProblem(validateWorkflow(w), 'INVALID_EVENT_TYPE_VALUE')).toBe(true);
+    });
+  });
+
+  describe('invalid wait duration', () => {
+    it('INVALID_WAIT_DURATION when duration is not ISO 8601', () => {
+      const w = workflow(
+        [node('start', 'start'), node('w', 'wait', { duration: '30 minutes' }), node('end', 'end')],
+        [edge('e1', 'start', 'w'), edge('e2', 'w', 'end')],
+      );
+      expect(hasProblem(validateWorkflow(w), 'INVALID_WAIT_DURATION')).toBe(true);
+    });
+
+    it('no INVALID_WAIT_DURATION for valid ISO 8601', () => {
+      const w = workflow(
+        [node('start', 'start', { inputs: [{ name: 'x', type: 'string', required: true }] }),
+         node('w', 'wait', { duration: 'PT30M' }), node('end', 'end')],
+        [edge('e1', 'start', 'w'), edge('e2', 'w', 'end')],
+      );
+      expect(hasProblem(validateWorkflow(w), 'INVALID_WAIT_DURATION')).toBe(false);
+    });
+  });
+
+  describe('input definition validation', () => {
+    it('INVALID_INPUT_DEFINITION when input has no name', () => {
+      const w = workflow(
+        [node('start', 'start', { inputs: [{ type: 'string', required: true }] }), node('end', 'end')],
+        [edge('e1', 'start', 'end')],
+      );
+      expect(hasProblem(validateWorkflow(w), 'INVALID_INPUT_DEFINITION')).toBe(true);
+    });
+
+    it('INVALID_INPUT_DEFINITION when input name is blank', () => {
+      const w = workflow(
+        [node('start', 'start', { inputs: [{ name: '  ', type: 'string', required: true }] }), node('end', 'end')],
+        [edge('e1', 'start', 'end')],
+      );
+      expect(hasProblem(validateWorkflow(w), 'INVALID_INPUT_DEFINITION')).toBe(true);
+    });
+  });
+
+  describe('duplicate input name', () => {
+    it('DUPLICATE_INPUT_NAME when start has duplicate inputs', () => {
+      const w = workflow(
+        [node('start', 'start', { inputs: [
+          { name: 'x', type: 'string', required: true },
+          { name: 'x', type: 'number', required: false },
+        ] }), node('end', 'end')],
+        [edge('e1', 'start', 'end')],
+      );
+      expect(hasProblem(validateWorkflow(w), 'DUPLICATE_INPUT_NAME')).toBe(true);
+    });
+  });
+
+  describe('duplicate output name', () => {
+    it('DUPLICATE_OUTPUT_NAME on action node', () => {
+      const w = workflow(
+        [
+          node('start', 'start', { inputs: [{ name: 'x', type: 'string', required: true }] }),
+          node('a', 'action', { actionType: 'test', outputs: [
+            { name: 'result', type: 'string', required: true },
+            { name: 'result', type: 'number', required: false },
+          ] }),
+          node('end', 'end'),
+        ],
+        [edge('e1', 'start', 'a'), edge('e2', 'a', 'end')],
+      );
+      expect(hasProblem(validateWorkflow(w), 'DUPLICATE_OUTPUT_NAME')).toBe(true);
+    });
+
+    it('DUPLICATE_OUTPUT_NAME on human task node', () => {
+      const w = workflow(
+        [
+          node('start', 'start', { inputs: [{ name: 'x', type: 'string', required: true }] }),
+          node('t', 'human-task', { description: 'Do it', outputs: [
+            { name: 'decision', type: 'string', required: true },
+            { name: 'decision', type: 'boolean', required: false },
+          ] }),
+          node('end', 'end'),
+        ],
+        [edge('e1', 'start', 't'), edge('e2', 't', 'end')],
+      );
+      expect(hasProblem(validateWorkflow(w), 'DUPLICATE_OUTPUT_NAME')).toBe(true);
+    });
+  });
 });

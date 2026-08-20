@@ -3,6 +3,7 @@ package io.apitomy.flow.validation;
 import io.apitomy.flow.engine.ConditionEvaluator;
 import io.apitomy.flow.model.*;
 
+import java.time.Duration;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -28,17 +29,44 @@ public class WorkflowValidator {
         List<WorkflowEdge> edges = workflow.edges();
         Set<String> nodeIds = new HashSet<>();
 
-        // Duplicate node IDs
+        // Workflow identity
+        if (workflow.id() == null || workflow.id().isBlank()) {
+            problems.add(ValidationProblem.error("MISSING_WORKFLOW_ID", "Workflow has no ID"));
+        }
+        if (workflow.name() == null || workflow.name().isBlank()) {
+            problems.add(ValidationProblem.error("MISSING_WORKFLOW_NAME", "Workflow has no name"));
+        }
+
+        // Empty workflow
+        if (nodes.isEmpty()) {
+            problems.add(ValidationProblem.error("EMPTY_WORKFLOW", "Workflow has no nodes"));
+            return;
+        }
+
+        // Node ID validation
         for (WorkflowNode node : nodes) {
+            if (node.id() == null || node.id().isBlank()) {
+                problems.add(ValidationProblem.error("MISSING_NODE_ID", "Node has no ID"));
+                continue;
+            }
+            if (node.name() == null || node.name().isBlank()) {
+                problems.add(ValidationProblem.warning("MISSING_NODE_NAME",
+                    "Node has no name", node.id()));
+            }
             if (!nodeIds.add(node.id())) {
                 problems.add(ValidationProblem.error("DUPLICATE_NODE_ID",
                     "Duplicate node ID: " + node.id(), node.id()));
             }
         }
 
-        // Duplicate edge IDs
+        // Edge ID validation
         Set<String> edgeIds = new HashSet<>();
         for (WorkflowEdge edge : edges) {
+            if (edge.id() == null || edge.id().isBlank()) {
+                problems.add(ValidationProblem.edgeError("MISSING_EDGE_ID",
+                    "Edge has no ID", null));
+                continue;
+            }
             if (!edgeIds.add(edge.id())) {
                 problems.add(ValidationProblem.edgeError("DUPLICATE_EDGE_ID",
                     "Duplicate edge ID: " + edge.id(), edge.id()));
@@ -63,13 +91,33 @@ public class WorkflowValidator {
 
         // Edge reference checks
         for (WorkflowEdge edge : edges) {
-            if (!nodeIds.contains(edge.source())) {
+            if (edge.source() != null && !nodeIds.contains(edge.source())) {
                 problems.add(ValidationProblem.edgeError("INVALID_EDGE_SOURCE",
                     "Edge " + edge.id() + " references nonexistent source: " + edge.source(), edge.id()));
             }
-            if (!nodeIds.contains(edge.target())) {
+            if (edge.target() != null && !nodeIds.contains(edge.target())) {
                 problems.add(ValidationProblem.edgeError("INVALID_EDGE_TARGET",
                     "Edge " + edge.id() + " references nonexistent target: " + edge.target(), edge.id()));
+            }
+        }
+
+        // Self-loop edges
+        for (WorkflowEdge edge : edges) {
+            if (edge.source() != null && edge.source().equals(edge.target())) {
+                problems.add(ValidationProblem.edgeWarning("SELF_LOOP_EDGE",
+                    "Edge connects a node to itself: " + edge.source(), edge.id()));
+            }
+        }
+
+        // Duplicate edges (same source and target)
+        Set<String> edgePairs = new HashSet<>();
+        for (WorkflowEdge edge : edges) {
+            if (edge.source() != null && edge.target() != null) {
+                String pair = edge.source() + "->" + edge.target();
+                if (!edgePairs.add(pair)) {
+                    problems.add(ValidationProblem.edgeWarning("DUPLICATE_EDGE",
+                        "Duplicate edge from " + edge.source() + " to " + edge.target(), edge.id()));
+                }
             }
         }
 
@@ -91,19 +139,44 @@ public class WorkflowValidator {
             }
         });
 
-        // Action nodes must have actionType
+        // Action node config validation
         nodes.stream().filter(n -> n.type() == NodeType.ACTION).forEach(action -> {
-            if (!action.config().containsKey("actionType")) {
+            Object actionTypeVal = action.config().get("actionType");
+            if (actionTypeVal == null) {
                 problems.add(ValidationProblem.error("MISSING_ACTION_TYPE",
                     "Action node missing actionType in config", action.id()));
+            } else if (!(actionTypeVal instanceof String s) || s.isBlank()) {
+                problems.add(ValidationProblem.error("INVALID_ACTION_TYPE_VALUE",
+                    "Action node actionType must be a non-blank string", action.id()));
             }
-            if (!action.config().containsKey("inputs")) {
+
+            Object inputsVal = action.config().get("inputs");
+            if (inputsVal == null) {
                 problems.add(ValidationProblem.warning("MISSING_ACTION_INPUTS",
                     "Action node has no inputs defined", action.id()));
+            } else if (!(inputsVal instanceof Map<?, ?> inputs)) {
+                problems.add(ValidationProblem.warning("INVALID_INPUTS_TYPE",
+                    "Action node inputs must be a Map", action.id()));
+            } else {
+                for (Map.Entry<?, ?> entry : inputs.entrySet()) {
+                    String name = String.valueOf(entry.getKey());
+                    Object expr = entry.getValue();
+                    if (expr == null || (expr instanceof String es && es.isBlank())) {
+                        problems.add(ValidationProblem.warning("EMPTY_ACTION_INPUT_EXPRESSION",
+                            "Action node input \"" + name + "\" has no EL expression", action.id()));
+                    }
+                }
             }
-            if (!action.config().containsKey("outputs")) {
+
+            Object outputsVal = action.config().get("outputs");
+            if (outputsVal == null) {
                 problems.add(ValidationProblem.warning("MISSING_ACTION_OUTPUTS",
                     "Action node has no outputs defined", action.id()));
+            } else if (!(outputsVal instanceof List<?> outputs)) {
+                problems.add(ValidationProblem.warning("INVALID_OUTPUTS_TYPE",
+                    "Action node outputs must be a List", action.id()));
+            } else {
+                validateOutputNames(outputs, action.id(), problems);
             }
         });
     }
@@ -184,7 +257,25 @@ public class WorkflowValidator {
 
         for (var entry : edgesBySource.entrySet()) {
             List<WorkflowEdge> outgoing = entry.getValue();
-            if (outgoing.size() <= 1) continue;
+
+            // Default edge with condition (check all edges, even single)
+            for (WorkflowEdge edge : outgoing) {
+                if (edge.isDefault() && edge.condition() != null && !edge.condition().isBlank()) {
+                    problems.add(ValidationProblem.edgeWarning("DEFAULT_EDGE_WITH_CONDITION",
+                        "Default edge has a condition that will never be evaluated", edge.id()));
+                }
+            }
+
+            // Single conditional edge with no fallback
+            if (outgoing.size() == 1) {
+                WorkflowEdge only = outgoing.getFirst();
+                if (!only.isDefault() && only.condition() != null && !only.condition().isBlank()) {
+                    problems.add(ValidationProblem.warning("SINGLE_CONDITIONAL_EDGE",
+                        "Node has a single outgoing edge with a condition but no fallback",
+                        entry.getKey()));
+                }
+                continue;
+            }
 
             // Multiple default edges
             List<WorkflowEdge> defaults = outgoing.stream().filter(WorkflowEdge::isDefault).toList();
@@ -230,13 +321,17 @@ public class WorkflowValidator {
     }
 
     private void validateSemantics(Workflow workflow, List<ValidationProblem> problems) {
-        // Missing event type on receive-event nodes
+        // Event type validation on receive-event nodes
         workflow.nodes().stream()
             .filter(n -> n.type() == NodeType.RECEIVE_EVENT)
             .forEach(node -> {
-                if (!node.config().containsKey("eventType")) {
+                Object eventTypeVal = node.config().get("eventType");
+                if (eventTypeVal == null) {
                     problems.add(ValidationProblem.warning("MISSING_EVENT_TYPE",
                         "Receive-event node has no eventType configured", node.id()));
+                } else if (!(eventTypeVal instanceof String s) || s.isBlank()) {
+                    problems.add(ValidationProblem.warning("INVALID_EVENT_TYPE_VALUE",
+                        "Receive-event node eventType must be a non-blank string", node.id()));
                 }
             });
 
@@ -255,7 +350,7 @@ public class WorkflowValidator {
             }
         }
 
-        // Human task nodes missing description or outputs
+        // Human task node validation
         workflow.nodes().stream()
             .filter(n -> n.type() == NodeType.HUMAN_TASK)
             .forEach(node -> {
@@ -263,31 +358,89 @@ public class WorkflowValidator {
                     problems.add(ValidationProblem.warning("MISSING_TASK_DESCRIPTION",
                         "Human task node has no description", node.id()));
                 }
-                if (!node.config().containsKey("outputs")) {
+                if (node.config().get("inputs") instanceof Map<?, ?> inputs) {
+                    for (Map.Entry<?, ?> entry : inputs.entrySet()) {
+                        String name = String.valueOf(entry.getKey());
+                        Object expr = entry.getValue();
+                        if (expr == null || (expr instanceof String es && es.isBlank())) {
+                            problems.add(ValidationProblem.warning("EMPTY_TASK_INPUT_EXPRESSION",
+                                "Human task input \"" + name + "\" has no EL expression", node.id()));
+                        }
+                    }
+                }
+                Object outputsVal = node.config().get("outputs");
+                if (outputsVal == null) {
                     problems.add(ValidationProblem.warning("MISSING_TASK_OUTPUTS",
                         "Human task node has no outputs defined", node.id()));
+                } else if (outputsVal instanceof List<?> outputs) {
+                    validateOutputNames(outputs, node.id(), problems);
                 }
             });
 
-        // Wait nodes missing duration
+        // Wait node duration validation
         workflow.nodes().stream()
             .filter(n -> n.type() == NodeType.WAIT)
             .forEach(node -> {
-                if (!node.config().containsKey("duration")) {
+                Object durationVal = node.config().get("duration");
+                if (durationVal == null) {
                     problems.add(ValidationProblem.warning("MISSING_WAIT_DURATION",
                         "Wait node has no duration configured", node.id()));
+                } else if (durationVal instanceof String d) {
+                    try {
+                        Duration.parse(d);
+                    } catch (Exception e) {
+                        problems.add(ValidationProblem.error("INVALID_WAIT_DURATION",
+                            "Wait node duration is not valid ISO 8601: " + d, node.id()));
+                    }
                 }
             });
 
-        // Missing start inputs
+        // Start node input validation
         WorkflowNode start = workflow.findStartNode();
-        if (start != null && !start.config().containsKey("inputs")) {
-            problems.add(ValidationProblem.warning("MISSING_START_INPUTS",
-                "Start node has no inputs defined", start.id()));
+        if (start != null) {
+            Object inputsDef = start.config().get("inputs");
+            if (inputsDef == null) {
+                problems.add(ValidationProblem.warning("MISSING_START_INPUTS",
+                    "Start node has no inputs defined", start.id()));
+            } else if (inputsDef instanceof List<?> inputs) {
+                Set<String> inputNames = new HashSet<>();
+                for (Object inputObj : inputs) {
+                    if (inputObj instanceof Map<?, ?> input) {
+                        Object nameVal = input.get("name");
+                        if (nameVal == null || (nameVal instanceof String s && s.isBlank())) {
+                            problems.add(ValidationProblem.warning("INVALID_INPUT_DEFINITION",
+                                "Start node input is missing a name", start.id()));
+                        } else {
+                            String name = String.valueOf(nameVal);
+                            if (!inputNames.add(name)) {
+                                problems.add(ValidationProblem.warning("DUPLICATE_INPUT_NAME",
+                                    "Start node has duplicate input name: " + name, start.id()));
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // Automated cycles (cycles with only action nodes)
         detectAutomatedCycles(workflow, problems);
+    }
+
+    private void validateOutputNames(List<?> outputDefs, String nodeId,
+                                      List<ValidationProblem> problems) {
+        Set<String> outputNames = new HashSet<>();
+        for (Object defObj : outputDefs) {
+            if (defObj instanceof Map<?, ?> def) {
+                Object nameVal = def.get("name");
+                if (nameVal != null) {
+                    String name = String.valueOf(nameVal);
+                    if (!outputNames.add(name)) {
+                        problems.add(ValidationProblem.warning("DUPLICATE_OUTPUT_NAME",
+                            "Duplicate output name: " + name, nodeId));
+                    }
+                }
+            }
+        }
     }
 
     private boolean hasSameEventConfig(WorkflowNode a, WorkflowNode b) {
