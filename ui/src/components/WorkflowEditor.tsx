@@ -59,6 +59,14 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ node: Node<FlowNodeData>; position: { x: number; y: number } } | null>(null);
   const snapshotNeededRef = useRef(false);
+  const mountedRef = useRef(false);
+
+  // Suppress onChange during initial render — ReactFlow fires onNodesChange
+  // (dimension measurements, fitView) before the user has interacted.
+  useEffect(() => {
+    const id = setTimeout(() => { mountedRef.current = true; }, 0);
+    return () => clearTimeout(id);
+  }, []);
 
   // Capture initial state as the first snapshot
   const initializedRef = useRef(false);
@@ -106,6 +114,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
   }, [nodes, validationProblems]);
 
   const emitChange = useCallback((updatedNodes: Node<FlowNodeData>[], updatedEdges: Edge[]) => {
+    if (!mountedRef.current) return;
     onChange(toWorkflow(workflow, updatedNodes, updatedEdges));
   }, [workflow, onChange]);
 
