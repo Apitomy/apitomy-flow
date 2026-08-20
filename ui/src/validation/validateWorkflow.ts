@@ -256,7 +256,7 @@ function validateEdgeConditions(workflow: Workflow, problems: ValidationProblem[
     }
     for (const [priority, count] of priorityCounts) {
       if (count > 1) {
-        problems.push(problem('warning', 'DUPLICATE_EDGE_PRIORITY', `Multiple edges from node ${sourceId} share priority ${priority}`, undefined, sourceId));
+        problems.push(problem('warning', 'DUPLICATE_EDGE_PRIORITY', `Multiple edges from node ${sourceId} share priority ${priority}`, sourceId));
       }
     }
   }
@@ -353,7 +353,7 @@ function validateOutputNames(outputDefs: unknown[], nodeId: string, problems: Va
   for (const defObj of outputDefs) {
     if (typeof defObj === 'object' && defObj !== null) {
       const nameVal = (defObj as Record<string, unknown>).name;
-      if (nameVal) {
+      if (nameVal !== undefined && nameVal !== null) {
         const name = String(nameVal);
         if (outputNames.has(name)) {
           problems.push(problem('warning', 'DUPLICATE_OUTPUT_NAME',
@@ -366,8 +366,10 @@ function validateOutputNames(outputDefs: unknown[], nodeId: string, problems: Va
 }
 
 function isValidIsoDuration(value: string): boolean {
-  return /^P(?:\d+Y)?(?:\d+M)?(?:\d+W)?(?:\d+D)?(?:T(?:\d+H)?(?:\d+M)?(?:\d+(?:\.\d+)?S)?)?$/.test(value)
-    && value !== 'P' && value !== 'PT';
+  // Match java.time.Duration.parse() which only supports days-and-time (PnDTnHnMnS)
+  return /^P(?:\d+D)?(?:T(?:\d+H)?(?:\d+M)?(?:\d+(?:\.\d+)?S)?)?$/.test(value)
+    && value !== 'P' && value !== 'PT'
+    && !/T$/.test(value);
 }
 
 function detectAutomatedCycles(workflow: Workflow, problems: ValidationProblem[]) {

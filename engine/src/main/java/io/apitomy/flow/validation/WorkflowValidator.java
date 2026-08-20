@@ -218,8 +218,9 @@ public class WorkflowValidator {
             while (!queue.isEmpty()) {
                 String current = queue.poll();
                 if (reachable.add(current)) {
-                    edges.stream().filter(e -> e.source().equals(current))
-                        .map(WorkflowEdge::target).forEach(queue::add);
+                    edges.stream()
+                        .filter(e -> e.source() != null && e.source().equals(current))
+                        .map(WorkflowEdge::target).filter(Objects::nonNull).forEach(queue::add);
                 }
             }
             for (WorkflowNode node : nodes) {
@@ -236,8 +237,9 @@ public class WorkflowValidator {
                 .map(WorkflowNode::id).forEach(id -> { reverseQueue.add(id); canReachEnd.add(id); });
             while (!reverseQueue.isEmpty()) {
                 String current = reverseQueue.poll();
-                edges.stream().filter(e -> e.target().equals(current))
-                    .map(WorkflowEdge::source)
+                edges.stream()
+                    .filter(e -> e.target() != null && e.target().equals(current))
+                    .map(WorkflowEdge::source).filter(Objects::nonNull)
                     .filter(canReachEnd::add)
                     .forEach(reverseQueue::add);
             }
@@ -253,6 +255,7 @@ public class WorkflowValidator {
 
     private void validateEdgeConditions(Workflow workflow, List<ValidationProblem> problems) {
         Map<String, List<WorkflowEdge>> edgesBySource = workflow.edges().stream()
+            .filter(e -> e.source() != null)
             .collect(Collectors.groupingBy(WorkflowEdge::source));
 
         for (var entry : edgesBySource.entrySet()) {
@@ -304,7 +307,7 @@ public class WorkflowValidator {
             Map<Integer, Long> priorityCounts = outgoing.stream()
                 .collect(Collectors.groupingBy(WorkflowEdge::priority, Collectors.counting()));
             priorityCounts.entrySet().stream().filter(e -> e.getValue() > 1).forEach(e ->
-                problems.add(ValidationProblem.edgeWarning("DUPLICATE_EDGE_PRIORITY",
+                problems.add(ValidationProblem.warning("DUPLICATE_EDGE_PRIORITY",
                     "Multiple edges from node " + entry.getKey() + " share priority " + e.getKey(),
                     entry.getKey())));
         }
