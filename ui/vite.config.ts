@@ -9,6 +9,7 @@ export default defineConfig({
       entry: resolve(__dirname, 'src/index.ts'),
       formats: ['es'],
       fileName: 'index',
+      cssFileName: 'style',
     },
     rollupOptions: {
       external: ['react', 'react-dom', 'react/jsx-runtime',
