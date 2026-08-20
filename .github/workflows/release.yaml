@@ -116,6 +116,7 @@ jobs:
     uses: ./.github/workflows/npm-publish.yaml
     with:
       release-version: ${{ needs.release.outputs.release-version }}
+      branch: ${{ inputs.branch }}
     secrets: inherit
 
 

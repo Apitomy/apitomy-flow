@@ -5,10 +5,18 @@ on:
       release-version:
         description: 'Release version to publish (e.g., 1.0.0)'
         required: true
+      branch:
+        description: 'Branch/tag to publish from'
+        required: true
+        default: 'main'
   workflow_call:
     inputs:
       release-version:
         description: 'Release version to publish'
+        required: true
+        type: string
+      branch:
+        description: 'Branch/tag to publish from'
         required: true
         type: string
 
@@ -23,6 +31,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.branch }}
 
       - name: Setup Node
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
@@ -34,6 +44,7 @@ jobs:
       - name: Log Metadata
         run: |
           echo "Publishing Apitomy Flow UI version ${{ inputs.release-version }} to npm"
+          echo "Publishing from branch/tag: ${{ inputs.branch }}"
 
 
       - name: Build Project
