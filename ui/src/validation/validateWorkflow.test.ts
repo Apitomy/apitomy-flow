@@ -166,6 +166,22 @@ describe('validateWorkflow', () => {
       );
       expect(hasProblem(validateWorkflow(w), 'INVALID_CONDITION')).toBe(false);
     });
+
+    it('no INVALID_CONDITION for escaped quote inside string', () => {
+      const w = workflow(
+        [node('start', 'start'), node('end', 'end')],
+        [edge('e1', 'start', 'end', { condition: "context.x == 'it\\'s ok'" })],
+      );
+      expect(hasProblem(validateWorkflow(w), 'INVALID_CONDITION')).toBe(false);
+    });
+
+    it('no INVALID_CONDITION for escaped backslash before closing quote', () => {
+      const w = workflow(
+        [node('start', 'start'), node('end', 'end')],
+        [edge('e1', 'start', 'end', { condition: "context.x == 'hello\\\\'" })],
+      );
+      expect(hasProblem(validateWorkflow(w), 'INVALID_CONDITION')).toBe(false);
+    });
   });
 
   describe('semantic rules', () => {

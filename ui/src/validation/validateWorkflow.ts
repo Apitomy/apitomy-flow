@@ -392,11 +392,11 @@ function isValidCondition(expression: string): boolean {
     const ch = expression[i];
 
     if (inSingleQuote) {
-      if (ch === "'" && expression[i - 1] !== '\\') inSingleQuote = false;
+      if (ch === "'" && !isEscaped(expression, i)) inSingleQuote = false;
       continue;
     }
     if (inDoubleQuote) {
-      if (ch === '"' && expression[i - 1] !== '\\') inDoubleQuote = false;
+      if (ch === '"' && !isEscaped(expression, i)) inDoubleQuote = false;
       continue;
     }
 
@@ -413,6 +413,12 @@ function isValidCondition(expression: string): boolean {
   }
 
   return !inSingleQuote && !inDoubleQuote && parenDepth === 0 && bracketDepth === 0;
+}
+
+function isEscaped(expression: string, index: number): boolean {
+  let backslashes = 0;
+  for (let j = index - 1; j >= 0 && expression[j] === '\\'; j--) backslashes++;
+  return backslashes % 2 !== 0;
 }
 
 function detectAutomatedCycles(workflow: Workflow, problems: ValidationProblem[]) {
