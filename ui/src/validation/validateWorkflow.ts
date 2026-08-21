@@ -251,7 +251,7 @@ function validateEdgeConditions(workflow: Workflow, problems: ValidationProblem[
     }
 
     const priorityCounts = new Map<number, number>();
-    for (const edge of outgoing) {
+    for (const edge of outgoing.filter(e => !e.isDefault)) {
       priorityCounts.set(edge.priority, (priorityCounts.get(edge.priority) || 0) + 1);
     }
     for (const [priority, count] of priorityCounts) {
@@ -287,7 +287,7 @@ function validateSemantics(workflow: Workflow, problems: ValidationProblem[]) {
   for (let i = 0; i < receivers.length; i++) {
     for (let j = i + 1; j < receivers.length; j++) {
       if (receivers[i].config.eventType === receivers[j].config.eventType &&
-          JSON.stringify(receivers[i].config.match) === JSON.stringify(receivers[j].config.match)) {
+          stableStringify(receivers[i].config.match) === stableStringify(receivers[j].config.match)) {
         problems.push(problem('warning', 'DUPLICATE_EVENT_RECEIVER', 'Multiple receive-event nodes match the same events', receivers[j].id));
       }
     }
@@ -295,7 +295,7 @@ function validateSemantics(workflow: Workflow, problems: ValidationProblem[]) {
 
   // Human task node validation
   for (const node of workflow.nodes.filter(n => n.type === 'human-task')) {
-    if (!node.config.description) {
+    if (!node.config.description || (typeof node.config.description === 'string' && node.config.description.trim() === '')) {
       problems.push(problem('warning', 'MISSING_TASK_DESCRIPTION', 'Human task node has no description', node.id));
     }
     if (node.config.inputs && typeof node.config.inputs === 'object' && !Array.isArray(node.config.inputs)) {
@@ -373,6 +373,18 @@ function validateOutputNames(outputDefs: unknown[], nodeId: string, problems: Va
       }
     }
   }
+}
+
+function stableStringify(value: unknown): string {
+  return JSON.stringify(value, (_, v) => {
+    if (v && typeof v === 'object' && !Array.isArray(v)) {
+      return Object.keys(v).sort().reduce((sorted: Record<string, unknown>, key) => {
+        sorted[key] = (v as Record<string, unknown>)[key];
+        return sorted;
+      }, {});
+    }
+    return v;
+  });
 }
 
 function isValidIsoDuration(value: string): boolean {

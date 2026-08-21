@@ -86,7 +86,7 @@ class WorkflowEngineStartTest {
         WorkflowEngine engine = engine();
         Workflow invalid = new Workflow("w", "W", null, null,
             List.of(actionNode("orphan", "test")), List.of());
-        assertThrows(Exception.class, () -> engine.startWorkflow(invalid, Map.of()));
+        assertThrows(WorkflowValidationException.class, () -> engine.startWorkflow(invalid, Map.of()));
     }
 
     @Test
@@ -97,7 +97,7 @@ class WorkflowEngineStartTest {
                 startNode("start", List.of(inputDef("required", "string", true))),
                 endNode("end")),
             List.of(edge("e1", "start", "end")));
-        assertThrows(Exception.class, () -> engine.startWorkflow(workflow, Map.of()));
+        assertThrows(IllegalArgumentException.class, () -> engine.startWorkflow(workflow, Map.of()));
     }
 
     @Test
