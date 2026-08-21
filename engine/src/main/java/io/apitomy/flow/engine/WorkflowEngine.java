@@ -424,6 +424,7 @@ public class WorkflowEngine {
                 }
                 if (resolution.action() == ErrorAction.RETRY) {
                     if (++retries > MAX_RETRIES) {
+                        log.error("Retry limit ({}) exceeded for action node: {}", MAX_RETRIES, actionNode.id());
                         return failWorkflow(instance,
                             "Exceeded retry limit (" + MAX_RETRIES + ") for action node: " + actionNode.id(), e);
                     }
@@ -441,6 +442,7 @@ public class WorkflowEngine {
                 }
                 if (resolution.action() == ErrorAction.RETRY) {
                     if (++retries > MAX_RETRIES) {
+                        log.error("Retry limit ({}) exceeded for action node: {}", MAX_RETRIES, actionNode.id());
                         return failWorkflow(instance,
                             "Exceeded retry limit (" + MAX_RETRIES + ") for action node: " + actionNode.id(), null);
                     }
@@ -472,6 +474,7 @@ public class WorkflowEngine {
                 }
                 if (resolution.action() == ErrorAction.RETRY) {
                     if (++retries > MAX_RETRIES) {
+                        log.error("Retry limit ({}) exceeded for action node: {}", MAX_RETRIES, actionNode.id());
                         return failWorkflow(instance,
                             "Exceeded retry limit (" + MAX_RETRIES + ") for action node: " + actionNode.id(), null);
                     }
