@@ -182,6 +182,18 @@ describe('validateWorkflow', () => {
       );
       expect(hasProblem(validateWorkflow(w), 'INVALID_CONDITION')).toBe(false);
     });
+
+    it('no DUPLICATE_EDGE_PRIORITY when default edge shares priority with conditional', () => {
+      const w = workflow(
+        [node('start', 'start'), node('a', 'action', { actionType: 'x' }), node('end', 'end')],
+        [
+          edge('e1', 'start', 'a', { condition: 'context.x == 1', priority: 0 }),
+          edge('e2', 'start', 'end', { isDefault: true, priority: 0 }),
+          edge('e3', 'a', 'end'),
+        ],
+      );
+      expect(hasProblem(validateWorkflow(w), 'DUPLICATE_EDGE_PRIORITY')).toBe(false);
+    });
   });
 
   describe('semantic rules', () => {
@@ -249,6 +261,31 @@ describe('validateWorkflow', () => {
         [edge('e1', 'start', 't'), edge('e2', 't', 'end')],
       );
       expect(hasProblem(validateWorkflow(w), 'EMPTY_TASK_INPUT_EXPRESSION')).toBe(false);
+    });
+
+    it('MISSING_TASK_DESCRIPTION for whitespace-only description', () => {
+      const w = workflow(
+        [
+          node('start', 'start'),
+          node('t', 'human-task', { description: '   ', outputs: [{ name: 'x', type: 'string', required: true }] }),
+          node('end', 'end'),
+        ],
+        [edge('e1', 'start', 't'), edge('e2', 't', 'end')],
+      );
+      expect(hasProblem(validateWorkflow(w), 'MISSING_TASK_DESCRIPTION')).toBe(true);
+    });
+
+    it('DUPLICATE_EVENT_RECEIVER with different key order in match config', () => {
+      const w = workflow(
+        [
+          node('start', 'start'),
+          node('r1', 'receive-event', { eventType: 'deploy', match: { repo: 'a', branch: 'main' } }),
+          node('r2', 'receive-event', { eventType: 'deploy', match: { branch: 'main', repo: 'a' } }),
+          node('end', 'end'),
+        ],
+        [edge('e1', 'start', 'r1'), edge('e2', 'r1', 'end'), edge('e3', 'start', 'r2'), edge('e4', 'r2', 'end')],
+      );
+      expect(hasProblem(validateWorkflow(w), 'DUPLICATE_EVENT_RECEIVER')).toBe(true);
     });
   });
 
