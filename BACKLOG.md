@@ -31,9 +31,9 @@ state management, type safety, cross-component consistency, and test coverage.
 | # | Status | Component | Location | Description |
 |---|--------|-----------|----------|-------------|
 | 10 | Fixed (PR #26) | Engine | `Workflow.java:29-30` | **NPE in `getOutgoingEdges`** when any edge has null source. Same at line 36 for null target. Should use `nodeId.equals(e.source())` or add null guards. |
-| 11 | Open | Engine | `WorkflowEngine.java:583-598` | **NPE when `initialContext` is null.** `validateInputs` calls `initialContext.containsKey()` before any null check. |
-| 12 | Open | Engine | `WorkflowEngine.java:285` | **No null check on `findNodeById` result in advance loop.** If the error handler set `currentNodeId` to a non-existent node, the next access throws NPE with no meaningful message. |
-| 13 | Open | Engine | `WorkflowValidator.java:93-101` | **Null edge source/target silently accepted.** Edges with null source or target are not flagged, but cause NPEs at runtime. |
+| 11 | Fixed (PR #30) | Engine | `WorkflowEngine.java:583-598` | **NPE when `initialContext` is null.** `validateInputs` calls `initialContext.containsKey()` before any null check. |
+| 12 | Fixed (PR #30) | Engine | `WorkflowEngine.java:285` | **No null check on `findNodeById` result in advance loop.** If the error handler set `currentNodeId` to a non-existent node, the next access throws NPE with no meaningful message. |
+| 13 | Fixed (PR #30) | Engine | `WorkflowValidator.java:93-101` | **Null edge source/target silently accepted.** Edges with null source or target are not flagged, but cause NPEs at runtime. |
 | 14 | Open | Engine | `JsonNodeELResolver.java:19-25` | **Array access via dot notation silently returns null.** `arr.0` evaluates to null while `arr[0]` works. Should parse string as integer for array nodes. |
 | 15 | Open | UI | `PropertiesPanel.tsx:227,622` | **Adding input with empty key overwrites previous empty-key entry.** Clicking "+ Add input" twice before naming the first entry silently drops one — data loss with no feedback. |
 | 16 | Open | UI | `PropertiesPanel.tsx:190,586` | **Renaming input key to existing key silently drops collision.** `Object.fromEntries` keeps last entry for duplicate keys. |
@@ -63,7 +63,7 @@ state management, type safety, cross-component consistency, and test coverage.
 | # | Status | Component | Description |
 |---|--------|-----------|-------------|
 | 1 | Fixed (PR #26) | Engine | **Default `config` to empty map in `WorkflowNode` compact constructor.** Eliminates an entire class of NPE bugs across engine and validator. |
-| 2 | Open | Engine | **Default `nodes`/`edges` to empty lists in `Workflow` compact constructor.** Same pattern — prevents NPEs in all query methods. |
+| 2 | Fixed (PR #30) | Engine | **Default `nodes`/`edges` to empty lists in `Workflow` compact constructor.** Same pattern — prevents NPEs in all query methods. |
 | 3 | Fixed (PR #25) | Engine | **Add `MAX_RETRIES` constant to `executeActionNode`.** Prevents infinite loops from buggy error handlers. |
 | 4 | Fixed (PR #25) | Engine | **Handle all node types in the error-handler transition block.** The `!hasEnteredCurrentNode` block should handle ACTION and START explicitly. |
 | 5 | Fixed (PR #27) | Engine | **Add `@JsonProperty` annotations to `ValidationSeverity`, `NodeResultStatus`, `ErrorAction`.** Forces lowercase serialization to match TypeScript types. |
@@ -75,8 +75,8 @@ state management, type safety, cross-component consistency, and test coverage.
 
 | # | Status | Component | Description |
 |---|--------|-----------|-------------|
-| 9 | Open | Engine | **Return `Optional` from `findNodeById` and `findStartNode`.** Makes absence explicit and leverages compiler. |
-| 10 | Open | Engine | **Validate `targetNodeId` in `ErrorResolution.transitionTo()`.** Fail fast with `Objects.requireNonNull` instead of silent null propagation. |
+| 9 | Fixed (PR #30) | Engine | **Return `Optional` from `findNodeById` and `findStartNode`.** Makes absence explicit and leverages compiler. |
+| 10 | Fixed (PR #30) | Engine | **Validate `targetNodeId` in `ErrorResolution.transitionTo()`.** Fail fast with `Objects.requireNonNull` instead of silent null propagation. |
 | 11 | Open | Engine | **`NodeExecutorProvider.fromList` should detect duplicate action types.** Currently silently overwrites. |
 | 12 | Open | UI | **Add undo/redo support for property edits.** Use debounced snapshots (e.g., on 500ms inactivity or on field blur). |
 | 13 | Open | UI | **Replace `any` with `React.MouseEvent` in callbacks.** Three callbacks use `(_: any, ...)` — straightforward type fix. |
