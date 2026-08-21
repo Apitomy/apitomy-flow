@@ -301,8 +301,8 @@ class WorkflowEngineErrorTest {
         };
 
         Workflow workflow = new Workflow("w", "W", null, null,
-            List.of(startNode("start"), actionNode("a", "fail"), endNode("end"), endNode("error-end")),
-            List.of(edge("e1", "start", "a"), edge("e2", "a", "end")));
+            List.of(startNode("start", List.of()), actionNode("a", "fail"), endNode("end"), endNode("error-end")),
+            List.of(edge("e1", "start", "a"), edge("e2", "a", "end"), edge("e3", "a", "error-end")));
 
         WorkflowEngine engine = new WorkflowEngine(
             NodeExecutorProvider.fromList(failingExecutor("fail")), List.of(listener), transitionHandler);
