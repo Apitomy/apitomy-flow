@@ -401,7 +401,7 @@ public class WorkflowEngine {
 
     private WorkflowInstance executeActionNode(Workflow workflow, WorkflowInstance instance,
                                                WorkflowNode actionNode) {
-        String actionType = (String) actionNode.config().get("actionType");
+        String actionType = actionNode.config().get("actionType") instanceof String at ? at : null;
         NodeExecutor executor = executorProvider.getExecutor(actionType);
         if (executor == null) {
             return failWorkflow(instance, "No executor found for action type: " + actionType, null);
