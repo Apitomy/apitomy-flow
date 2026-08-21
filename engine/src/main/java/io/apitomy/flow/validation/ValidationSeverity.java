@@ -1,5 +1,8 @@
 package io.apitomy.flow.validation;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 public enum ValidationSeverity {
-    ERROR, WARNING
+    @JsonProperty("error") ERROR,
+    @JsonProperty("warning") WARNING
 }

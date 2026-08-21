@@ -1,5 +1,7 @@
 package io.apitomy.flow.model;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
+
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -14,8 +16,8 @@ public record WorkflowInstance(
     Map<String, Object> context,
     List<HistoryEntry> history,
     String failureReason,
-    Instant createdOn,
-    Instant updatedOn
+    @JsonFormat(shape = JsonFormat.Shape.STRING) Instant createdOn,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) Instant updatedOn
 ) {
     public static Builder builder() {
         return new Builder();
