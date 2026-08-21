@@ -26,15 +26,17 @@ public record Workflow(
     }
 
     public List<WorkflowEdge> getOutgoingEdges(String nodeId) {
+        if (nodeId == null) return List.of();
         return edges.stream()
-            .filter(e -> e.source().equals(nodeId))
+            .filter(e -> nodeId.equals(e.source()))
             .sorted(Comparator.comparingInt(WorkflowEdge::priority))
             .toList();
     }
 
     public List<WorkflowEdge> getIncomingEdges(String nodeId) {
+        if (nodeId == null) return List.of();
         return edges.stream()
-            .filter(e -> e.target().equals(nodeId))
+            .filter(e -> nodeId.equals(e.target()))
             .toList();
     }
 }

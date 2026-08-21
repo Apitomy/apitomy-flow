@@ -8,4 +8,8 @@ public record WorkflowNode(
     String name,
     Map<String, Object> config,
     Position position
-) {}
+) {
+    public WorkflowNode {
+        if (config == null) config = Map.of();
+    }
+}

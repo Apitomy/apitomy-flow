@@ -75,4 +75,20 @@ class WorkflowSerializationTest {
         assertEquals(1, workflow.getOutgoingEdges("start").size());
         assertEquals("action", workflow.getOutgoingEdges("start").getFirst().target());
     }
+
+    @Test
+    void nullConfigDefaultsToEmptyMap() {
+        WorkflowNode node = new WorkflowNode("test", NodeType.ACTION, "Test", null, new Position(0, 0));
+        assertNotNull(node.config(), "Null config should default to empty map");
+        assertTrue(node.config().isEmpty());
+    }
+
+    @Test
+    void nullConfigRoundTrips() throws Exception {
+        WorkflowNode node = new WorkflowNode("test", NodeType.ACTION, "Test", null, new Position(0, 0));
+        String json = mapper.writeValueAsString(node);
+        WorkflowNode deserialized = mapper.readValue(json, WorkflowNode.class);
+        assertNotNull(deserialized.config());
+        assertTrue(deserialized.config().isEmpty());
+    }
 }

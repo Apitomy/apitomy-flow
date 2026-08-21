@@ -123,7 +123,7 @@ public class WorkflowValidator {
 
         // Start must not have incoming edges
         for (WorkflowNode start : startNodes) {
-            boolean hasIncoming = edges.stream().anyMatch(e -> e.target().equals(start.id()));
+            boolean hasIncoming = edges.stream().anyMatch(e -> start.id().equals(e.target()));
             if (hasIncoming) {
                 problems.add(ValidationProblem.error("START_HAS_INCOMING",
                     "Start node must not have incoming edges", start.id()));
@@ -132,7 +132,7 @@ public class WorkflowValidator {
 
         // End must not have outgoing edges
         nodes.stream().filter(n -> n.type() == NodeType.END).forEach(end -> {
-            boolean hasOutgoing = edges.stream().anyMatch(e -> e.source().equals(end.id()));
+            boolean hasOutgoing = edges.stream().anyMatch(e -> end.id().equals(e.source()));
             if (hasOutgoing) {
                 problems.add(ValidationProblem.error("END_HAS_OUTGOING",
                     "End node must not have outgoing edges", end.id()));
