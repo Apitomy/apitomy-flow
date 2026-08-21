@@ -260,6 +260,16 @@ function validateEdgeConditions(workflow: Workflow, problems: ValidationProblem[
       }
     }
   }
+
+  // Invalid EL conditions
+  for (const edge of workflow.edges) {
+    if (edge.condition && edge.condition.trim() !== '') {
+      if (!isValidCondition(edge.condition)) {
+        problems.push(problem('warning', 'INVALID_CONDITION',
+          `Edge condition is not valid EL: ${edge.condition}`, undefined, edge.id));
+      }
+    }
+  }
 }
 
 function validateSemantics(workflow: Workflow, problems: ValidationProblem[]) {
@@ -370,6 +380,45 @@ function isValidIsoDuration(value: string): boolean {
   return /^P(?:\d+D)?(?:T(?:\d+H)?(?:\d+M)?(?:\d+(?:\.\d+)?S)?)?$/.test(value)
     && value !== 'P' && value !== 'PT'
     && !/T$/.test(value);
+}
+
+function isValidCondition(expression: string): boolean {
+  let parenDepth = 0;
+  let bracketDepth = 0;
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+
+  for (let i = 0; i < expression.length; i++) {
+    const ch = expression[i];
+
+    if (inSingleQuote) {
+      if (ch === "'" && !isEscaped(expression, i)) inSingleQuote = false;
+      continue;
+    }
+    if (inDoubleQuote) {
+      if (ch === '"' && !isEscaped(expression, i)) inDoubleQuote = false;
+      continue;
+    }
+
+    switch (ch) {
+      case "'": inSingleQuote = true; break;
+      case '"': inDoubleQuote = true; break;
+      case '(': parenDepth++; break;
+      case ')': parenDepth--; break;
+      case '[': bracketDepth++; break;
+      case ']': bracketDepth--; break;
+    }
+
+    if (parenDepth < 0 || bracketDepth < 0) return false;
+  }
+
+  return !inSingleQuote && !inDoubleQuote && parenDepth === 0 && bracketDepth === 0;
+}
+
+function isEscaped(expression: string, index: number): boolean {
+  let backslashes = 0;
+  for (let j = index - 1; j >= 0 && expression[j] === '\\'; j--) backslashes++;
+  return backslashes % 2 !== 0;
 }
 
 function detectAutomatedCycles(workflow: Workflow, problems: ValidationProblem[]) {

@@ -134,6 +134,54 @@ describe('validateWorkflow', () => {
       );
       expect(hasProblem(validateWorkflow(w), 'MULTIPLE_DEFAULT_EDGES')).toBe(true);
     });
+
+    it('INVALID_CONDITION for unbalanced parentheses', () => {
+      const w = workflow(
+        [node('start', 'start'), node('end', 'end')],
+        [edge('e1', 'start', 'end', { condition: '(context.x == 1' })],
+      );
+      expect(hasProblem(validateWorkflow(w), 'INVALID_CONDITION')).toBe(true);
+    });
+
+    it('INVALID_CONDITION for unclosed string literal', () => {
+      const w = workflow(
+        [node('start', 'start'), node('end', 'end')],
+        [edge('e1', 'start', 'end', { condition: "context.x == 'hello" })],
+      );
+      expect(hasProblem(validateWorkflow(w), 'INVALID_CONDITION')).toBe(true);
+    });
+
+    it('INVALID_CONDITION for unbalanced brackets', () => {
+      const w = workflow(
+        [node('start', 'start'), node('end', 'end')],
+        [edge('e1', 'start', 'end', { condition: 'context.items[0' })],
+      );
+      expect(hasProblem(validateWorkflow(w), 'INVALID_CONDITION')).toBe(true);
+    });
+
+    it('no INVALID_CONDITION for valid expression', () => {
+      const w = workflow(
+        [node('start', 'start'), node('end', 'end')],
+        [edge('e1', 'start', 'end', { condition: "context.x == 1 && (context.y == 'hello')" })],
+      );
+      expect(hasProblem(validateWorkflow(w), 'INVALID_CONDITION')).toBe(false);
+    });
+
+    it('no INVALID_CONDITION for escaped quote inside string', () => {
+      const w = workflow(
+        [node('start', 'start'), node('end', 'end')],
+        [edge('e1', 'start', 'end', { condition: "context.x == 'it\\'s ok'" })],
+      );
+      expect(hasProblem(validateWorkflow(w), 'INVALID_CONDITION')).toBe(false);
+    });
+
+    it('no INVALID_CONDITION for escaped backslash before closing quote', () => {
+      const w = workflow(
+        [node('start', 'start'), node('end', 'end')],
+        [edge('e1', 'start', 'end', { condition: "context.x == 'hello\\\\'" })],
+      );
+      expect(hasProblem(validateWorkflow(w), 'INVALID_CONDITION')).toBe(false);
+    });
   });
 
   describe('semantic rules', () => {
