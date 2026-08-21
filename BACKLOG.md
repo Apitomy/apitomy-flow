@@ -38,7 +38,7 @@ state management, type safety, cross-component consistency, and test coverage.
 | 15 | Open | UI | `PropertiesPanel.tsx:227,622` | **Adding input with empty key overwrites previous empty-key entry.** Clicking "+ Add input" twice before naming the first entry silently drops one — data loss with no feedback. |
 | 16 | Open | UI | `PropertiesPanel.tsx:190,586` | **Renaming input key to existing key silently drops collision.** `Object.fromEntries` keeps last entry for duplicate keys. |
 | 17 | Open | UI | `WorkflowEditor.tsx:236-268` | **Property edits not captured in undo history.** Editing node name, action type, edge condition, or any config field is irreversible via Ctrl+Z. Only structural operations are undoable. |
-| 18 | Open | Cross-cutting | TS `validateWorkflow.ts:279-280` | **Duplicate event receiver comparison is order-sensitive.** Uses `JSON.stringify` which is key-order-dependent, while Java uses `Objects.equals` (order-insensitive). Same match configs in different key order are caught by Java but missed by TypeScript. |
+| 18 | Fixed (PR #31) | Cross-cutting | TS `validateWorkflow.ts:279-280` | **Duplicate event receiver comparison is order-sensitive.** Uses `JSON.stringify` which is key-order-dependent, while Java uses `Objects.equals` (order-insensitive). Same match configs in different key order are caught by Java but missed by TypeScript. |
 | 19 | Fixed (PR #29) | Cross-cutting | TS `validateWorkflow.ts` | **Missing `INVALID_CONDITION` validation rule.** Java validates EL expression syntax; TypeScript has no equivalent. Invalid conditions pass UI validation but fail at engine runtime. |
 
 ### Low
@@ -49,8 +49,8 @@ state management, type safety, cross-component consistency, and test coverage.
 | 21 | Open | Engine | `WorkflowEngine.java:466-488` | **Condition evaluation failure loses error context.** Error handler receives no info about which expression failed. |
 | 22 | Open | Engine | `WorkflowValidator.java:458-476` | **Cycle detection only reports first automated cycle.** Multiple independent cycles are silently ignored. |
 | 23 | Open | UI | `WorkflowEditor.tsx:40,46` | **`validationProblems` prop silently ignored.** Always recomputes internally; consumers get no feedback that their prop is discarded. |
-| 24 | Open | UI | `validateWorkflow.ts:253-261` | **`DUPLICATE_EDGE_PRIORITY` false positive with default edges.** Default edges (priority 0) trigger false warnings against conditional edges with priority 0. |
-| 25 | Open | UI | `validateWorkflow.ts:289` | **`MISSING_TASK_DESCRIPTION` doesn't trim whitespace.** Whitespace-only description accepted as valid, inconsistent with all other string checks. |
+| 24 | Fixed (PR #31) | UI | `validateWorkflow.ts:253-261` | **`DUPLICATE_EDGE_PRIORITY` false positive with default edges.** Default edges (priority 0) trigger false warnings against conditional edges with priority 0. |
+| 25 | Fixed (PR #31) | UI | `validateWorkflow.ts:289` | **`MISSING_TASK_DESCRIPTION` doesn't trim whitespace.** Whitespace-only description accepted as valid, inconsistent with all other string checks. |
 | 26 | Open | UI | `WorkflowViewer.tsx:64-67` | **`selectedNodeHistory` returns only first visit.** In looping workflows, always shows first visit's timestamps/outputs, never most recent. |
 | 27 | Open | UI | `dev/App.tsx:113` | **Viewer tab hardcodes `cveTriage` instead of live `workflow` state.** Editor changes aren't reflected in Viewer. |
 
@@ -81,10 +81,10 @@ state management, type safety, cross-component consistency, and test coverage.
 | 12 | Open | UI | **Add undo/redo support for property edits.** Use debounced snapshots (e.g., on 500ms inactivity or on field blur). |
 | 13 | Open | UI | **Replace `any` with `React.MouseEvent` in callbacks.** Three callbacks use `(_: any, ...)` — straightforward type fix. |
 | 14 | Open | UI | **Use stable keys for list items.** Using `key={i}` causes focus/state bugs when items are removed from the middle. |
-| 15 | Open | UI | **Fix duplicate event receiver comparison** to use order-insensitive deep equality. |
+| 15 | Fixed (PR #31) | UI | **Fix duplicate event receiver comparison** to use order-insensitive deep equality. |
 | 16 | Fixed (PR #29) | UI | **Add basic condition syntax validation** to bring parity with Java's `INVALID_CONDITION` rule. |
 | 17 | Open | Tests | **Add tests for `conversion.ts`, `useUndoRedo.ts`, and UI components.** These core files have zero test coverage. |
-| 18 | Open | Tests | **Fix over-broad `assertThrows(Exception.class)` in engine tests.** Should assert specific exception types. |
+| 18 | Fixed (PR #31) | Tests | **Fix over-broad `assertThrows(Exception.class)` in engine tests.** Should assert specific exception types. |
 
 ### Low Priority
 
