@@ -541,4 +541,37 @@ class WorkflowValidatorTest {
             List.of(edge("e1", "start", "ht"), edge("e2", "ht", "end")));
         assertTrue(hasCode(validate(w), "DUPLICATE_OUTPUT_NAME"));
     }
+
+    // --- Null-safety ---
+
+    @Test
+    void validatorHandlesNullEdgeTarget() {
+        WorkflowEdge nullTargetEdge = new WorkflowEdge("e-bad", "start", null, null, 0, false, null);
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), endNode("end")),
+            List.of(nullTargetEdge, edge("e1", "start", "end")));
+        List<ValidationProblem> problems = validate(w);
+        assertNotNull(problems, "Validator should not throw NPE on null edge target");
+    }
+
+    @Test
+    void validatorHandlesNullEdgeSource() {
+        WorkflowEdge nullSourceEdge = new WorkflowEdge("e-bad", null, "end", null, 0, false, null);
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), endNode("end")),
+            List.of(nullSourceEdge, edge("e1", "start", "end")));
+        List<ValidationProblem> problems = validate(w);
+        assertNotNull(problems, "Validator should not throw NPE on null edge source");
+    }
+
+    @Test
+    void validatorHandlesNullConfigNode() {
+        WorkflowNode nullConfigAction = new WorkflowNode("a", NodeType.ACTION, "A", null, new Position(0, 0));
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), nullConfigAction, endNode("end")),
+            List.of(edge("e1", "start", "a"), edge("e2", "a", "end")));
+        List<ValidationProblem> problems = validate(w);
+        assertTrue(hasCode(problems, "MISSING_ACTION_TYPE"),
+            "Null config should be treated as empty map, triggering MISSING_ACTION_TYPE");
+    }
 }
