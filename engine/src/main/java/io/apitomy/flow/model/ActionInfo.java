@@ -9,11 +9,4 @@ public record ActionInfo(
     String actionType,
     Map<String, Object> resolvedInputs,
     List<OutputDefinition> expectedOutputs
-) {
-
-    public record OutputDefinition(
-        String name,
-        String type,
-        boolean required
-    ) {}
-}
+) {}

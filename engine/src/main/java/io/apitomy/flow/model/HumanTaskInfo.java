@@ -9,11 +9,4 @@ public record HumanTaskInfo(
     String description,
     Map<String, Object> inputs,
     List<OutputDefinition> outputs
-) {
-
-    public record OutputDefinition(
-        String name,
-        String type,
-        boolean required
-    ) {}
-}
+) {}
