@@ -244,7 +244,7 @@ public class WorkflowEngine {
         }
 
         // Check event type
-        String expectedType = (String) currentNode.config().get("eventType");
+        String expectedType = currentNode.config().get("eventType") instanceof String et ? et : null;
         if (expectedType == null) {
             return false;
         }
