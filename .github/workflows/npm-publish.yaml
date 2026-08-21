@@ -58,6 +58,8 @@ jobs:
       - name: Publish to npm
         run: npm publish --provenance --access public
         working-directory: ui
+        env:
+          NODE_AUTH_TOKEN: ''
 
 
       - name: Slack Notification (Always)
