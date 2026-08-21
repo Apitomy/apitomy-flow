@@ -1,5 +1,7 @@
 package io.apitomy.flow.spi;
 
+import java.util.Objects;
+
 public record ErrorResolution(
     ErrorAction action,
     String targetNodeId
@@ -13,6 +15,7 @@ public record ErrorResolution(
     }
 
     public static ErrorResolution transitionTo(String nodeId) {
+        Objects.requireNonNull(nodeId, "targetNodeId must not be null");
         return new ErrorResolution(ErrorAction.TRANSITION, nodeId);
     }
 }
