@@ -59,6 +59,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ node: Node<FlowNodeData>; position: { x: number; y: number } } | null>(null);
   const snapshotNeededRef = useRef(false);
+  const changeNeededRef = useRef(false);
   const mountedRef = useRef(false);
 
   // Suppress onChange during initial render — ReactFlow fires onNodesChange
@@ -77,13 +78,20 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
     }
   }, [initialNodes, initialEdges, takeSnapshot]);
 
-  // Commit pending snapshots after render — coalesces multiple changes
-  // (e.g. node removal + edge removal) into a single undo step
+  // Commit pending snapshots and emit deferred onChange after render.
+  // Using an effect (not setTimeout) ensures we always read the latest
+  // nodes/edges state, eliminating stale-closure issues when ReactFlow
+  // fires multiple handlers in the same event (e.g. keyboard delete).
   useEffect(() => {
     if (snapshotNeededRef.current) {
       snapshotNeededRef.current = false;
       takeSnapshot(nodes, edges);
     }
+    if (changeNeededRef.current && mountedRef.current) {
+      changeNeededRef.current = false;
+      onChange(toWorkflow(workflow, nodes, edges));
+    }
+    isRestoringRef.current = false;
   });
 
   const selectedNode = nodes.find(n => n.id === selectedNodeId);
@@ -113,32 +121,21 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
     });
   }, [nodes, validationProblems]);
 
-  const emitChange = useCallback((updatedNodes: Node<FlowNodeData>[], updatedEdges: Edge[]) => {
-    if (!mountedRef.current) return;
-    onChange(toWorkflow(workflow, updatedNodes, updatedEdges));
-  }, [workflow, onChange]);
-
   const handleNodesChange = useCallback((changes: NodeChange<Node<FlowNodeData>>[]) => {
     if (!isRestoringRef.current && changes.some(c => c.type === 'remove')) {
       snapshotNeededRef.current = true;
     }
     onNodesChange(changes);
-    setNodes(current => {
-      setTimeout(() => emitChange(current, edges), 0);
-      return current;
-    });
-  }, [onNodesChange, edges, emitChange, setNodes]);
+    changeNeededRef.current = true;
+  }, [onNodesChange]);
 
   const handleEdgesChange = useCallback((changes: EdgeChange[]) => {
     if (!isRestoringRef.current && changes.some(c => c.type === 'remove')) {
       snapshotNeededRef.current = true;
     }
     onEdgesChange(changes);
-    setEdges(current => {
-      setTimeout(() => emitChange(nodes, current), 0);
-      return current;
-    });
-  }, [onEdgesChange, nodes, emitChange, setEdges]);
+    changeNeededRef.current = true;
+  }, [onEdgesChange]);
 
   const onConnect = useCallback((connection: Connection) => {
     const edgeId = generateEdgeId(connection.source!, connection.target!);
@@ -149,12 +146,9 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
       data: { condition: undefined, priority: 0, isDefault: false },
     };
     snapshotNeededRef.current = true;
-    setEdges(eds => {
-      const updated = addEdge(newEdge, eds);
-      setTimeout(() => emitChange(nodes, updated), 0);
-      return updated;
-    });
-  }, [setEdges, nodes, emitChange]);
+    setEdges(eds => addEdge(newEdge, eds));
+    changeNeededRef.current = true;
+  }, [setEdges]);
 
   const onDrop = useCallback((event: DragEvent) => {
     event.preventDefault();
@@ -174,14 +168,11 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
     };
 
     snapshotNeededRef.current = true;
-    setNodes(nds => {
-      const updated = [...nds, newNode];
-      setTimeout(() => emitChange(updated, edges), 0);
-      return updated;
-    });
+    setNodes(nds => [...nds, newNode]);
+    changeNeededRef.current = true;
     setSelectedNodeId(newNode.id);
     setSelectedEdgeId(null);
-  }, [screenToFlowPosition, setNodes, edges, emitChange]);
+  }, [screenToFlowPosition, setNodes]);
 
   const onDragOver = useCallback((event: DragEvent) => {
     event.preventDefault();
@@ -217,64 +208,48 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
       data: { ...node.data, name: `${node.data.name} (copy)`, config: { ...node.data.config } },
     };
     snapshotNeededRef.current = true;
-    setNodes(nds => {
-      const updated = [...nds, newNode];
-      setTimeout(() => emitChange(updated, edges), 0);
-      return updated;
-    });
-  }, [setNodes, edges, emitChange]);
+    setNodes(nds => [...nds, newNode]);
+    changeNeededRef.current = true;
+  }, [setNodes]);
 
   const onDeleteNode = useCallback((nodeId: string) => {
     snapshotNeededRef.current = true;
     setNodes(nds => {
-      const updated = nds.filter(n => n.id !== nodeId);
-      setEdges(eds => {
-        const updatedEdges = eds.filter(e => e.source !== nodeId && e.target !== nodeId);
-        setTimeout(() => emitChange(updated, updatedEdges), 0);
-        return updatedEdges;
-      });
+      setEdges(eds => eds.filter(e => e.source !== nodeId && e.target !== nodeId));
       if (selectedNodeId === nodeId) setSelectedNodeId(null);
-      return updated;
+      return nds.filter(n => n.id !== nodeId);
     });
-  }, [setNodes, setEdges, emitChange, selectedNodeId]);
+    changeNeededRef.current = true;
+  }, [setNodes, setEdges, selectedNodeId]);
 
   const onNodeDragStop = useCallback(() => {
     snapshotNeededRef.current = true;
+    changeNeededRef.current = true;
   }, []);
 
   const onNodeDataChange = useCallback((id: string, dataUpdate: Partial<FlowNodeData>) => {
-    setNodes(nds => {
-      const updated = nds.map(n => n.id === id ? { ...n, data: { ...n.data, ...dataUpdate } } : n);
-      setTimeout(() => emitChange(updated, edges), 0);
-      return updated;
-    });
-  }, [setNodes, edges, emitChange]);
+    setNodes(nds => nds.map(n => n.id === id ? { ...n, data: { ...n.data, ...dataUpdate } } : n));
+    changeNeededRef.current = true;
+  }, [setNodes]);
 
   const onNodeIdChange = useCallback((oldId: string, newId: string) => {
     setNodes(nds => {
       if (nds.some(n => n.id === newId)) return nds;
-      const updatedNodes = nds.map(n => n.id === oldId ? { ...n, id: newId } : n);
-      setEdges(eds => {
-        const updatedEdges = eds.map(e => ({
-          ...e,
-          source: e.source === oldId ? newId : e.source,
-          target: e.target === oldId ? newId : e.target,
-        }));
-        setTimeout(() => emitChange(updatedNodes, updatedEdges), 0);
-        return updatedEdges;
-      });
+      setEdges(eds => eds.map(e => ({
+        ...e,
+        source: e.source === oldId ? newId : e.source,
+        target: e.target === oldId ? newId : e.target,
+      })));
       if (selectedNodeId === oldId) setSelectedNodeId(newId);
-      return updatedNodes;
+      return nds.map(n => n.id === oldId ? { ...n, id: newId } : n);
     });
-  }, [setNodes, setEdges, emitChange, selectedNodeId]);
+    changeNeededRef.current = true;
+  }, [setNodes, setEdges, selectedNodeId]);
 
   const onEdgeDataChange = useCallback((id: string, dataUpdate: Record<string, any>) => {
-    setEdges(eds => {
-      const updated = eds.map(e => e.id === id ? { ...e, data: { ...e.data, ...dataUpdate } } : e);
-      setTimeout(() => emitChange(nodes, updated), 0);
-      return updated;
-    });
-  }, [setEdges, nodes, emitChange]);
+    setEdges(eds => eds.map(e => e.id === id ? { ...e, data: { ...e.data, ...dataUpdate } } : e));
+    changeNeededRef.current = true;
+  }, [setEdges]);
 
   const handleUndo = useCallback(() => {
     const snapshot = undo();
@@ -282,11 +257,8 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
     isRestoringRef.current = true;
     setNodes(snapshot.nodes);
     setEdges(snapshot.edges);
-    setTimeout(() => {
-      emitChange(snapshot.nodes, snapshot.edges);
-      isRestoringRef.current = false;
-    }, 0);
-  }, [undo, setNodes, setEdges, emitChange]);
+    changeNeededRef.current = true;
+  }, [undo, setNodes, setEdges]);
 
   const handleRedo = useCallback(() => {
     const snapshot = redo();
@@ -294,11 +266,8 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
     isRestoringRef.current = true;
     setNodes(snapshot.nodes);
     setEdges(snapshot.edges);
-    setTimeout(() => {
-      emitChange(snapshot.nodes, snapshot.edges);
-      isRestoringRef.current = false;
-    }, 0);
-  }, [redo, setNodes, setEdges, emitChange]);
+    changeNeededRef.current = true;
+  }, [redo, setNodes, setEdges]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
