@@ -143,12 +143,12 @@ public class WorkflowEngine {
             }
         }
 
-        List<HumanTaskInfo.OutputDefinition> outputs = List.of();
+        List<OutputDefinition> outputs = List.of();
         if (node.config().get("outputs") instanceof List<?> outputDefs) {
             outputs = outputDefs.stream()
                 .filter(Map.class::isInstance)
                 .map(o -> (Map<?, ?>) o)
-                .map(o -> new HumanTaskInfo.OutputDefinition(
+                .map(o -> new OutputDefinition(
                     String.valueOf(o.get("name")),
                     o.get("type") != null ? String.valueOf(o.get("type")) : "string",
                     Boolean.TRUE.equals(o.get("required"))
@@ -216,12 +216,12 @@ public class WorkflowEngine {
 
         Map<String, Object> resolvedInputs = resolveNodeInputs(node, instance.context());
 
-        List<ActionInfo.OutputDefinition> expectedOutputs = List.of();
+        List<OutputDefinition> expectedOutputs = List.of();
         if (node.config().get("outputs") instanceof List<?> outputDefs) {
             expectedOutputs = outputDefs.stream()
                 .filter(Map.class::isInstance)
                 .map(o -> (Map<?, ?>) o)
-                .map(o -> new ActionInfo.OutputDefinition(
+                .map(o -> new OutputDefinition(
                     String.valueOf(o.get("name")),
                     o.get("type") != null ? String.valueOf(o.get("type")) : "string",
                     Boolean.TRUE.equals(o.get("required"))
