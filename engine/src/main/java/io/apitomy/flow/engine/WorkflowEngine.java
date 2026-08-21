@@ -15,6 +15,7 @@ public class WorkflowEngine {
 
     private static final Logger log = LoggerFactory.getLogger(WorkflowEngine.class);
     private static final int MAX_TRANSITIONS = 100;
+    private static final int MAX_RETRIES = 10;
 
     private final NodeExecutorProvider executorProvider;
     private final List<WorkflowEventListener> listeners;
@@ -290,9 +291,19 @@ public class WorkflowEngine {
             boolean hasEnteredCurrentNode = !instance.history().isEmpty() &&
                 instance.history().getLast().nodeId().equals(currentNode.id());
 
-            // Handle terminal/waiting nodes reached via error handler transition
-            // These nodes haven't been entered yet (no history entry)
+            // Handle nodes reached via error handler transition — these haven't
+            // been entered yet (no history entry), so record entry before proceeding.
             if (!hasEnteredCurrentNode) {
+                Instant entryTime = Instant.now();
+                instance = completeCurrentHistoryEntry(instance, entryTime);
+                instance = instance.toBuilder()
+                    .addHistory(new HistoryEntry(currentNode.id(), currentNode.name(),
+                        null, null, entryTime, null, null))
+                    .updatedOn(entryTime)
+                    .build();
+                WorkflowInstance enteredInstance = instance;
+                fireEvent(l -> l.onNodeEntered(enteredInstance, currentNode));
+
                 switch (currentNode.type()) {
                     case END -> {
                         instance = instance.toBuilder()
@@ -310,6 +321,13 @@ public class WorkflowEngine {
                             .updatedOn(Instant.now())
                             .build();
                         return instance;
+                    }
+                    case ACTION -> {
+                        instance = executeActionNode(workflow, instance, currentNode);
+                        if (instance.status() != InstanceStatus.RUNNING) return instance;
+                    }
+                    case START -> {
+                        return failWorkflow(instance, "Cannot transition to START node", null);
                     }
                 }
             }
@@ -390,6 +408,7 @@ public class WorkflowEngine {
         }
 
         Map<String, Object> resolvedInputs = resolveNodeInputs(actionNode, instance.context());
+        int retries = 0;
 
         while (true) {
             NodeResult result;
@@ -404,6 +423,10 @@ public class WorkflowEngine {
                     return failWorkflow(instance, "Error handler threw: " + handlerError.getMessage(), handlerError);
                 }
                 if (resolution.action() == ErrorAction.RETRY) {
+                    if (++retries > MAX_RETRIES) {
+                        return failWorkflow(instance,
+                            "Exceeded retry limit (" + MAX_RETRIES + ") for action node: " + actionNode.id(), e);
+                    }
                     continue;
                 }
                 return applyResolution(workflow, instance, actionNode, resolution);
@@ -417,6 +440,10 @@ public class WorkflowEngine {
                     return failWorkflow(instance, "Error handler threw: " + handlerError.getMessage(), handlerError);
                 }
                 if (resolution.action() == ErrorAction.RETRY) {
+                    if (++retries > MAX_RETRIES) {
+                        return failWorkflow(instance,
+                            "Exceeded retry limit (" + MAX_RETRIES + ") for action node: " + actionNode.id(), null);
+                    }
                     continue;
                 }
                 return applyResolution(workflow, instance, actionNode, resolution);
@@ -444,6 +471,10 @@ public class WorkflowEngine {
                     return failWorkflow(instance, "Error handler threw: " + handlerError.getMessage(), handlerError);
                 }
                 if (resolution.action() == ErrorAction.RETRY) {
+                    if (++retries > MAX_RETRIES) {
+                        return failWorkflow(instance,
+                            "Exceeded retry limit (" + MAX_RETRIES + ") for action node: " + actionNode.id(), null);
+                    }
                     continue;
                 }
                 return applyResolution(workflow, instance, actionNode, resolution);
