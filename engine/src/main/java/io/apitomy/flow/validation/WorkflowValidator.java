@@ -91,11 +91,17 @@ public class WorkflowValidator {
 
         // Edge reference checks
         for (WorkflowEdge edge : edges) {
-            if (edge.source() != null && !nodeIds.contains(edge.source())) {
+            if (edge.source() == null) {
+                problems.add(ValidationProblem.edgeError("MISSING_EDGE_SOURCE",
+                    "Edge " + edge.id() + " has no source", edge.id()));
+            } else if (!nodeIds.contains(edge.source())) {
                 problems.add(ValidationProblem.edgeError("INVALID_EDGE_SOURCE",
                     "Edge " + edge.id() + " references nonexistent source: " + edge.source(), edge.id()));
             }
-            if (edge.target() != null && !nodeIds.contains(edge.target())) {
+            if (edge.target() == null) {
+                problems.add(ValidationProblem.edgeError("MISSING_EDGE_TARGET",
+                    "Edge " + edge.id() + " has no target", edge.id()));
+            } else if (!nodeIds.contains(edge.target())) {
                 problems.add(ValidationProblem.edgeError("INVALID_EDGE_TARGET",
                     "Edge " + edge.id() + " references nonexistent target: " + edge.target(), edge.id()));
             }
@@ -210,7 +216,7 @@ public class WorkflowValidator {
         }
 
         // Unreachable from start (BFS)
-        WorkflowNode startNode = workflow.findStartNode();
+        WorkflowNode startNode = workflow.findStartNode().orElse(null);
         if (startNode != null) {
             Set<String> reachable = new HashSet<>();
             Queue<String> queue = new LinkedList<>();
@@ -399,7 +405,7 @@ public class WorkflowValidator {
             });
 
         // Start node input validation
-        WorkflowNode start = workflow.findStartNode();
+        WorkflowNode start = workflow.findStartNode().orElse(null);
         if (start != null) {
             Object inputsDef = start.config().get("inputs");
             if (inputsDef == null) {

@@ -45,7 +45,8 @@ public class WorkflowEngine {
         }
 
         // Find start node and validate inputs
-        WorkflowNode startNode = workflow.findStartNode();
+        WorkflowNode startNode = workflow.findStartNode()
+            .orElseThrow(() -> new IllegalStateException("No start node found"));
         validateInputs(startNode, initialContext);
 
         // Create instance
@@ -82,7 +83,8 @@ public class WorkflowEngine {
                 "Cannot complete node: instance is not in WAITING status (current: " + instance.status() + ")");
         }
 
-        WorkflowNode currentNode = workflow.findNodeById(instance.currentNodeId());
+        WorkflowNode currentNode = workflow.findNodeById(instance.currentNodeId())
+            .orElseThrow(() -> new IllegalStateException("Current node not found: " + instance.currentNodeId()));
 
         // Record output on history, merge into context
         WorkflowInstance withHistory = completeCurrentHistoryEntry(instance, Instant.now(), result.output());
@@ -122,7 +124,7 @@ public class WorkflowEngine {
         if (instance.status() != InstanceStatus.WAITING) {
             return null;
         }
-        WorkflowNode node = workflow.findNodeById(instance.currentNodeId());
+        WorkflowNode node = workflow.findNodeById(instance.currentNodeId()).orElse(null);
         if (node == null || node.type() != NodeType.HUMAN_TASK) {
             return null;
         }
@@ -164,7 +166,7 @@ public class WorkflowEngine {
         if (instance.status() != InstanceStatus.WAITING) {
             return null;
         }
-        WorkflowNode node = workflow.findNodeById(instance.currentNodeId());
+        WorkflowNode node = workflow.findNodeById(instance.currentNodeId()).orElse(null);
         if (node == null || node.type() != NodeType.RECEIVE_EVENT) {
             return null;
         }
@@ -186,7 +188,7 @@ public class WorkflowEngine {
         if (instance.status() != InstanceStatus.WAITING) {
             return null;
         }
-        WorkflowNode node = workflow.findNodeById(instance.currentNodeId());
+        WorkflowNode node = workflow.findNodeById(instance.currentNodeId()).orElse(null);
         if (node == null || node.type() != NodeType.WAIT) {
             return null;
         }
@@ -207,7 +209,7 @@ public class WorkflowEngine {
         if (instance.status() != InstanceStatus.WAITING) {
             return null;
         }
-        WorkflowNode node = workflow.findNodeById(instance.currentNodeId());
+        WorkflowNode node = workflow.findNodeById(instance.currentNodeId()).orElse(null);
         if (node == null || node.type() != NodeType.ACTION) {
             return null;
         }
@@ -238,7 +240,7 @@ public class WorkflowEngine {
             return false;
         }
 
-        WorkflowNode currentNode = workflow.findNodeById(instance.currentNodeId());
+        WorkflowNode currentNode = workflow.findNodeById(instance.currentNodeId()).orElse(null);
         if (currentNode == null || currentNode.type() != NodeType.RECEIVE_EVENT) {
             return false;
         }
@@ -283,7 +285,12 @@ public class WorkflowEngine {
                     null);
             }
 
-            WorkflowNode currentNode = workflow.findNodeById(instance.currentNodeId());
+            WorkflowNode currentNode = workflow.findNodeById(instance.currentNodeId())
+                .orElse(null);
+            if (currentNode == null) {
+                return failWorkflow(instance,
+                    "Current node not found: " + instance.currentNodeId(), null);
+            }
 
             // Check if we've entered the current node (has history entry)
             // If no history entry exists for current node, we transitioned here via error handler
@@ -352,7 +359,8 @@ public class WorkflowEngine {
             fireEvent(l -> l.onEdgeFollowed(edgeInstance, selectedEdge));
 
             // Transition to target node
-            WorkflowNode targetNode = workflow.findNodeById(selectedEdge.target());
+            WorkflowNode targetNode = workflow.findNodeById(selectedEdge.target())
+                .orElseThrow(() -> new IllegalStateException("Edge target not found: " + selectedEdge.target()));
             Instant now = Instant.now();
 
             // Mark current history entry as completed
@@ -527,7 +535,8 @@ public class WorkflowEngine {
             case FAIL -> failWorkflow(instance, "Workflow failed at node: " + node.id(), null);
             case RETRY -> instance;
             case TRANSITION -> {
-                WorkflowNode target = workflow.findNodeById(resolution.targetNodeId());
+                WorkflowNode target = workflow.findNodeById(resolution.targetNodeId())
+                    .orElse(null);
                 if (target == null) {
                     yield failWorkflow(instance,
                         "Error handler TRANSITION target not found: " + resolution.targetNodeId(), null);
@@ -615,6 +624,9 @@ public class WorkflowEngine {
     }
 
     private void validateInputs(WorkflowNode startNode, Map<String, Object> initialContext) {
+        if (initialContext == null) {
+            initialContext = Map.of();
+        }
         Object inputsDef = startNode.config().get("inputs");
         if (inputsDef instanceof List<?> inputs) {
             for (Object inputObj : inputs) {

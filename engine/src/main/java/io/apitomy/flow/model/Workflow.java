@@ -2,6 +2,7 @@ package io.apitomy.flow.model;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 
 public record Workflow(
     String id,
@@ -11,18 +12,21 @@ public record Workflow(
     List<WorkflowNode> nodes,
     List<WorkflowEdge> edges
 ) {
-    public WorkflowNode findNodeById(String nodeId) {
-        return nodes.stream()
-            .filter(n -> n.id().equals(nodeId))
-            .findFirst()
-            .orElse(null);
+    public Workflow {
+        if (nodes == null) nodes = List.of();
+        if (edges == null) edges = List.of();
     }
 
-    public WorkflowNode findStartNode() {
+    public Optional<WorkflowNode> findNodeById(String nodeId) {
+        return nodes.stream()
+            .filter(n -> n.id().equals(nodeId))
+            .findFirst();
+    }
+
+    public Optional<WorkflowNode> findStartNode() {
         return nodes.stream()
             .filter(n -> n.type() == NodeType.START)
-            .findFirst()
-            .orElse(null);
+            .findFirst();
     }
 
     public List<WorkflowEdge> getOutgoingEdges(String nodeId) {

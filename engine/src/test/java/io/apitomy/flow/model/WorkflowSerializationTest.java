@@ -68,10 +68,10 @@ class WorkflowSerializationTest {
     @Test
     void workflowHelperMethods() {
         Workflow workflow = TestWorkflows.simpleActionWorkflow("analyze");
-        assertNotNull(workflow.findStartNode());
-        assertEquals(NodeType.START, workflow.findStartNode().type());
-        assertNotNull(workflow.findNodeById("action"));
-        assertNull(workflow.findNodeById("nonexistent"));
+        assertTrue(workflow.findStartNode().isPresent());
+        assertEquals(NodeType.START, workflow.findStartNode().get().type());
+        assertTrue(workflow.findNodeById("action").isPresent());
+        assertTrue(workflow.findNodeById("nonexistent").isEmpty());
         assertEquals(1, workflow.getOutgoingEdges("start").size());
         assertEquals("action", workflow.getOutgoingEdges("start").getFirst().target());
     }
