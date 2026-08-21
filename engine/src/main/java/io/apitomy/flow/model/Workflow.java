@@ -18,8 +18,9 @@ public record Workflow(
     }
 
     public Optional<WorkflowNode> findNodeById(String nodeId) {
+        if (nodeId == null) return Optional.empty();
         return nodes.stream()
-            .filter(n -> n.id().equals(nodeId))
+            .filter(n -> nodeId.equals(n.id()))
             .findFirst();
     }
 

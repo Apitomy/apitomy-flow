@@ -38,6 +38,10 @@ public class WorkflowEngine {
 
     public WorkflowInstance startWorkflow(Workflow workflow, Map<String, Object> initialContext,
                                           String instanceId) {
+        if (initialContext == null) {
+            initialContext = Map.of();
+        }
+
         // Validate definition
         List<ValidationProblem> problems = validator.validate(workflow);
         if (validator.hasErrors(problems)) {
@@ -624,9 +628,6 @@ public class WorkflowEngine {
     }
 
     private void validateInputs(WorkflowNode startNode, Map<String, Object> initialContext) {
-        if (initialContext == null) {
-            initialContext = Map.of();
-        }
         Object inputsDef = startNode.config().get("inputs");
         if (inputsDef instanceof List<?> inputs) {
             for (Object inputObj : inputs) {
