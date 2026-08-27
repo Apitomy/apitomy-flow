@@ -1,7 +1,7 @@
 import { useMemo, useState, useCallback, useRef } from 'react';
 import { ReactFlow, Background, Controls, ReactFlowProvider, type Node } from '@xyflow/react';
 import { AngleDoubleRightIcon, AngleDoubleLeftIcon } from '@patternfly/react-icons';
-import { type HistoryEntry } from '../types/instance.ts';
+import { type HistoryEntry, type InstanceStatus } from '../types/instance.ts';
 import { type Workflow } from '../types/workflow.ts';
 import { type WorkflowInstance } from '../types/instance.ts';
 import { toReactFlowNodes, toReactFlowEdges } from '../utils/conversion.ts';
@@ -28,17 +28,31 @@ function WorkflowViewerInner({ workflow, instance, theme = 'light' }: WorkflowVi
     [instance.history],
   );
 
+  const isTerminal = instance.status === 'completed' || instance.status === 'failed' || instance.status === 'cancelled';
+
   const nodes = useMemo(() => {
     return toReactFlowNodes(workflow.nodes).map(node => {
       const isCurrent = node.id === instance.currentNodeId;
       const isVisited = visitedNodeIds.has(node.id);
+      let className: string;
+      if (isCurrent && isTerminal) {
+        className = instance.status === 'failed' ? 'flow-node-failed'
+          : instance.status === 'cancelled' ? 'flow-node-cancelled'
+          : 'flow-node-visited';
+      } else if (isCurrent) {
+        className = 'flow-node-current';
+      } else if (isVisited) {
+        className = 'flow-node-visited';
+      } else {
+        className = 'flow-node-unvisited';
+      }
       return {
         ...node,
-        className: isCurrent ? 'flow-node-current' : isVisited ? 'flow-node-visited' : 'flow-node-unvisited',
+        className,
         draggable: false,
       };
     });
-  }, [workflow.nodes, instance.currentNodeId, visitedNodeIds]);
+  }, [workflow.nodes, instance.currentNodeId, instance.status, isTerminal, visitedNodeIds]);
 
   const edges = useMemo(() => {
     return toReactFlowEdges(workflow.edges).map(edge => {
@@ -165,6 +179,7 @@ function WorkflowViewerInner({ workflow, instance, theme = 'light' }: WorkflowVi
               node={selectedWorkflowNode}
               history={selectedNodeHistory}
               isCurrent={selectedNodeId === instance.currentNodeId}
+              instanceStatus={instance.status}
             />
           ) : (
             <div className="workflow-viewer__context-entries">
@@ -194,10 +209,11 @@ function formatValue(value: unknown): string {
   return String(value);
 }
 
-function NodeDetail({ node, history, isCurrent }: {
+function NodeDetail({ node, history, isCurrent, instanceStatus }: {
   node: WorkflowViewerProps['workflow']['nodes'][number] | null;
   history: HistoryEntry | null;
   isCurrent: boolean;
+  instanceStatus: InstanceStatus;
 }) {
   if (!node) {
     return <div className="workflow-viewer__context-empty">Node not found</div>;
@@ -218,7 +234,12 @@ function NodeDetail({ node, history, isCurrent }: {
       <div className="workflow-viewer__context-entry">
         <span className="workflow-viewer__context-key">Status</span>
         <span className="workflow-viewer__context-value">
-          {isCurrent ? 'Current (waiting)' : wasVisited ? 'Completed' : 'Not yet reached'}
+          {isCurrent
+            ? (instanceStatus === 'completed' ? 'Completed'
+              : instanceStatus === 'failed' ? 'Failed'
+              : instanceStatus === 'cancelled' ? 'Cancelled'
+              : 'Current (waiting)')
+            : wasVisited ? 'Completed' : 'Not yet reached'}
         </span>
       </div>
       {history?.enteredOn && (
