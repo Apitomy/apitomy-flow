@@ -1,0 +1,9 @@
+.node-action-menu button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.node-action-menu__icon {
+  display: inline-flex;
+  align-items: center;
+}

@@ -1,5 +1,6 @@
 import { type WorkflowViewerNodeMenuItem } from './WorkflowViewer.tsx';
 import './NodeContextMenu.css';
+import './NodeActionMenu.css';
 
 interface NodeActionMenuProps {
   items: WorkflowViewerNodeMenuItem[];
@@ -14,6 +15,15 @@ interface NodeActionMenuProps {
  * item's `onSelect` handler.
  */
 export function NodeActionMenu({ items, nodeId, position, onClose }: NodeActionMenuProps) {
+  const handleSelect = (item: WorkflowViewerNodeMenuItem) => {
+    // Always close the menu, even if the host's handler throws.
+    try {
+      item.onSelect(nodeId);
+    } finally {
+      onClose();
+    }
+  };
+
   return (
     <>
       <div
@@ -21,14 +31,14 @@ export function NodeActionMenu({ items, nodeId, position, onClose }: NodeActionM
         onClick={onClose}
         onContextMenu={(e) => { e.preventDefault(); onClose(); }}
       />
-      <div className="node-context-menu" style={{ top: position.y, left: position.x }}>
+      <div className="node-context-menu node-action-menu" style={{ top: position.y, left: position.x }}>
         {items.map((item) => (
           <button
             key={item.id}
             className={item.danger ? 'node-context-menu__danger' : undefined}
-            onClick={() => { item.onSelect(nodeId); onClose(); }}
+            onClick={() => handleSelect(item)}
           >
-            {item.icon}
+            {item.icon && <span className="node-action-menu__icon">{item.icon}</span>}
             {item.label}
           </button>
         ))}
