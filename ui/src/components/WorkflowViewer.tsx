@@ -8,16 +8,42 @@ import { toReactFlowNodes, toReactFlowEdges } from '../utils/conversion.ts';
 import { type FlowTheme } from './WorkflowEditor.tsx';
 import { nodeTypes } from './nodes/nodeTypes.ts';
 import { edgeTypes } from './edges/edgeTypes.ts';
+import { NodeActionMenu } from './NodeActionMenu.tsx';
 import './theme.css';
 import './WorkflowViewer.css';
+
+/**
+ * A host-contributed action shown in a node's right-click context menu.
+ */
+export interface WorkflowViewerNodeMenuItem {
+  /** Stable identifier, used as the React key. */
+  id: string;
+  /** Text displayed for the menu item. */
+  label: string;
+  /** Optional leading icon rendered before the label. */
+  icon?: React.ReactNode;
+  /** When true, the item is rendered using the danger (destructive) style. */
+  danger?: boolean;
+  /** Invoked with the clicked node's id when the item is selected. */
+  onSelect: (nodeId: string) => void;
+}
 
 export interface WorkflowViewerProps {
   workflow: Workflow;
   instance: WorkflowInstance;
   theme?: FlowTheme;
+  /**
+   * Host-contributed actions for a node's right-click context menu. Provide a
+   * static array, or a function to compute items per node (e.g. only offer
+   * "Open trace" for nodes that ran). When omitted or resolving to an empty
+   * list, no custom menu opens and the browser default is left untouched.
+   */
+  nodeContextMenuItems?:
+    | WorkflowViewerNodeMenuItem[]
+    | ((nodeId: string) => WorkflowViewerNodeMenuItem[]);
 }
 
-function WorkflowViewerInner({ workflow, instance, theme = 'light' }: WorkflowViewerProps) {
+function WorkflowViewerInner({ workflow, instance, theme = 'light', nodeContextMenuItems }: WorkflowViewerProps) {
   const visitedNodeIds = useMemo(
     () => new Set(instance.history.map(h => h.nodeId)),
     [instance.history],
@@ -73,7 +99,15 @@ function WorkflowViewerInner({ workflow, instance, theme = 'light' }: WorkflowVi
   const [collapsed, setCollapsed] = useState(false);
   const [panelWidth, setPanelWidth] = useState(320);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ nodeId: string; x: number; y: number } | null>(null);
   const isResizing = useRef(false);
+
+  const resolveMenuItems = useCallback((nodeId: string): WorkflowViewerNodeMenuItem[] => {
+    if (!nodeContextMenuItems) return [];
+    return typeof nodeContextMenuItems === 'function'
+      ? nodeContextMenuItems(nodeId)
+      : nodeContextMenuItems;
+  }, [nodeContextMenuItems]);
 
   const selectedNodeHistory = useMemo(() => {
     if (!selectedNodeId) return null;
@@ -92,7 +126,14 @@ function WorkflowViewerInner({ workflow, instance, theme = 'light' }: WorkflowVi
 
   const onPaneClick = useCallback(() => {
     setSelectedNodeId(null);
+    setContextMenu(null);
   }, []);
+
+  const onNodeContextMenu = useCallback((event: React.MouseEvent, node: Node) => {
+    event.preventDefault();
+    if (resolveMenuItems(node.id).length === 0) return;
+    setContextMenu({ nodeId: node.id, x: event.clientX, y: event.clientY });
+  }, [resolveMenuItems]);
 
   const onResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -128,12 +169,21 @@ function WorkflowViewerInner({ workflow, instance, theme = 'light' }: WorkflowVi
           nodesConnectable={false}
           colorMode={theme}
           onNodeClick={onNodeClick}
+          onNodeContextMenu={onNodeContextMenu}
           onPaneClick={onPaneClick}
           fitView
         >
           <Background />
           <Controls showInteractive={false} />
         </ReactFlow>
+        {contextMenu && (
+          <NodeActionMenu
+            items={resolveMenuItems(contextMenu.nodeId)}
+            nodeId={contextMenu.nodeId}
+            position={{ x: contextMenu.x, y: contextMenu.y }}
+            onClose={() => setContextMenu(null)}
+          />
+        )}
       </div>
       {collapsed ? (
         <div className="workflow-viewer__context-collapsed">
