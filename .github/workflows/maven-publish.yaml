@@ -5,18 +5,10 @@ on:
       release-version:
         description: 'Release version to publish (e.g., 1.0.0)'
         required: true
-      branch:
-        description: 'Branch/tag to publish from'
-        required: true
-        default: 'main'
   workflow_call:
     inputs:
       release-version:
         description: 'Release version to publish'
-        required: true
-        type: string
-      branch:
-        description: 'Branch/tag to publish from'
         required: true
         type: string
 
@@ -35,7 +27,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: ${{ inputs.branch }}
+          ref: v${{ inputs.release-version }}
 
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
@@ -47,7 +39,7 @@ jobs:
       - name: Log Metadata
         run: |
           echo "Publishing Apitomy Flow Engine version ${{ inputs.release-version }} to Maven Central"
-          echo "Publishing from branch/tag: ${{ inputs.branch }}"
+          echo "Publishing from tag: v${{ inputs.release-version }}"
 
 
       - name: Set up settings.xml
