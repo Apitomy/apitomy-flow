@@ -140,6 +140,100 @@ class AsyncActionNodeTest {
     }
 
     @Test
+    void failedResultFailsWorkflowWithDefaultHandler() {
+        boolean[] failed = {false};
+        WorkflowEventListener listener = new WorkflowEventListener() {
+            public void onWorkflowFailed(WorkflowInstance i, Exception e) {
+                failed[0] = true;
+            }
+        };
+        WorkflowEngine engine = new WorkflowEngine(
+            NodeExecutorProvider.fromList(pendingExecutor("agent-call")), List.of(listener), null);
+        Workflow workflow = simpleActionWorkflow("agent-call");
+        WorkflowInstance waiting = engine.startWorkflow(workflow, Map.of());
+
+        assertEquals(InstanceStatus.WAITING, waiting.status());
+
+        WorkflowInstance result = engine.completeCurrentNode(workflow, waiting,
+            new NodeResult(NodeResultStatus.FAILED, Map.of("error", "boom")));
+
+        assertEquals(InstanceStatus.FAILED, result.status());
+        assertNotNull(result.failureReason());
+        assertTrue(failed[0], "onWorkflowFailed should fire");
+    }
+
+    @Test
+    void failedResultRoutesToErrorNodeViaTransition() {
+        WorkflowErrorHandler transitionHandler = new WorkflowErrorHandler() {
+            public ErrorResolution handleNodeError(WorkflowInstance i, WorkflowNode n,
+                                                    NodeResult r, Exception e) {
+                return ErrorResolution.transitionTo("error-end");
+            }
+            public ErrorResolution handleNoMatchingEdge(WorkflowInstance i, WorkflowNode n) {
+                return ErrorResolution.fail();
+            }
+        };
+        Workflow workflow = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), actionNode("action", "agent-call"),
+                    endNode("end"), endNode("error-end")),
+            List.of(edge("e1", "start", "action"), edge("e2", "action", "end"),
+                    edge("e3", "action", "error-end")));
+
+        WorkflowEngine engine = new WorkflowEngine(
+            NodeExecutorProvider.fromList(pendingExecutor("agent-call")), List.of(), transitionHandler);
+        WorkflowInstance waiting = engine.startWorkflow(workflow, Map.of());
+
+        assertEquals(InstanceStatus.WAITING, waiting.status());
+
+        WorkflowInstance result = engine.completeCurrentNode(workflow, waiting,
+            new NodeResult(NodeResultStatus.FAILED, Map.of()));
+
+        assertEquals(InstanceStatus.COMPLETED, result.status());
+        assertEquals("error-end", result.currentNodeId());
+    }
+
+    @Test
+    void failedResultWithRetryReDispatchesAction() {
+        WorkflowErrorHandler retryHandler = new WorkflowErrorHandler() {
+            public ErrorResolution handleNodeError(WorkflowInstance i, WorkflowNode n,
+                                                    NodeResult r, Exception e) {
+                return ErrorResolution.retry();
+            }
+            public ErrorResolution handleNoMatchingEdge(WorkflowInstance i, WorkflowNode n) {
+                return ErrorResolution.fail();
+            }
+        };
+        WorkflowEngine engine = new WorkflowEngine(
+            NodeExecutorProvider.fromList(pendingExecutor("agent-call")), List.of(), retryHandler);
+        Workflow workflow = simpleActionWorkflow("agent-call");
+        WorkflowInstance waiting = engine.startWorkflow(workflow, Map.of());
+
+        // A FAILED result with a RETRY resolution should re-dispatch the (async) action,
+        // which returns PENDING again and re-parks the instance rather than completing it.
+        WorkflowInstance result = engine.completeCurrentNode(workflow, waiting,
+            new NodeResult(NodeResultStatus.FAILED, Map.of()));
+
+        assertEquals(InstanceStatus.WAITING, result.status());
+        assertEquals("action", result.currentNodeId());
+    }
+
+    @Test
+    void pendingResultDeliveredToCompleteCurrentNodeReparks() {
+        WorkflowEngine engine = engine(pendingExecutor("agent-call"));
+        Workflow workflow = simpleActionWorkflow("agent-call");
+        WorkflowInstance waiting = engine.startWorkflow(workflow, Map.of());
+
+        assertEquals(InstanceStatus.WAITING, waiting.status());
+
+        WorkflowInstance result = engine.completeCurrentNode(workflow, waiting,
+            new NodeResult(NodeResultStatus.PENDING, Map.of("progress", "50%")));
+
+        assertEquals(InstanceStatus.WAITING, result.status());
+        assertEquals("action", result.currentNodeId());
+        assertEquals("50%", result.context().get("progress"));
+    }
+
+    @Test
     void pendingWithEmptyOutputDoesNotFail() {
         NodeExecutor emptyPending = new NodeExecutor() {
             public String actionType() { return "agent"; }

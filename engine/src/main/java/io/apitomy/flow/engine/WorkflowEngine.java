@@ -90,7 +90,27 @@ public class WorkflowEngine {
         WorkflowNode currentNode = workflow.findNodeById(instance.currentNodeId())
             .orElseThrow(() -> new IllegalStateException("Current node not found: " + instance.currentNodeId()));
 
-        // Record output on history, merge into context
+        // A FAILED result must route through the same error-handling semantics as the
+        // synchronous action path (error handler + retry + failWorkflow), otherwise a
+        // failed async action would silently drive the instance to COMPLETED.
+        if (result.status() == NodeResultStatus.FAILED) {
+            return handleFailedCompletion(workflow, instance, currentNode, result);
+        }
+
+        // A PENDING result re-parks the instance in WAITING (optionally merging output),
+        // allowing the outcome to be delivered again later.
+        if (result.status() == NodeResultStatus.PENDING) {
+            WorkflowInstance reparked = instance;
+            if (result.output() != null && !result.output().isEmpty()) {
+                reparked = reparked.toBuilder().mergeContext(result.output()).build();
+            }
+            return reparked.toBuilder()
+                .status(InstanceStatus.WAITING)
+                .updatedOn(Instant.now())
+                .build();
+        }
+
+        // COMPLETED — record output on history, merge into context
         WorkflowInstance withHistory = completeCurrentHistoryEntry(instance, Instant.now(), result.output());
         WorkflowInstance updated = withHistory.toBuilder()
             .mergeContext(result.output())
@@ -103,6 +123,41 @@ public class WorkflowEngine {
 
         // Advance
         return advance(workflow, updated);
+    }
+
+    private WorkflowInstance handleFailedCompletion(Workflow workflow, WorkflowInstance instance,
+                                                    WorkflowNode actionNode, NodeResult result) {
+        ErrorResolution resolution;
+        try {
+            resolution = errorHandler.handleNodeError(instance, actionNode, result, null);
+        } catch (Exception handlerError) {
+            return failWorkflow(instance, "Error handler threw: " + handlerError.getMessage(), handlerError);
+        }
+
+        // RETRY re-executes the action node. For async executors this typically returns
+        // PENDING again, re-parking the instance until the next out-of-band result.
+        if (resolution.action() == ErrorAction.RETRY) {
+            WorkflowInstance running = instance.toBuilder()
+                .status(InstanceStatus.RUNNING)
+                .updatedOn(Instant.now())
+                .build();
+            WorkflowInstance executed = executeActionNode(workflow, running, actionNode);
+            if (executed.status() != InstanceStatus.RUNNING) {
+                return executed;
+            }
+            return advance(workflow, executed);
+        }
+
+        // FAIL / TRANSITION — apply the resolution as the synchronous path does.
+        WorkflowInstance running = instance.toBuilder()
+            .status(InstanceStatus.RUNNING)
+            .updatedOn(Instant.now())
+            .build();
+        WorkflowInstance resolved = applyResolution(workflow, running, actionNode, resolution);
+        if (resolved.status() != InstanceStatus.RUNNING) {
+            return resolved;
+        }
+        return advance(workflow, resolved);
     }
 
     public WorkflowInstance cancelWorkflow(Workflow workflow, WorkflowInstance instance) {
