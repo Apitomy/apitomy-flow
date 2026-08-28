@@ -3,8 +3,9 @@ import { useState } from 'react';
 import Editor from '@monaco-editor/react';
 import '@patternfly/patternfly/patternfly.css';
 import '@xyflow/react/dist/style.css';
+import { FileAltIcon, SearchIcon, ExternalLinkAltIcon } from '@patternfly/react-icons';
 import { WorkflowEditor } from '../components/WorkflowEditor.tsx';
-import { WorkflowViewer } from '../components/WorkflowViewer.tsx';
+import { WorkflowViewer, type WorkflowViewerNodeMenuItem } from '../components/WorkflowViewer.tsx';
 import { cveTriage, triageInstance } from './sampleWorkflows.ts';
 import { type Workflow } from '../types/workflow.ts';
 import { type FlowTheme } from '../components/WorkflowEditor.tsx';
@@ -77,6 +78,41 @@ const spi: EditorSpi = {
   ],
 };
 
+/**
+ * Demonstrates a host contributing its own actions to a viewer node's
+ * right-click context menu. Uses the function form so the menu can vary per
+ * node (here, "Jump to trace span" only appears for nodes that actually ran).
+ */
+function nodeContextMenuItems(nodeId: string): WorkflowViewerNodeMenuItem[] {
+  const items: WorkflowViewerNodeMenuItem[] = [
+    {
+      id: 'open-log',
+      label: 'Open execution log',
+      icon: <FileAltIcon />,
+      onSelect: (id) => alert(`Host: open execution log for node "${id}"`),
+    },
+    {
+      id: 'inspect',
+      label: 'Inspect node',
+      icon: <SearchIcon />,
+      onSelect: (id) => alert(`Host: inspect node "${id}"`),
+    },
+  ];
+
+  const wasVisited = triageInstance.history.some((h) => h.nodeId === nodeId);
+  if (wasVisited) {
+    items.push({
+      id: 'open-trace',
+      label: 'Jump to trace span',
+      icon: <ExternalLinkAltIcon />,
+      danger: true,
+      onSelect: (id) => alert(`Host: jump to trace span for node "${id}"`),
+    });
+  }
+
+  return items;
+}
+
 function App() {
   const [tab, setTab] = useState<'editor' | 'viewer' | 'json'>('editor');
   const [workflow, setWorkflow] = useState<Workflow>(cveTriage);
@@ -110,7 +146,12 @@ function App() {
           <WorkflowEditor workflow={workflow} onChange={setWorkflow} theme={theme} spi={spi} />
         )}
         {tab === 'viewer' && (
-          <WorkflowViewer workflow={cveTriage} instance={triageInstance} theme={theme} />
+          <WorkflowViewer
+            workflow={cveTriage}
+            instance={triageInstance}
+            theme={theme}
+            nodeContextMenuItems={nodeContextMenuItems}
+          />
         )}
         {tab === 'json' && (
           <Editor
