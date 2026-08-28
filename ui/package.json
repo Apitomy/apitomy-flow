@@ -1,6 +1,6 @@
 {
   "name": "@apitomy/flow-ui",
-  "version": "1.0.2-SNAPSHOT",
+  "version": "1.0.2",
   "description": "Reusable React component for visual workflow editing and instance viewing",
   "type": "module",
   "license": "Apache-2.0",
