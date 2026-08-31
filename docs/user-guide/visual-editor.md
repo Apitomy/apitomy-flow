@@ -103,6 +103,34 @@ The editor runs the TypeScript workflow validator on every change. Validation fe
 
 **Problems panel:** A collapsible panel at the bottom lists all validation problems grouped by severity (errors first). Click a problem to select and center the affected node or edge on the canvas.
 
+## Host-provided validation
+
+In addition to the editor's built-in validation, a host application can contribute its own
+validations through the `validate` function on the editor SPI. Problems it returns are merged
+with the built-in problems and drive the same Problems panel, per-node error/warning
+highlighting, and `onValidationChange` callback.
+
+The validator may run synchronously or return a `Promise`, so it can perform server-backed
+checks. The editor debounces calls while the user types and ignores stale (out-of-order)
+results, so only the most recent run is ever shown. If the validator throws or rejects, its
+problems are cleared and a warning is logged; built-in validation is never affected.
+
+```ts
+import { type EditorSpi, type ValidationProblem } from '@apitomy/flow-ui';
+
+const spi: EditorSpi = {
+  validate: async (workflow): Promise<ValidationProblem[]> => {
+    const problems: ValidationProblem[] = [];
+    // ...host-specific rules, optionally awaiting backend calls...
+    return problems;
+  },
+};
+```
+
+Host problems use the same shape as built-in ones (`severity`, `code`, `message`, and optional
+`nodeId` / `edgeId`). Namespace your `code` values (for example, prefix them with `HOST_`) to
+keep them distinguishable from the built-in codes.
+
 ## Styling
 
 The editor requires these CSS imports in your application:
