@@ -3,6 +3,14 @@ import { type WorkflowNode, type WorkflowEdge, type NodeType } from '../types/wo
 
 export const DEFAULT_NODE_DIMENSION = { width: 180, height: 50 };
 
+/**
+ * Approximate rendered size (px) of each node type, used only to space the
+ * dagre layout. These mirror the node component CSS (see
+ * `../components/nodes/*.css`); if a node's CSS size changes materially, update
+ * the matching entry here so layouts stay well-spaced. Slight drift only affects
+ * spacing, never correctness. Callers with measured dimensions can override via
+ * `LayoutOptions.nodeSize`.
+ */
 export const NODE_DIMENSIONS: Record<NodeType, { width: number; height: number }> = {
   'start': { width: 120, height: 44 },
   'end': { width: 120, height: 44 },
@@ -85,7 +93,9 @@ export function layoutWorkflow(
 /**
  * Decide whether a workflow's node positions are degenerate and should be
  * auto-laid-out. Returns true when any node lacks a valid position, or when
- * every node shares effectively the same coordinate (e.g. all at the origin).
+ * two or more nodes all share effectively the same coordinate (e.g. all at the
+ * origin). A single node with a valid position, and any graph whose nodes are
+ * spread out, are treated as intentionally placed and left untouched.
  *
  * @param nodes the workflow nodes to inspect
  * @returns true if the graph should be auto-laid-out
@@ -101,7 +111,9 @@ export function needsLayout(nodes: WorkflowNode[]): boolean {
     }
   }
 
-  if (nodes.length === 1) return true;
+  // With fewer than two valid-position nodes there is nothing to disambiguate,
+  // so a lone node with a real position is respected rather than re-laid-out.
+  if (nodes.length < 2) return false;
 
   const first = nodes[0].position;
   const allSame = nodes.every(n =>
