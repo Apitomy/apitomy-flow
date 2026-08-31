@@ -22,7 +22,7 @@ import { type EditorSpi } from '../types/spi.ts';
 import { type FlowNodeData, toReactFlowNodes, toReactFlowEdges, toWorkflow, toWorkflowNodes, toWorkflowEdges } from '../utils/conversion.ts';
 import { generateNodeId, generateEdgeId } from '../utils/id.ts';
 import { validateWorkflow } from '../validation/validateWorkflow.ts';
-import { layoutWorkflow } from '../layout/layoutWorkflow.ts';
+import { layoutWorkflow, needsLayout } from '../layout/layoutWorkflow.ts';
 import { useHostValidation } from '../hooks/useHostValidation.ts';
 import { nodeTypes } from './nodes/nodeTypes.ts';
 import { edgeTypes } from './edges/edgeTypes.ts';
@@ -45,8 +45,13 @@ export interface WorkflowEditorProps {
 }
 
 function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = 'light', spi }: WorkflowEditorProps) {
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: convert once on mount, React Flow manages state after
-  const initialNodes = useMemo(() => toReactFlowNodes(workflow.nodes), []);
+  const initialNodes = useMemo(() => {
+    const source = needsLayout(workflow.nodes)
+      ? layoutWorkflow(workflow.nodes, workflow.edges)
+      : workflow.nodes;
+    return toReactFlowNodes(source);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- convert once on mount
+  }, []);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const initialEdges = useMemo(() => toReactFlowEdges(workflow.edges), []);
 
@@ -62,6 +67,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
   const snapshotNeededRef = useRef(false);
   const changeNeededRef = useRef(false);
   const mountedRef = useRef(false);
+  const fallbackAppliedRef = useRef(needsLayout(workflow.nodes));
 
   // Suppress onChange during initial render — ReactFlow fires onNodesChange
   // (dimension measurements, fitView) before the user has interacted.
@@ -78,6 +84,15 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
       takeSnapshot(initialNodes, initialEdges);
     }
   }, [initialNodes, initialEdges, takeSnapshot]);
+
+  // Persist fallback layout on mount
+  useEffect(() => {
+    if (fallbackAppliedRef.current) {
+      fallbackAppliedRef.current = false;
+      onChange(toWorkflow(workflow, initialNodes, initialEdges));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once for fallback persistence
+  }, []);
 
   // Commit pending snapshots and emit deferred onChange after render.
   // Using an effect (not setTimeout) ensures we always read the latest
