@@ -14,15 +14,48 @@ import { TimesIcon } from '@patternfly/react-icons';
 import { type FlowNodeData } from '../../utils/conversion.ts';
 import { type EditorSpi } from '../../types/spi.ts';
 import { type ActionTypeDescriptor } from '../../types/spi.ts';
+import { type ValidationProblem } from '../../types/validation.ts';
 import './PropertiesPanel.css';
 
 interface PropertiesPanelProps {
   selectedNode?: Node<FlowNodeData>;
   selectedEdge?: Edge;
+  nodeProblems?: ValidationProblem[];
   onNodeChange: (id: string, data: Partial<FlowNodeData>) => void;
   onNodeIdChange: (oldId: string, newId: string) => void;
   onEdgeChange: (id: string, data: Record<string, any>) => void;
   spi?: EditorSpi;
+}
+
+/**
+ * Lists the validation problems for the selected node (errors first) at the top
+ * of the properties panel, so the reader can see exactly what is wrong with the
+ * node they are editing.
+ */
+function NodeProblems({ problems }: { problems: ValidationProblem[] }) {
+  if (problems.length === 0) return null;
+  const sorted = [...problems].sort((a, b) =>
+    a.severity === b.severity ? 0 : a.severity === 'error' ? -1 : 1,
+  );
+  return (
+    <div className="properties-panel__problems">
+      <ul className="properties-panel__problems-list">
+        {sorted.map((p, i) => (
+          <li key={`${p.code}-${i}`} className="properties-panel__problems-item">
+            <span className={p.severity === 'error'
+              ? 'properties-panel__problems-severity-error'
+              : 'properties-panel__problems-severity-warning'}>
+              {p.severity === 'error' ? 'E' : 'W'}
+            </span>
+            <span className="properties-panel__problems-body">
+              <span className="properties-panel__problems-message">{p.message}</span>
+              <span className="properties-panel__problems-code">{p.code}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 function useActionTypes(spi?: EditorSpi): { actionTypes: ActionTypeDescriptor[]; loading: boolean } {
@@ -51,7 +84,7 @@ function useActionTypes(spi?: EditorSpi): { actionTypes: ActionTypeDescriptor[];
   return { actionTypes: asyncTypes, loading: asyncTypes === LOADING_SENTINEL };
 }
 
-export function PropertiesPanel({ selectedNode, selectedEdge, onNodeChange, onNodeIdChange, onEdgeChange, spi }: PropertiesPanelProps) {
+export function PropertiesPanel({ selectedNode, selectedEdge, nodeProblems = [], onNodeChange, onNodeIdChange, onEdgeChange, spi }: PropertiesPanelProps) {
   const { actionTypes, loading: actionTypesLoading } = useActionTypes(spi);
 
   if (!selectedNode && !selectedEdge) {
@@ -70,6 +103,7 @@ export function PropertiesPanel({ selectedNode, selectedEdge, onNodeChange, onNo
         <div className="properties-panel__header">
           {selectedNode.data.nodeType} Node
         </div>
+        <NodeProblems problems={nodeProblems} />
         <div className="properties-panel__field">
           <label>Node ID</label>
           <input

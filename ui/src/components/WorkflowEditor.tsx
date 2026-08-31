@@ -122,11 +122,14 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
     if (!validationProblems?.length) return nodes;
     return nodes.map(node => {
       const problems = validationProblems.filter(p => p.nodeId === node.id);
-      const severity: 'error' | 'warning' | undefined = problems.some(p => p.severity === 'error') ? 'error'
-        : problems.some(p => p.severity === 'warning') ? 'warning' : undefined;
-      return severity ? { ...node, data: { ...node.data, validationSeverity: severity } } : node;
+      return problems.length ? { ...node, data: { ...node.data, validationProblems: problems } } : node;
     });
   }, [nodes, validationProblems]);
+
+  const selectedNodeProblems = useMemo(
+    () => (selectedNodeId ? validationProblems.filter(p => p.nodeId === selectedNodeId) : []),
+    [validationProblems, selectedNodeId],
+  );
 
   const handleNodesChange = useCallback((changes: NodeChange<Node<FlowNodeData>>[]) => {
     if (!isRestoringRef.current && changes.some(c => c.type === 'remove')) {
@@ -355,6 +358,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
         <PropertiesPanel
           selectedNode={selectedNode}
           selectedEdge={selectedEdge}
+          nodeProblems={selectedNodeProblems}
           onNodeChange={onNodeDataChange}
           onNodeIdChange={onNodeIdChange}
           onEdgeChange={onEdgeDataChange}
