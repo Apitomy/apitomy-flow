@@ -19,9 +19,10 @@ import { UndoIcon, RedoIcon } from '@patternfly/react-icons';
 import { type Workflow } from '../types/workflow.ts';
 import { type ValidationProblem } from '../types/validation.ts';
 import { type EditorSpi } from '../types/spi.ts';
-import { type FlowNodeData, toReactFlowNodes, toReactFlowEdges, toWorkflow } from '../utils/conversion.ts';
+import { type FlowNodeData, toReactFlowNodes, toReactFlowEdges, toWorkflow, toWorkflowNodes, toWorkflowEdges } from '../utils/conversion.ts';
 import { generateNodeId, generateEdgeId } from '../utils/id.ts';
 import { validateWorkflow } from '../validation/validateWorkflow.ts';
+import { layoutWorkflow } from '../layout/layoutWorkflow.ts';
 import { useHostValidation } from '../hooks/useHostValidation.ts';
 import { nodeTypes } from './nodes/nodeTypes.ts';
 import { edgeTypes } from './edges/edgeTypes.ts';
@@ -237,6 +238,19 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
     changeNeededRef.current = true;
   }, []);
 
+  const handleTidyUp = useCallback(() => {
+    takeSnapshot(nodes, edges);
+    const workflowNodes = toWorkflowNodes(nodes);
+    const laidOut = layoutWorkflow(workflowNodes, toWorkflowEdges(edges));
+    const positionById = new Map(laidOut.map(n => [n.id, n.position]));
+    setNodes(nds => nds.map(n => {
+      const pos = positionById.get(n.id);
+      return pos ? { ...n, position: pos } : n;
+    }));
+    changeNeededRef.current = true;
+    window.requestAnimationFrame(() => fitView({ duration: 300 }));
+  }, [nodes, edges, takeSnapshot, setNodes, fitView]);
+
   const onNodeDataChange = useCallback((id: string, dataUpdate: Partial<FlowNodeData>) => {
     setNodes(nds => nds.map(n => n.id === id ? { ...n, data: { ...n.data, ...dataUpdate } } : n));
     changeNeededRef.current = true;
@@ -341,6 +355,9 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
                 </button>
                 <button title="Redo (Ctrl+Y)" disabled={!canRedo} onClick={handleRedo}>
                   <RedoIcon /> Redo
+                </button>
+                <button title="Tidy up (auto-layout)" onClick={handleTidyUp}>
+                  Tidy up
                 </button>
               </div>
             </Panel>
