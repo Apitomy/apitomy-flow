@@ -27,6 +27,23 @@ The engine has no framework dependencies — it works in any Java application. T
 - [Installation](getting-started/installation.md) — Maven coordinates and npm package
 - [Quick Start](getting-started/quick-start.md) — Run your first workflow in minutes
 
+## User Guide
+
+- [Workflow Model](user-guide/workflow-model.md) — nodes, edges, and instances
+- [Engine Usage](user-guide/engine-usage.md) — running and resuming workflows with `WorkflowEngine`
+- [Node Executors](user-guide/node-executors.md) — implementing action nodes
+- [Error Handling](user-guide/error-handling.md) — fail / retry / transition strategies
+- [Event Correlation](user-guide/event-correlation.md) — matching external events to waiting instances
+- [Validation](user-guide/validation.md) — the validation rules reference
+- [Visual Editor](user-guide/visual-editor.md) — the `WorkflowEditor` component
+- [Workflow Viewer](user-guide/workflow-viewer.md) — the `WorkflowViewer` component
+
+## Developer Guide
+
+- [Architecture](developer-guide/architecture.md) — engine and UI internals
+- [Building](developer-guide/building.md) — build from source and run the dev app
+- [Contributing](developer-guide/contributing.md) — contribution workflow
+
 ## Links
 
 - [GitHub Repository](https://github.com/Apitomy/apitomy-flow)
