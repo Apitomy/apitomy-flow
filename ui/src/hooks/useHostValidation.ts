@@ -17,7 +17,7 @@ export function useHostValidation(
   workflow: Workflow,
   validate: WorkflowValidator | undefined,
 ): ValidationProblem[] {
-  const [problems, setProblems] = useState<ValidationProblem[]>([]);
+  const [hostProblems, setHostProblems] = useState<ValidationProblem[]>([]);
 
   const validator = useMemo(
     () => (validate ? createDebouncedValidator({ validate }) : undefined),
@@ -25,13 +25,10 @@ export function useHostValidation(
   );
 
   useEffect(() => {
-    if (!validator) {
-      setProblems([]);
-      return;
-    }
-    validator.run(workflow, setProblems);
+    if (!validator) return;
+    validator.run(workflow, setHostProblems);
     return () => validator.cancel();
   }, [validator, workflow]);
 
-  return problems;
+  return validator ? hostProblems : [];
 }
