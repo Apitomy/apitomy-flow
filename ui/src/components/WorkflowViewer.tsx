@@ -9,6 +9,7 @@ import { type FlowTheme } from './WorkflowEditor.tsx';
 import { nodeTypes } from './nodes/nodeTypes.ts';
 import { edgeTypes } from './edges/edgeTypes.ts';
 import { NodeActionMenu } from './NodeActionMenu.tsx';
+import { needsLayout, layoutWorkflow } from '../layout/layoutWorkflow.ts';
 import './theme.css';
 import './WorkflowViewer.css';
 
@@ -56,8 +57,17 @@ function WorkflowViewerInner({ workflow, instance, theme = 'light', nodeContextM
 
   const isTerminal = instance.status === 'completed' || instance.status === 'failed' || instance.status === 'cancelled';
 
+  // Compute layout only when topology changes, not on every instance/status
+  // update, so live-updating viewers don't re-run dagre on each poll.
+  const laidOutNodes = useMemo(
+    () => (needsLayout(workflow.nodes)
+      ? layoutWorkflow(workflow.nodes, workflow.edges)
+      : workflow.nodes),
+    [workflow.nodes, workflow.edges],
+  );
+
   const nodes = useMemo(() => {
-    return toReactFlowNodes(workflow.nodes).map(node => {
+    return toReactFlowNodes(laidOutNodes).map(node => {
       const isCurrent = node.id === instance.currentNodeId;
       const isVisited = visitedNodeIds.has(node.id);
       let className: string;
@@ -79,7 +89,7 @@ function WorkflowViewerInner({ workflow, instance, theme = 'light', nodeContextM
         draggable: false,
       };
     });
-  }, [workflow.nodes, instance.currentNodeId, instance.status, isTerminal, visitedNodeIds]);
+  }, [laidOutNodes, instance.currentNodeId, instance.status, isTerminal, visitedNodeIds]);
 
   const edges = useMemo(() => {
     return toReactFlowEdges(workflow.edges).map(edge => {

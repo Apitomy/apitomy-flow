@@ -19,9 +19,10 @@ import { UndoIcon, RedoIcon } from '@patternfly/react-icons';
 import { type Workflow } from '../types/workflow.ts';
 import { type ValidationProblem } from '../types/validation.ts';
 import { type EditorSpi } from '../types/spi.ts';
-import { type FlowNodeData, toReactFlowNodes, toReactFlowEdges, toWorkflow } from '../utils/conversion.ts';
+import { type FlowNodeData, toReactFlowNodes, toReactFlowEdges, toWorkflow, toWorkflowNodes, toWorkflowEdges } from '../utils/conversion.ts';
 import { generateNodeId, generateEdgeId } from '../utils/id.ts';
 import { validateWorkflow } from '../validation/validateWorkflow.ts';
+import { layoutWorkflow, needsLayout } from '../layout/layoutWorkflow.ts';
 import { useHostValidation } from '../hooks/useHostValidation.ts';
 import { nodeTypes } from './nodes/nodeTypes.ts';
 import { edgeTypes } from './edges/edgeTypes.ts';
@@ -44,8 +45,13 @@ export interface WorkflowEditorProps {
 }
 
 function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = 'light', spi }: WorkflowEditorProps) {
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: convert once on mount, React Flow manages state after
-  const initialNodes = useMemo(() => toReactFlowNodes(workflow.nodes), []);
+  const initialNodes = useMemo(() => {
+    const source = needsLayout(workflow.nodes)
+      ? layoutWorkflow(workflow.nodes, workflow.edges)
+      : workflow.nodes;
+    return toReactFlowNodes(source);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- convert once on mount
+  }, []);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const initialEdges = useMemo(() => toReactFlowEdges(workflow.edges), []);
 
@@ -61,6 +67,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
   const snapshotNeededRef = useRef(false);
   const changeNeededRef = useRef(false);
   const mountedRef = useRef(false);
+  const fallbackAppliedRef = useRef(needsLayout(workflow.nodes));
 
   // Suppress onChange during initial render — ReactFlow fires onNodesChange
   // (dimension measurements, fitView) before the user has interacted.
@@ -77,6 +84,15 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
       takeSnapshot(initialNodes, initialEdges);
     }
   }, [initialNodes, initialEdges, takeSnapshot]);
+
+  // Persist fallback layout on mount
+  useEffect(() => {
+    if (fallbackAppliedRef.current) {
+      fallbackAppliedRef.current = false;
+      onChange(toWorkflow(workflow, initialNodes, initialEdges));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once for fallback persistence
+  }, []);
 
   // Commit pending snapshots and emit deferred onChange after render.
   // Using an effect (not setTimeout) ensures we always read the latest
@@ -237,6 +253,19 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
     changeNeededRef.current = true;
   }, []);
 
+  const handleTidyUp = useCallback(() => {
+    takeSnapshot(nodes, edges);
+    const workflowNodes = toWorkflowNodes(nodes);
+    const laidOut = layoutWorkflow(workflowNodes, toWorkflowEdges(edges));
+    const positionById = new Map(laidOut.map(n => [n.id, n.position]));
+    setNodes(nds => nds.map(n => {
+      const pos = positionById.get(n.id);
+      return pos ? { ...n, position: pos } : n;
+    }));
+    changeNeededRef.current = true;
+    window.requestAnimationFrame(() => fitView({ duration: 300 }));
+  }, [nodes, edges, takeSnapshot, setNodes, fitView]);
+
   const onNodeDataChange = useCallback((id: string, dataUpdate: Partial<FlowNodeData>) => {
     setNodes(nds => nds.map(n => n.id === id ? { ...n, data: { ...n.data, ...dataUpdate } } : n));
     changeNeededRef.current = true;
@@ -341,6 +370,9 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
                 </button>
                 <button title="Redo (Ctrl+Y)" disabled={!canRedo} onClick={handleRedo}>
                   <RedoIcon /> Redo
+                </button>
+                <button title="Tidy up (auto-layout)" onClick={handleTidyUp}>
+                  Tidy up
                 </button>
               </div>
             </Panel>
