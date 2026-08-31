@@ -199,6 +199,62 @@ class WorkflowValidatorTest {
         assertTrue(hasCode(validate(w), "MISSING_TASK_OUTPUTS"));
     }
 
+    private Workflow humanTaskWithOutputs(List<Map<String, Object>> outputs) {
+        WorkflowNode task = new WorkflowNode("ht", NodeType.HUMAN_TASK, "HT",
+            Map.of("description", "Do it", "outputs", outputs), new Position(200, 0));
+        return new Workflow("w", "W", null, null,
+            List.of(startNode("start"), task, endNode("end")),
+            List.of(edge("e1", "start", "ht"), edge("e2", "ht", "end")));
+    }
+
+    @Test
+    void selectWidgetWithoutOptionsWarns() {
+        Workflow w = humanTaskWithOutputs(List.of(
+            Map.of("name", "choice", "type", "string", "widget", "select")));
+        assertTrue(hasCode(validate(w), "SELECT_MISSING_OPTIONS"));
+    }
+
+    @Test
+    void selectWidgetWithOptionsIsClean() {
+        Workflow w = humanTaskWithOutputs(List.of(Map.of(
+            "name", "choice", "type", "string", "widget", "select",
+            "options", List.of(Map.of("label", "A", "value", "a")))));
+        assertFalse(hasCode(validate(w), "SELECT_MISSING_OPTIONS"));
+    }
+
+    @Test
+    void malformedOptionWithoutValueWarns() {
+        Workflow w = humanTaskWithOutputs(List.of(Map.of(
+            "name", "choice", "type", "string", "widget", "select",
+            "options", List.of(Map.of("label", "A")))));
+        assertTrue(hasCode(validate(w), "MALFORMED_OUTPUT_OPTION"));
+    }
+
+    @Test
+    void widgetOnNonStringTypeWarns() {
+        Workflow w = humanTaskWithOutputs(List.of(
+            Map.of("name", "n", "type", "number", "widget", "textarea")));
+        assertTrue(hasCode(validate(w), "WIDGET_TYPE_MISMATCH"));
+    }
+
+    @Test
+    void defaultValueTypeMismatchWarns() {
+        Workflow w = humanTaskWithOutputs(List.of(
+            Map.of("name", "n", "type", "number", "defaultValue", "not-a-number")));
+        assertTrue(hasCode(validate(w), "DEFAULT_VALUE_TYPE_MISMATCH"));
+    }
+
+    @Test
+    void minimalOutputsProduceNoMetadataWarnings() {
+        Workflow w = humanTaskWithOutputs(List.of(
+            Map.of("name", "decision", "type", "string", "required", true)));
+        List<ValidationProblem> problems = validate(w);
+        assertFalse(hasCode(problems, "SELECT_MISSING_OPTIONS"));
+        assertFalse(hasCode(problems, "MALFORMED_OUTPUT_OPTION"));
+        assertFalse(hasCode(problems, "WIDGET_TYPE_MISMATCH"));
+        assertFalse(hasCode(problems, "DEFAULT_VALUE_TYPE_MISMATCH"));
+    }
+
     @Test
     void missingWaitDuration() {
         WorkflowNode waitNoDuration = new WorkflowNode("w", NodeType.WAIT, "Wait", Map.of(), new Position(0, 0));

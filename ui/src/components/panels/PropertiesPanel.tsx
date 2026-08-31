@@ -14,6 +14,7 @@ import { TimesIcon } from '@patternfly/react-icons';
 import { type FlowNodeData } from '../../utils/conversion.ts';
 import { type EditorSpi } from '../../types/spi.ts';
 import { type ActionTypeDescriptor } from '../../types/spi.ts';
+import { type HumanTaskOutput, type OutputOption, type OutputWidget } from '../../types/workflow.ts';
 import { type ValidationProblem } from '../../types/validation.ts';
 import './PropertiesPanel.css';
 
@@ -82,6 +83,252 @@ function useActionTypes(spi?: EditorSpi): { actionTypes: ActionTypeDescriptor[];
 
   if (!isAsync) return { actionTypes: staticTypes, loading: false };
   return { actionTypes: asyncTypes, loading: asyncTypes === LOADING_SENTINEL };
+}
+
+const OUTPUT_WIDGETS: OutputWidget[] = ['text', 'textarea', 'select'];
+
+/**
+ * Editor for a select widget's `options` list — a repeatable label/value pair editor shown only
+ * when a human-task output uses `widget: 'select'`.
+ */
+function OptionsEditor({ options, onChange }: {
+  options: OutputOption[];
+  onChange: (options: OutputOption[]) => void;
+}) {
+  return (
+    <div className="properties-panel__output-field">
+      <label>Options</label>
+      <div className="properties-panel__options-list">
+        {options.map((opt, i) => (
+          <div key={i} className="properties-panel__option-row">
+            <input
+              type="text"
+              value={opt.label}
+              placeholder="Label"
+              onChange={(e) => onChange(options.map((o, j) => j === i ? { ...o, label: e.target.value } : o))}
+            />
+            <input
+              type="text"
+              value={opt.value}
+              placeholder="Value"
+              onChange={(e) => onChange(options.map((o, j) => j === i ? { ...o, value: e.target.value } : o))}
+            />
+            <button
+              className="properties-panel__match-remove"
+              title="Remove option"
+              onClick={() => onChange(options.filter((_, j) => j !== i))}
+            >
+              &times;
+            </button>
+          </div>
+        ))}
+        <button
+          className="properties-panel__match-add"
+          onClick={() => onChange([...options, { label: '', value: '' }])}
+        >
+          + Add option
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Type-aware editor for a human-task output's `defaultValue`. Renders the control appropriate to the
+ * output's semantic type (and to a `select` widget), storing a value that matches the declared type.
+ */
+function DefaultValueEditor({ output, onChange }: {
+  output: HumanTaskOutput;
+  onChange: (value: unknown) => void;
+}) {
+  const type = output.type ?? 'string';
+  if (type === 'boolean') {
+    return (
+      <label className="properties-panel__input-required">
+        <input
+          type="checkbox"
+          checked={output.defaultValue === true}
+          onChange={(e) => onChange(e.target.checked ? true : undefined)}
+        />
+        Default checked
+      </label>
+    );
+  }
+  if (type === 'number') {
+    return (
+      <input
+        type="number"
+        value={typeof output.defaultValue === 'number' ? output.defaultValue : ''}
+        onChange={(e) => onChange(e.target.value === '' ? undefined : Number(e.target.value))}
+      />
+    );
+  }
+  if (type === 'string' && output.widget === 'select') {
+    return (
+      <select
+        value={typeof output.defaultValue === 'string' ? output.defaultValue : ''}
+        onChange={(e) => onChange(e.target.value || undefined)}
+      >
+        <option value="">(none)</option>
+        {(output.options ?? []).map((o, i) => (
+          <option key={i} value={o.value}>{o.label || o.value}</option>
+        ))}
+      </select>
+    );
+  }
+  if (type === 'object') {
+    const text = typeof output.defaultValue === 'string'
+      ? output.defaultValue
+      : output.defaultValue != null ? JSON.stringify(output.defaultValue) : '';
+    return (
+      <textarea
+        rows={2}
+        value={text}
+        placeholder='{ "key": "value" }'
+        onChange={(e) => {
+          const raw = e.target.value;
+          if (raw === '') { onChange(undefined); return; }
+          try { onChange(JSON.parse(raw)); } catch { onChange(raw); }
+        }}
+      />
+    );
+  }
+  return (
+    <input
+      type="text"
+      value={typeof output.defaultValue === 'string' ? output.defaultValue : ''}
+      onChange={(e) => onChange(e.target.value || undefined)}
+    />
+  );
+}
+
+/**
+ * Editor for a human-task node's `outputs` — the form fields a person fills in to complete the task.
+ * The minimal case (name / type / required) stays inline; label, description, widget, select options
+ * and default value live behind a per-output "Advanced" toggle (progressive disclosure) so simple
+ * outputs stay uncluttered.
+ */
+function HumanTaskOutputsEditor({ outputs, onChange }: {
+  outputs: HumanTaskOutput[];
+  onChange: (outputs: HumanTaskOutput[]) => void;
+}) {
+  const [expanded, setExpanded] = useState<Record<number, boolean>>({});
+
+  const update = (i: number, patch: Partial<HumanTaskOutput>) =>
+    onChange(outputs.map((o, j) => (j === i ? { ...o, ...patch } : o)));
+
+  return (
+    <div className="properties-panel__inputs-list">
+      {outputs.map((output, i) => {
+        const type = output.type ?? 'string';
+        const isOpen = !!expanded[i];
+        return (
+          <div key={i} className="properties-panel__input-item">
+            <div className="properties-panel__input-row">
+              <input
+                type="text"
+                value={output.name}
+                placeholder="Name"
+                onChange={(e) => update(i, { name: e.target.value })}
+              />
+              <select
+                value={type}
+                onChange={(e) => {
+                  const newType = e.target.value as HumanTaskOutput['type'];
+                  const patch: Partial<HumanTaskOutput> = { type: newType };
+                  if (newType !== 'string') {
+                    // widget/options only apply to string outputs; clear stale values
+                    patch.widget = undefined;
+                    patch.options = undefined;
+                  }
+                  update(i, patch);
+                }}
+              >
+                <option value="string">string</option>
+                <option value="number">number</option>
+                <option value="boolean">boolean</option>
+                <option value="object">object</option>
+              </select>
+              <button
+                className="properties-panel__match-remove"
+                title="Remove output"
+                onClick={() => onChange(outputs.filter((_, j) => j !== i))}
+              >
+                &times;
+              </button>
+            </div>
+            <label className="properties-panel__input-required">
+              <input
+                type="checkbox"
+                checked={!!output.required}
+                onChange={(e) => update(i, { required: e.target.checked })}
+              />
+              Required
+            </label>
+            <button
+              type="button"
+              className="properties-panel__output-advanced-toggle"
+              onClick={() => setExpanded((prev) => ({ ...prev, [i]: !prev[i] }))}
+            >
+              {isOpen ? '▾' : '▸'} Advanced
+            </button>
+            {isOpen && (
+              <div className="properties-panel__output-advanced">
+                <div className="properties-panel__output-field">
+                  <label>Label</label>
+                  <input
+                    type="text"
+                    value={output.label ?? ''}
+                    placeholder={output.name || 'Field label'}
+                    onChange={(e) => update(i, { label: e.target.value || undefined })}
+                  />
+                </div>
+                <div className="properties-panel__output-field">
+                  <label>Description</label>
+                  <textarea
+                    rows={2}
+                    value={output.description ?? ''}
+                    placeholder="Help text shown under the field"
+                    onChange={(e) => update(i, { description: e.target.value || undefined })}
+                  />
+                </div>
+                {type === 'string' && (
+                  <div className="properties-panel__output-field">
+                    <label>Widget</label>
+                    <select
+                      value={output.widget ?? 'text'}
+                      onChange={(e) => update(i, { widget: e.target.value as OutputWidget })}
+                    >
+                      {OUTPUT_WIDGETS.map((w) => <option key={w} value={w}>{w}</option>)}
+                    </select>
+                  </div>
+                )}
+                {type === 'string' && output.widget === 'select' && (
+                  <OptionsEditor
+                    options={output.options ?? []}
+                    onChange={(options) => update(i, { options })}
+                  />
+                )}
+                <div className="properties-panel__output-field">
+                  <label>Default value</label>
+                  <DefaultValueEditor
+                    output={output}
+                    onChange={(defaultValue) => update(i, { defaultValue })}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+      <button
+        className="properties-panel__match-add"
+        onClick={() => onChange([...outputs, { name: '', type: 'string', required: true }])}
+      >
+        + Add output
+      </button>
+    </div>
+  );
 }
 
 export function PropertiesPanel({ selectedNode, selectedEdge, nodeProblems = [], onNodeChange, onNodeIdChange, onEdgeChange, spi }: PropertiesPanelProps) {
@@ -270,78 +517,12 @@ export function PropertiesPanel({ selectedNode, selectedEdge, nodeProblems = [],
             </div>
             <div className="properties-panel__field">
               <label>Outputs (form fields for completion)</label>
-              <div className="properties-panel__inputs-list">
-                {((selectedNode.data.config.outputs as { name: string; type: string; required: boolean }[]) || []).map((output, i) => (
-                  <div key={i} className="properties-panel__input-item">
-                    <div className="properties-panel__input-row">
-                      <input
-                        type="text"
-                        value={output.name}
-                        placeholder="Name"
-                        onChange={(e) => {
-                          const outputs = [...((selectedNode.data.config.outputs as any[]) || [])];
-                          outputs[i] = { ...outputs[i], name: e.target.value };
-                          onNodeChange(selectedNode.id, {
-                            config: { ...selectedNode.data.config, outputs },
-                          });
-                        }}
-                      />
-                      <select
-                        value={output.type}
-                        onChange={(e) => {
-                          const outputs = [...((selectedNode.data.config.outputs as any[]) || [])];
-                          outputs[i] = { ...outputs[i], type: e.target.value };
-                          onNodeChange(selectedNode.id, {
-                            config: { ...selectedNode.data.config, outputs },
-                          });
-                        }}
-                      >
-                        <option value="string">string</option>
-                        <option value="number">number</option>
-                        <option value="boolean">boolean</option>
-                        <option value="object">object</option>
-                      </select>
-                      <button
-                        className="properties-panel__match-remove"
-                        title="Remove output"
-                        onClick={() => {
-                          const outputs = ((selectedNode.data.config.outputs as any[]) || []).filter((_, j) => j !== i);
-                          onNodeChange(selectedNode.id, {
-                            config: { ...selectedNode.data.config, outputs },
-                          });
-                        }}
-                      >
-                        &times;
-                      </button>
-                    </div>
-                    <label className="properties-panel__input-required">
-                      <input
-                        type="checkbox"
-                        checked={output.required}
-                        onChange={(e) => {
-                          const outputs = [...((selectedNode.data.config.outputs as any[]) || [])];
-                          outputs[i] = { ...outputs[i], required: e.target.checked };
-                          onNodeChange(selectedNode.id, {
-                            config: { ...selectedNode.data.config, outputs },
-                          });
-                        }}
-                      />
-                      Required
-                    </label>
-                  </div>
-                ))}
-                <button
-                  className="properties-panel__match-add"
-                  onClick={() => {
-                    const outputs = [...((selectedNode.data.config.outputs as any[]) || []), { name: '', type: 'string', required: true }];
-                    onNodeChange(selectedNode.id, {
-                      config: { ...selectedNode.data.config, outputs },
-                    });
-                  }}
-                >
-                  + Add output
-                </button>
-              </div>
+              <HumanTaskOutputsEditor
+                outputs={(selectedNode.data.config.outputs as HumanTaskOutput[]) || []}
+                onChange={(outputs) => onNodeChange(selectedNode.id, {
+                  config: { ...selectedNode.data.config, outputs },
+                })}
+              />
             </div>
           </>
         )}

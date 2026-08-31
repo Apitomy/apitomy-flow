@@ -312,6 +312,7 @@ function validateSemantics(workflow: Workflow, problems: ValidationProblem[]) {
       problems.push(problem('warning', 'MISSING_TASK_OUTPUTS', 'Human task node has no outputs defined', node.id));
     } else if (Array.isArray(outputsVal)) {
       validateOutputNames(outputsVal, node.id, problems);
+      validateHumanTaskOutputMetadata(outputsVal, node.id, problems);
     }
   }
 
@@ -356,6 +357,68 @@ function validateSemantics(workflow: Workflow, problems: ValidationProblem[]) {
   }
 
   detectAutomatedCycles(workflow, problems);
+}
+
+/**
+ * Validates the optional presentation metadata carried by human-task outputs. Mirrors the engine's
+ * WorkflowValidator; all problems are warnings and the metadata is advisory. Applies only to
+ * human-task nodes so action-node outputs are unaffected.
+ */
+function validateHumanTaskOutputMetadata(outputDefs: unknown[], nodeId: string, problems: ValidationProblem[]) {
+  for (const defObj of outputDefs) {
+    if (typeof defObj !== 'object' || defObj === null) {
+      continue;
+    }
+    const def = defObj as Record<string, unknown>;
+    const name = def.name !== undefined && def.name !== null ? String(def.name) : '(unnamed)';
+    const type = typeof def.type === 'string' && def.type.trim() !== '' ? def.type : 'string';
+    const widget = typeof def.widget === 'string' && def.widget.trim() !== '' ? def.widget : undefined;
+
+    // widget only meaningfully applies to string-typed outputs
+    if (widget !== undefined && type !== 'string') {
+      problems.push(problem('warning', 'WIDGET_TYPE_MISMATCH',
+        `Output "${name}" declares widget "${widget}" but its type is "${type}"; widget applies to string outputs`, nodeId));
+    }
+
+    // select widgets need options
+    if (widget === 'select') {
+      const optionsVal = def.options;
+      if (!Array.isArray(optionsVal) || optionsVal.length === 0) {
+        problems.push(problem('warning', 'SELECT_MISSING_OPTIONS',
+          `Output "${name}" uses widget "select" but declares no options`, nodeId));
+      }
+    }
+
+    // options entries must carry a value
+    if (Array.isArray(def.options)) {
+      for (const optObj of def.options) {
+        if (typeof optObj === 'object' && optObj !== null) {
+          const value = (optObj as Record<string, unknown>).value;
+          if (value === undefined || value === null || (typeof value === 'string' && value.trim() === '')) {
+            problems.push(problem('warning', 'MALFORMED_OUTPUT_OPTION',
+              `Output "${name}" has a select option with no value`, nodeId));
+          }
+        }
+      }
+    }
+
+    // defaultValue should match the declared semantic type
+    if (def.defaultValue !== undefined && def.defaultValue !== null
+        && !valueMatchesType(def.defaultValue, type)) {
+      problems.push(problem('warning', 'DEFAULT_VALUE_TYPE_MISMATCH',
+        `Output "${name}" default value does not match declared type "${type}"`, nodeId));
+    }
+  }
+}
+
+/** Tests whether a value is compatible with a declared semantic output type. */
+function valueMatchesType(value: unknown, type: string): boolean {
+  switch (type) {
+    case 'number': return typeof value === 'number';
+    case 'boolean': return typeof value === 'boolean';
+    case 'object': return typeof value === 'object' && value !== null;
+    default: return typeof value === 'string';
+  }
 }
 
 function validateOutputNames(outputDefs: unknown[], nodeId: string, problems: ValidationProblem[]) {

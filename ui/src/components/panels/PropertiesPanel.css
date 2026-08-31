@@ -167,6 +167,55 @@
   font-size: 12px;
   color: var(--flow-text-subtle, #6a6e73);
 }
+.properties-panel__output-advanced-toggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px 0;
+  margin-top: 4px;
+  color: var(--flow-brand, #06c);
+}
+.properties-panel__output-advanced {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--flow-border, #d2d2d2);
+}
+.properties-panel__output-field label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.properties-panel__output-field input[type="text"],
+.properties-panel__output-field input[type="number"],
+.properties-panel__output-field textarea,
+.properties-panel__output-field > select {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--flow-border, #d2d2d2);
+  border-radius: 4px;
+  font-size: 13px;
+  background: var(--flow-input-bg, #fff);
+  color: var(--flow-input-text, inherit);
+}
+.properties-panel__options-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.properties-panel__option-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.properties-panel__option-row input[type="text"] {
+  flex: 1;
+  min-width: 0;
+}
 .properties-panel__field-hint {
   font-size: 12px;
   color: var(--flow-text-subtle, #6a6e73);

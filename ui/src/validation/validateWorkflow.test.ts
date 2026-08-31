@@ -552,4 +552,56 @@ describe('validateWorkflow', () => {
       expect(hasProblem(validateWorkflow(w), 'DUPLICATE_OUTPUT_NAME')).toBe(true);
     });
   });
+
+  describe('human-task output metadata', () => {
+    function humanTask(outputs: any[]): Workflow {
+      return workflow(
+        [
+          node('start', 'start', { inputs: [{ name: 'x', type: 'string', required: true }] }),
+          node('t', 'human-task', { description: 'Do it', outputs }),
+          node('end', 'end'),
+        ],
+        [edge('e1', 'start', 't'), edge('e2', 't', 'end')],
+      );
+    }
+
+    it('SELECT_MISSING_OPTIONS when select widget has no options', () => {
+      const w = humanTask([{ name: 'choice', type: 'string', widget: 'select' }]);
+      expect(hasProblem(validateWorkflow(w), 'SELECT_MISSING_OPTIONS')).toBe(true);
+    });
+
+    it('no SELECT_MISSING_OPTIONS when select widget has options', () => {
+      const w = humanTask([{ name: 'choice', type: 'string', widget: 'select', options: [{ label: 'A', value: 'a' }] }]);
+      expect(hasProblem(validateWorkflow(w), 'SELECT_MISSING_OPTIONS')).toBe(false);
+    });
+
+    it('MALFORMED_OUTPUT_OPTION when an option has no value', () => {
+      const w = humanTask([{ name: 'choice', type: 'string', widget: 'select', options: [{ label: 'A' }] }]);
+      expect(hasProblem(validateWorkflow(w), 'MALFORMED_OUTPUT_OPTION')).toBe(true);
+    });
+
+    it('WIDGET_TYPE_MISMATCH when widget set on a non-string type', () => {
+      const w = humanTask([{ name: 'n', type: 'number', widget: 'select', options: [{ label: 'A', value: 'a' }] }]);
+      expect(hasProblem(validateWorkflow(w), 'WIDGET_TYPE_MISMATCH')).toBe(true);
+    });
+
+    it('DEFAULT_VALUE_TYPE_MISMATCH when default does not match type', () => {
+      const w = humanTask([{ name: 'n', type: 'number', defaultValue: 'not-a-number' }]);
+      expect(hasProblem(validateWorkflow(w), 'DEFAULT_VALUE_TYPE_MISMATCH')).toBe(true);
+    });
+
+    it('no DEFAULT_VALUE_TYPE_MISMATCH when default matches type', () => {
+      const w = humanTask([{ name: 'n', type: 'number', defaultValue: 42 }]);
+      expect(hasProblem(validateWorkflow(w), 'DEFAULT_VALUE_TYPE_MISMATCH')).toBe(false);
+    });
+
+    it('minimal output (name/type/required only) produces no metadata warnings', () => {
+      const w = humanTask([{ name: 'decision', type: 'string', required: true }]);
+      const problems = validateWorkflow(w);
+      expect(hasProblem(problems, 'SELECT_MISSING_OPTIONS')).toBe(false);
+      expect(hasProblem(problems, 'MALFORMED_OUTPUT_OPTION')).toBe(false);
+      expect(hasProblem(problems, 'WIDGET_TYPE_MISMATCH')).toBe(false);
+      expect(hasProblem(problems, 'DEFAULT_VALUE_TYPE_MISMATCH')).toBe(false);
+    });
+  });
 });
