@@ -58,12 +58,12 @@ Null or blank conditions evaluate to `true` (unconditional edges always match).
 
 ### Validation
 
-The `WorkflowValidator` runs 27 rules across four categories:
+The `WorkflowValidator` runs 51 rules across four categories:
 
-1. **Structural** (10 rules) — graph integrity (start/end nodes, edge references, duplicates)
+1. **Structural** (26 rules) — graph integrity (start/end nodes, edge references, duplicates)
 2. **Connectivity** (5 rules) — reachability, dead ends, isolated nodes
-3. **Edge/Condition** (4 rules) — default edges, duplicate priorities, EL syntax
-4. **Semantic** (8 rules) — event receivers, action types, input schemas, wait durations, automated cycles
+3. **Edge/Condition** (7 rules) — default edges, duplicate priorities, EL syntax
+4. **Semantic** (13 rules) — event receivers, action types, input schemas, wait durations, automated cycles
 
 `startWorkflow` runs the validator automatically and rejects definitions with ERROR-level problems.
 
@@ -76,7 +76,7 @@ WorkflowEditor (ReactFlowProvider wrapper)
   └─ WorkflowEditorInner
        ├─ NodePalette (drag source for new nodes)
        ├─ ReactFlow canvas
-       │    ├─ Custom node components (5 types)
+       │    ├─ Custom node components (6 types)
        │    └─ ConditionalEdge component
        ├─ PropertiesPanel (node/edge config form)
        └─ ProblemsPanel (validation results)
@@ -100,4 +100,4 @@ Workflow (prop) → toReactFlowNodes/Edges → React Flow state
 
 ### TypeScript Validator
 
-A port of the Java `WorkflowValidator` implementing 23 of 24 rules (skips `INVALID_CONDITION` which requires Jakarta EL). Runs synchronously on every edit via `useMemo`.
+A port of the Java `WorkflowValidator` implementing 49 of the 51 rules — it omits only `MISSING_EDGE_SOURCE` and `MISSING_EDGE_TARGET`, which the editor UI cannot produce. `INVALID_CONDITION` is included, using a lightweight balanced-token syntax check rather than a full Jakarta EL parse. Runs synchronously on every edit via `useMemo`. Host applications can contribute additional problems asynchronously through the editor SPI (see [Visual Editor](../user-guide/visual-editor.md)).

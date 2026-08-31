@@ -6,12 +6,12 @@ Apitomy Flow is a standalone library designed to integrate into [Apitomy](https:
 
 ## Key Features
 
-- **Directed graph workflows** with 5 node types and conditional edge routing
+- **Directed graph workflows** with 6 node types and conditional edge routing
 - **Stateless engine** — takes state in, returns state out; no persistence opinions
 - **Human-in-the-loop** tasks and external event correlation
 - **Visual editor** with drag-and-drop node placement and real-time validation
 - **Read-only viewer** for monitoring workflow instance progress
-- **24 validation rules** catch structural and semantic problems at design time
+- **51 validation rules** catch structural and semantic problems at design time
 
 ## Two Components
 
