@@ -105,6 +105,35 @@ export const triageInstance: WorkflowInstance = {
   updatedOn: '2024-01-01T00:00:05Z',
 };
 
+/**
+ * A completed run of {@link cveTriage} that took the "Affected" path all the way
+ * through to the "Mitigated" End node. Useful for previewing how the viewer
+ * renders a finished workflow (including the inbound edge to the End node).
+ */
+export const completedTriageInstance: WorkflowInstance = {
+  id: 'inst-2',
+  workflowId: 'cve-triage',
+  currentNodeId: 'end-mitigated',
+  status: 'completed',
+  context: {
+    cveId: 'CVE-2024-1234',
+    severity: 'high',
+    affectedVersions: '1.0.0 - 1.3.2',
+    affected: true,
+    triageNotes: 'Confirmed exploitable in production; prioritize patch.',
+    mitigationPlan: 'Upgrade to 1.3.3 and rotate affected credentials.',
+  },
+  history: [
+    { nodeId: 'start', nodeName: 'Start', enteredOn: '2024-01-01T00:00:00Z', completedOn: '2024-01-01T00:00:00Z' },
+    { nodeId: 'analyze', nodeName: 'Analyze CVE', edgeId: 'e1', enteredOn: '2024-01-01T00:00:01Z', completedOn: '2024-01-01T00:00:05Z', output: { severity: 'high', affectedVersions: '1.0.0 - 1.3.2' } },
+    { nodeId: 'triage', nodeName: 'Triage Decision', edgeId: 'e2', enteredOn: '2024-01-01T00:00:05Z', completedOn: '2024-01-01T00:02:00Z', output: { affected: true, triageNotes: 'Confirmed exploitable in production; prioritize patch.' } },
+    { nodeId: 'mitigate', nodeName: 'Plan Mitigation', edgeId: 'e3', edgeCondition: 'context.affected == true', enteredOn: '2024-01-01T00:02:00Z', completedOn: '2024-01-01T00:02:30Z', output: { mitigationPlan: 'Upgrade to 1.3.3 and rotate affected credentials.' } },
+    { nodeId: 'end-mitigated', nodeName: 'Mitigated', edgeId: 'e5', enteredOn: '2024-01-01T00:02:30Z', completedOn: '2024-01-01T00:02:30Z' },
+  ],
+  createdOn: '2024-01-01T00:00:00Z',
+  updatedOn: '2024-01-01T00:02:30Z',
+};
+
 export const emptyWorkflow: Workflow = {
   id: 'new',
   name: 'New Workflow',

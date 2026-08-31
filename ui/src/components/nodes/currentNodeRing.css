@@ -1,0 +1,37 @@
+/*
+ * Marching-ants ring for the current/waiting node. The SVG is stretched 4px
+ * beyond React Flow's node wrapper (which is the positioning context), and the
+ * dashed rounded rect is animated by moving its stroke-dashoffset — the same
+ * mechanism the animated edges use.
+ */
+.flow-node-ring {
+    position: absolute;
+    /* <svg> is a replaced element, so it won't stretch to `inset`; size it
+       explicitly to the node wrapper plus the 4px offset on every side. */
+    left: -4px;
+    top: -4px;
+    width: calc(100% + 8px);
+    height: calc(100% + 8px);
+    overflow: visible;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.flow-node-ring__path {
+    fill: none;
+    stroke: var(--xy-edge-stroke, #b1b1b7);
+    stroke-width: 2;
+    stroke-dasharray: 6 4;
+    /* Keep dashes an even pixel size regardless of node dimensions. */
+    vector-effect: non-scaling-stroke;
+    animation: flow-node-march 0.5s linear infinite;
+}
+
+/* dasharray sums to 10, so a -10 offset is one seamless loop. */
+@keyframes flow-node-march {
+    to { stroke-dashoffset: -10; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .flow-node-ring__path { animation: none; }
+}

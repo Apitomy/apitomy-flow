@@ -46,6 +46,11 @@
 .dev-app--dark .dev-app__tabs button.active {
   border-bottom-color: #4d94ff;
 }
+.dev-app__toggles {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
 .dev-app__theme-toggle {
   display: flex;
   align-items: center;

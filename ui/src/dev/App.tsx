@@ -6,7 +6,7 @@ import '@xyflow/react/dist/style.css';
 import { FileAltIcon, SearchIcon, ExternalLinkAltIcon } from '@patternfly/react-icons';
 import { WorkflowEditor } from '../components/WorkflowEditor.tsx';
 import { WorkflowViewer, type WorkflowViewerNodeMenuItem } from '../components/WorkflowViewer.tsx';
-import { cveTriage, triageInstance } from './sampleWorkflows.ts';
+import { cveTriage, triageInstance, completedTriageInstance } from './sampleWorkflows.ts';
 import { type Workflow } from '../types/workflow.ts';
 import { type FlowTheme } from '../components/WorkflowEditor.tsx';
 import { type EditorSpi } from '../types/spi.ts';
@@ -117,6 +117,7 @@ function App() {
   const [tab, setTab] = useState<'editor' | 'viewer' | 'json'>('editor');
   const [workflow, setWorkflow] = useState<Workflow>(cveTriage);
   const [theme, setTheme] = useState<FlowTheme>('light');
+  const [completed, setCompleted] = useState(false);
 
   return (
     <div className={`dev-app ${theme === 'dark' ? 'dev-app--dark' : ''}`}>
@@ -132,14 +133,26 @@ function App() {
             JSON
           </button>
         </div>
-        <label className="dev-app__theme-toggle">
-          <input
-            type="checkbox"
-            checked={theme === 'dark'}
-            onChange={(e) => setTheme(e.target.checked ? 'dark' : 'light')}
-          />
-          Dark mode
-        </label>
+        <div className="dev-app__toggles">
+          {tab === 'viewer' && (
+            <label className="dev-app__theme-toggle">
+              <input
+                type="checkbox"
+                checked={completed}
+                onChange={(e) => setCompleted(e.target.checked)}
+              />
+              Completed run
+            </label>
+          )}
+          <label className="dev-app__theme-toggle">
+            <input
+              type="checkbox"
+              checked={theme === 'dark'}
+              onChange={(e) => setTheme(e.target.checked ? 'dark' : 'light')}
+            />
+            Dark mode
+          </label>
+        </div>
       </div>
       <div className="dev-app__content">
         {tab === 'editor' && (
@@ -148,7 +161,7 @@ function App() {
         {tab === 'viewer' && (
           <WorkflowViewer
             workflow={cveTriage}
-            instance={triageInstance}
+            instance={completed ? completedTriageInstance : triageInstance}
             theme={theme}
             nodeContextMenuItems={nodeContextMenuItems}
           />

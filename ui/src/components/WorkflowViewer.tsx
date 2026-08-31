@@ -74,6 +74,7 @@ function WorkflowViewerInner({ workflow, instance, theme = 'light', nodeContextM
       }
       return {
         ...node,
+        data: { ...node.data, isCurrent: isCurrent && !isTerminal },
         className,
         draggable: false,
       };
@@ -91,10 +92,10 @@ function WorkflowViewerInner({ workflow, instance, theme = 'light', nodeContextM
           stroke: isVisited ? 'var(--flow-status-success, #3e8635)' : undefined,
           opacity: isVisited ? 1 : 0.3,
         },
-        animated: edge.id === instance.history[instance.history.length - 1]?.edgeId,
+        animated: !isTerminal && edge.id === instance.history[instance.history.length - 1]?.edgeId,
       };
     });
-  }, [workflow.edges, visitedEdgeIds, instance.history]);
+  }, [workflow.edges, visitedEdgeIds, instance.history, isTerminal]);
 
   const [collapsed, setCollapsed] = useState(false);
   const [panelWidth, setPanelWidth] = useState(320);

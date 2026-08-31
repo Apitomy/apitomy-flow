@@ -5,12 +5,13 @@ import { ActionNode } from './ActionNode.tsx';
 import { HumanTaskNode } from './HumanTaskNode.tsx';
 import { ReceiveEventNode } from './ReceiveEventNode.tsx';
 import { WaitNode } from './WaitNode.tsx';
+import { withCurrentRing } from './currentNodeRing.tsx';
 
 export const nodeTypes: NodeTypes = {
-  'start': StartNode,
-  'end': EndNode,
-  'action': ActionNode,
-  'human-task': HumanTaskNode,
-  'receive-event': ReceiveEventNode,
-  'wait': WaitNode,
+  'start': withCurrentRing(StartNode),
+  'end': withCurrentRing(EndNode),
+  'action': withCurrentRing(ActionNode),
+  'human-task': withCurrentRing(HumanTaskNode),
+  'receive-event': withCurrentRing(ReceiveEventNode),
+  'wait': withCurrentRing(WaitNode),
 };
