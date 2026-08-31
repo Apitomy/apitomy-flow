@@ -5,11 +5,9 @@ import './HumanTaskNode.css';
 
 export function HumanTaskNode({ data, selected }: NodeProps) {
   const nodeData = data as FlowNodeData;
-  const validationClass = nodeData.validationSeverity === 'error' ? 'has-error'
-    : nodeData.validationSeverity === 'warning' ? 'has-warning' : '';
 
   return (
-    <div className={`flow-node-human-task ${validationClass} ${selected ? 'selected' : ''}`}>
+    <div className={`flow-node-human-task ${selected ? 'selected' : ''}`}>
       <Handle type="target" position={Position.Left} />
       <UserIcon />
       <span>{nodeData.name}</span>

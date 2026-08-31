@@ -5,11 +5,9 @@ import './ReceiveEventNode.css';
 
 export function ReceiveEventNode({ data, selected }: NodeProps) {
   const nodeData = data as FlowNodeData;
-  const validationClass = nodeData.validationSeverity === 'error' ? 'has-error'
-    : nodeData.validationSeverity === 'warning' ? 'has-warning' : '';
 
   return (
-    <div className={`flow-node-receive-event ${validationClass} ${selected ? 'selected' : ''}`}>
+    <div className={`flow-node-receive-event ${selected ? 'selected' : ''}`}>
       <Handle type="target" position={Position.Left} />
       <EnvelopeIcon />
       <span>{nodeData.name}</span>

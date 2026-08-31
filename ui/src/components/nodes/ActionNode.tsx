@@ -5,11 +5,9 @@ import './ActionNode.css';
 
 export function ActionNode({ data, selected }: NodeProps) {
   const nodeData = data as FlowNodeData;
-  const validationClass = nodeData.validationSeverity === 'error' ? 'has-error'
-    : nodeData.validationSeverity === 'warning' ? 'has-warning' : '';
 
   return (
-    <div className={`flow-node-action ${validationClass} ${selected ? 'selected' : ''}`}>
+    <div className={`flow-node-action ${selected ? 'selected' : ''}`}>
       <Handle type="target" position={Position.Left} />
       <PlayIcon />
       <span>{nodeData.name}</span>

@@ -11,6 +11,4 @@
   min-width: 120px;
 }
 .flow-node-human-task:hover { box-shadow: 0 2px 8px var(--flow-shadow, rgba(0, 0, 0, 0.12)); filter: brightness(0.97); }
-.flow-node-human-task.has-error { border-color: var(--flow-status-danger, #c9190b); }
-.flow-node-human-task.has-warning { border-color: var(--flow-status-warning, #f0ab00); }
 .flow-node-human-task.selected { box-shadow: 0 0 0 2px var(--flow-brand, #06c); }

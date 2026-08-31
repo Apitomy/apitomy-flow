@@ -11,6 +11,4 @@
   min-width: 120px;
 }
 .flow-node-wait:hover { box-shadow: 0 2px 8px var(--flow-shadow, rgba(0, 0, 0, 0.12)); filter: brightness(0.97); }
-.flow-node-wait.has-error { border-color: var(--flow-status-danger, #c9190b); }
-.flow-node-wait.has-warning { border-color: var(--flow-status-warning, #f0ab00); }
 .flow-node-wait.selected { box-shadow: 0 0 0 2px var(--flow-brand, #06c); }

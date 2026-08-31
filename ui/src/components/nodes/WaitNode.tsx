@@ -5,11 +5,9 @@ import './WaitNode.css';
 
 export function WaitNode({ data, selected }: NodeProps) {
   const nodeData = data as FlowNodeData;
-  const validationClass = nodeData.validationSeverity === 'error' ? 'has-error'
-    : nodeData.validationSeverity === 'warning' ? 'has-warning' : '';
 
   return (
-    <div className={`flow-node-wait ${validationClass} ${selected ? 'selected' : ''}`}>
+    <div className={`flow-node-wait ${selected ? 'selected' : ''}`}>
       <Handle type="target" position={Position.Left} />
       <OutlinedClockIcon />
       <span>{nodeData.name}</span>

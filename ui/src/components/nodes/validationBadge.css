@@ -1,0 +1,27 @@
+/*
+ * Corner validation badge. The node wrapper (React Flow's node element) is the
+ * positioning context; the badge is pulled up and left so it straddles the
+ * top-left corner and sits outside the node box, above other overlays.
+ */
+.flow-node-badge {
+    position: absolute;
+    top: -8px;
+    left: -8px;
+    z-index: 2;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* White circular backing so the icon reads against any node/canvas color. */
+    background: #fff;
+    border-radius: 50%;
+    line-height: 0;
+}
+
+.flow-node-badge svg {
+    width: 16px;
+    height: 16px;
+}
+
+.flow-node-badge--error svg { color: var(--flow-status-danger, #c9190b); }
+.flow-node-badge--warning svg { color: var(--flow-status-warning, #f0ab00); }
