@@ -22,6 +22,7 @@ import { type EditorSpi } from '../types/spi.ts';
 import { type FlowNodeData, toReactFlowNodes, toReactFlowEdges, toWorkflow } from '../utils/conversion.ts';
 import { generateNodeId, generateEdgeId } from '../utils/id.ts';
 import { validateWorkflow } from '../validation/validateWorkflow.ts';
+import { useHostValidation } from '../hooks/useHostValidation.ts';
 import { nodeTypes } from './nodes/nodeTypes.ts';
 import { edgeTypes } from './edges/edgeTypes.ts';
 import { NodePalette } from './panels/NodePalette.tsx';
@@ -37,7 +38,6 @@ export type FlowTheme = 'light' | 'dark';
 export interface WorkflowEditorProps {
   workflow: Workflow;
   onChange: (workflow: Workflow) => void;
-  validationProblems?: ValidationProblem[];
   onValidationChange?: (problems: ValidationProblem[]) => void;
   theme?: FlowTheme;
   spi?: EditorSpi;
@@ -102,9 +102,16 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
     [workflow, nodes, edges],
   );
 
-  const validationProblems = useMemo(
+  const builtInProblems = useMemo(
     () => validateWorkflow(currentWorkflow),
     [currentWorkflow],
+  );
+
+  const hostProblems = useHostValidation(currentWorkflow, spi?.validate);
+
+  const validationProblems = useMemo(
+    () => [...builtInProblems, ...hostProblems],
+    [builtInProblems, hostProblems],
   );
 
   useEffect(() => {
