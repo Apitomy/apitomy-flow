@@ -10,6 +10,7 @@ import { cveTriage, triageInstance, completedTriageInstance } from './sampleWork
 import { type Workflow } from '../types/workflow.ts';
 import { type FlowTheme } from '../components/WorkflowEditor.tsx';
 import { type EditorSpi } from '../types/spi.ts';
+import { type ValidationProblem } from '../types/validation.ts';
 import './App.css';
 
 const spi: EditorSpi = {
@@ -76,6 +77,38 @@ const spi: EditorSpi = {
       ],
     },
   ],
+  validate: async (wf): Promise<ValidationProblem[]> => {
+    const problems: ValidationProblem[] = [];
+    const known = new Set(['send-email', 'http-request', 'lookup-cve', 'create-jira-ticket']);
+
+    // Synchronous host rule: action type must be in the host's catalog.
+    for (const node of wf.nodes) {
+      if (node.type === 'action') {
+        const actionType = node.config.actionType;
+        if (typeof actionType === 'string' && actionType.trim() !== '' && !known.has(actionType)) {
+          problems.push({
+            severity: 'error',
+            code: 'HOST_UNKNOWN_ACTION_TYPE',
+            message: `Action type "${actionType}" is not in the host catalog`,
+            nodeId: node.id,
+          });
+        }
+      }
+    }
+
+    // Simulated backend latency to demonstrate the debounced/async path.
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    if (wf.name && wf.name.length > 40) {
+      problems.push({
+        severity: 'warning',
+        code: 'HOST_NAME_TOO_LONG',
+        message: 'Workflow name exceeds the host limit of 40 characters',
+      });
+    }
+
+    return problems;
+  },
 };
 
 /**

@@ -48,7 +48,7 @@ state management, type safety, cross-component consistency, and test coverage.
 | 20 | Open | Engine | `WorkflowEngine.java:547-558` | **Non-string input values mangled through `String.valueOf`.** A Map value produces an EL syntax error. |
 | 21 | Open | Engine | `WorkflowEngine.java:466-488` | **Condition evaluation failure loses error context.** Error handler receives no info about which expression failed. |
 | 22 | Open | Engine | `WorkflowValidator.java:458-476` | **Cycle detection only reports first automated cycle.** Multiple independent cycles are silently ignored. |
-| 23 | Open | UI | `WorkflowEditor.tsx:40,46` | **`validationProblems` prop silently ignored.** Always recomputes internally; consumers get no feedback that their prop is discarded. |
+| 23 | Fixed | UI | `WorkflowEditor.tsx:40,46` | **`validationProblems` prop silently ignored.** Always recomputes internally; consumers get no feedback that their prop is discarded. |
 | 24 | Fixed (PR #31) | UI | `validateWorkflow.ts:253-261` | **`DUPLICATE_EDGE_PRIORITY` false positive with default edges.** Default edges (priority 0) trigger false warnings against conditional edges with priority 0. |
 | 25 | Fixed (PR #31) | UI | `validateWorkflow.ts:289` | **`MISSING_TASK_DESCRIPTION` doesn't trim whitespace.** Whitespace-only description accepted as valid, inconsistent with all other string checks. |
 | 26 | Open | UI | `WorkflowViewer.tsx:64-67` | **`selectedNodeHistory` returns only first visit.** In looping workflows, always shows first visit's timestamps/outputs, never most recent. |
