@@ -130,6 +130,9 @@ Host problems use the same shape as built-in ones (`severity`, `code`, `message`
 `nodeId` / `edgeId`). Namespace your `code` values (for example, prefix them with `HOST_`) to
 keep them distinguishable from the built-in codes.
 
+Pass a stable `validate` reference — wrap it in `useCallback` (or define it outside the component)
+— so the editor doesn't rebuild its debounced validator and restart the debounce on every render.
+
 ## Styling
 
 The editor requires these CSS imports in your application:
