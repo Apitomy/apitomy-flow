@@ -15,15 +15,19 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    /* White circular backing so the icon reads against any node/canvas color. */
-    background: #fff;
-    border-radius: 50%;
     line-height: 0;
 }
 
 .flow-node-badge svg {
     width: 16px;
     height: 16px;
+    /* Theme-colored outline that hugs the icon's own shape (circle or triangle),
+       so it reads against any node/canvas color in both light and dark mode.
+       Stacked to thicken the halo without a mismatched filled backing. */
+    filter:
+        drop-shadow(0 0 1px var(--flow-bg-primary, #fff))
+        drop-shadow(0 0 1px var(--flow-bg-primary, #fff))
+        drop-shadow(0 0 1px var(--flow-bg-primary, #fff));
 }
 
 .flow-node-badge--error svg { color: var(--flow-status-danger, #c9190b); }
