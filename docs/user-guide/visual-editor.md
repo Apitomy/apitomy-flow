@@ -103,7 +103,7 @@ The editor runs the TypeScript workflow validator on every change. Validation fe
 
 **Problems panel:** A collapsible panel at the bottom lists all validation problems grouped by severity (errors first). Click a problem to select and center the affected node or edge on the canvas.
 
-## Host-provided validation
+### Host-provided validation
 
 In addition to the editor's built-in validation, a host application can contribute its own
 validations through the `validate` function on the editor SPI. Problems it returns are merged
