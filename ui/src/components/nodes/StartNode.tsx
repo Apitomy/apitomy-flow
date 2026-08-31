@@ -5,11 +5,9 @@ import './StartNode.css';
 
 export function StartNode({ data, selected }: NodeProps) {
   const nodeData = data as FlowNodeData;
-  const validationClass = nodeData.validationSeverity === 'error' ? 'has-error'
-    : nodeData.validationSeverity === 'warning' ? 'has-warning' : '';
 
   return (
-    <div className={`flow-node-start ${validationClass} ${selected ? 'selected' : ''}`}>
+    <div className={`flow-node-start ${selected ? 'selected' : ''}`}>
       <OutlinedCircleIcon />
       <span>{nodeData.name}</span>
       <Handle type="source" position={Position.Right} />

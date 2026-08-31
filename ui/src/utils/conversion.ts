@@ -1,11 +1,12 @@
 import { type Node, type Edge } from '@xyflow/react';
 import { type WorkflowNode, type WorkflowEdge, type Workflow } from '../types/workflow.ts';
+import { type ValidationProblem } from '../types/validation.ts';
 
 export interface FlowNodeData extends Record<string, unknown> {
   name: string;
   nodeType: WorkflowNode['type'];
   config: Record<string, any>;
-  validationSeverity?: 'error' | 'warning';
+  validationProblems?: ValidationProblem[];
 }
 
 export function toReactFlowNodes(nodes: WorkflowNode[]): Node<FlowNodeData>[] {

@@ -1,0 +1,58 @@
+/*
+ * Corner validation badge. The node wrapper (React Flow's node element) is the
+ * positioning context; the badge is pulled up and left so it straddles the
+ * top-left corner and sits outside the node box, above other overlays.
+ */
+.flow-node-badge {
+    position: absolute;
+    top: -8px;
+    left: -8px;
+    z-index: 2;
+    /* Hoverable so the tooltip can list the node's problems. The 16px target is
+       small enough not to meaningfully interfere with dragging the node. */
+    pointer-events: auto;
+    cursor: help;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 0;
+}
+
+.flow-node-badge svg {
+    width: 16px;
+    height: 16px;
+    /* Theme-colored outline that hugs the icon's own shape (circle or triangle),
+       so it reads against any node/canvas color in both light and dark mode.
+       Stacked to thicken the halo without a mismatched filled backing. */
+    filter:
+        drop-shadow(0 0 1px var(--flow-bg-primary, #fff))
+        drop-shadow(0 0 1px var(--flow-bg-primary, #fff))
+        drop-shadow(0 0 1px var(--flow-bg-primary, #fff));
+}
+
+.flow-node-badge--error svg { color: var(--flow-status-danger, #c9190b); }
+.flow-node-badge--warning svg { color: var(--flow-status-warning, #f0ab00); }
+
+.flow-node-badge__tooltip-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    text-align: left;
+}
+
+.flow-node-badge__tooltip-item {
+    padding: 2px 0;
+}
+
+.flow-node-badge__tooltip-item::before {
+    content: '';
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    margin-right: 6px;
+    border-radius: 50%;
+    vertical-align: middle;
+}
+
+.flow-node-badge__tooltip-item--error::before { background: var(--flow-status-danger, #c9190b); }
+.flow-node-badge__tooltip-item--warning::before { background: var(--flow-status-warning, #f0ab00); }
