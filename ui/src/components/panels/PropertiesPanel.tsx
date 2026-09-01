@@ -16,7 +16,7 @@ import { type EditorSpi } from '../../types/spi.ts';
 import { type ActionTypeDescriptor } from '../../types/spi.ts';
 import { type HumanTaskOutput, type OutputOption, type OutputWidget } from '../../types/workflow.ts';
 import { type ValidationProblem } from '../../types/validation.ts';
-import { mapToPairs, pairsToMap, duplicateKeys, mapsEqual, type KeyValuePair } from '../../utils/mapInputs.ts';
+import { mapToPairs, pairsToMap, duplicateKeys, type KeyValuePair } from '../../utils/mapInputs.ts';
 import './PropertiesPanel.css';
 
 interface PropertiesPanelProps {
@@ -353,15 +353,24 @@ function MapInputsEditor({ map, onChange, nodeId, keyPlaceholder, valuePlacehold
 }) {
   const [pairs, setPairs] = useState<KeyValuePair[]>(() => mapToPairs(map));
   const [sync, setSync] = useState<{ nodeId: string; map: Record<string, string> | undefined }>({ nodeId, map });
+  // The exact map object this editor last emitted. The parent stores it verbatim
+  // (see WorkflowEditor.onNodeDataChange), so it comes back by reference — letting
+  // us tell our own echoed output apart from a genuine external change.
+  const [lastEmitted, setLastEmitted] = useState<Record<string, string> | undefined>(undefined);
 
-  // Re-initialize from the incoming map on node switch, or when an external change (undo/redo,
-  // source-view edit) diverges from this editor's own last serialized output. Local edits round-trip
-  // to an equal map, so they never trigger a reset — preserving in-progress duplicate/empty rows.
   // Adjusting state during render (rather than in an effect) is React's recommended pattern for
   // resetting state on prop change and avoids a cascading re-render.
-  if (sync.nodeId !== nodeId || sync.map !== map) {
+  if (sync.nodeId !== nodeId) {
+    // Node switch: always re-initialize from the new node's map. The previous node's in-progress
+    // pairs must never carry over, even when both nodes happen to serialize to an equal map.
     setSync({ nodeId, map });
-    if (!mapsEqual(pairsToMap(pairs), map)) {
+    setPairs(mapToPairs(map));
+  } else if (sync.map !== map) {
+    // Same node, but the incoming map reference changed. Adopt genuine external changes (undo/redo,
+    // source-view edit); ignore only this editor's own serialized output echoed back by the parent,
+    // so in-progress duplicate/empty rows survive round-tripping.
+    setSync({ nodeId, map });
+    if (map !== lastEmitted) {
       setPairs(mapToPairs(map));
     }
   }
@@ -369,14 +378,16 @@ function MapInputsEditor({ map, onChange, nodeId, keyPlaceholder, valuePlacehold
   const dupes = duplicateKeys(pairs);
 
   const commit = (next: KeyValuePair[]) => {
+    const nextMap = pairsToMap(next);
+    setLastEmitted(nextMap);
     setPairs(next);
-    onChange(pairsToMap(next));
+    onChange(nextMap);
   };
 
   return (
     <div className="properties-panel__inputs-list">
       {pairs.map((pair, i) => {
-        const isDuplicate = pair.key !== '' && dupes.has(pair.key);
+        const isDuplicate = dupes.has(pair.key);
         const isEmpty = pair.key === '';
         return (
           <div key={i} className="properties-panel__input-item">

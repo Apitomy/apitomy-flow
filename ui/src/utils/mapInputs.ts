@@ -66,26 +66,3 @@ export function duplicateKeys(pairs: KeyValuePair[]): Set<string> {
   }
   return duplicates;
 }
-
-/**
- * Shallow key/value equality for two maps, treating `null`/`undefined` as an empty map. Used to
- * detect whether an incoming map reflects an external change (undo/redo, source-view edit) rather
- * than this editor's own last serialized output.
- *
- * @param a the first map, or `undefined`/`null`
- * @param b the second map, or `undefined`/`null`
- * @return `true` if both maps have the same keys and values
- */
-export function mapsEqual(
-  a: Record<string, string> | null | undefined,
-  b: Record<string, string> | null | undefined,
-): boolean {
-  const left: Record<string, string> = a ?? {};
-  const right: Record<string, string> = b ?? {};
-  const leftKeys = Object.keys(left);
-  const rightKeys = Object.keys(right);
-  if (leftKeys.length !== rightKeys.length) {
-    return false;
-  }
-  return leftKeys.every((key) => Object.prototype.hasOwnProperty.call(right, key) && left[key] === right[key]);
-}

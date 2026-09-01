@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mapToPairs, pairsToMap, duplicateKeys, mapsEqual, type KeyValuePair } from './mapInputs.ts';
+import { mapToPairs, pairsToMap, duplicateKeys, type KeyValuePair } from './mapInputs.ts';
 
 describe('mapToPairs', () => {
   it('converts a map to pairs preserving insertion order', () => {
@@ -65,26 +65,5 @@ describe('duplicateKeys', () => {
       { key: 'b', value: '2' },
     ];
     expect(duplicateKeys(pairs)).toEqual(new Set());
-  });
-});
-
-describe('mapsEqual', () => {
-  it('is order-independent', () => {
-    expect(mapsEqual({ a: '1', b: '2' }, { b: '2', a: '1' })).toBe(true);
-  });
-
-  it('is value-sensitive', () => {
-    expect(mapsEqual({ a: '1' }, { a: '2' })).toBe(false);
-  });
-
-  it('detects differing key sets', () => {
-    expect(mapsEqual({ a: '1' }, { a: '1', b: '2' })).toBe(false);
-    expect(mapsEqual({ a: '1', b: '2' }, { a: '1' })).toBe(false);
-  });
-
-  it('treats null/undefined as an empty map', () => {
-    expect(mapsEqual(undefined, {})).toBe(true);
-    expect(mapsEqual(null, undefined)).toBe(true);
-    expect(mapsEqual(undefined, { a: '1' })).toBe(false);
   });
 });
