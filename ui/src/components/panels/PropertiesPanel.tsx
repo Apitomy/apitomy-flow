@@ -26,6 +26,10 @@ interface PropertiesPanelProps {
   onNodeIdChange: (oldId: string, newId: string) => void;
   onEdgeChange: (id: string, data: Record<string, any>) => void;
   spi?: EditorSpi;
+  /** Current panel width in pixels. When omitted, the CSS default width is used. */
+  width?: number;
+  /** Starts a drag-resize when the user presses the panel's resize handle. */
+  onResizeStart?: (e: React.MouseEvent) => void;
 }
 
 /**
@@ -331,22 +335,32 @@ function HumanTaskOutputsEditor({ outputs, onChange }: {
   );
 }
 
-export function PropertiesPanel({ selectedNode, selectedEdge, nodeProblems = [], onNodeChange, onNodeIdChange, onEdgeChange, spi }: PropertiesPanelProps) {
+export function PropertiesPanel({ selectedNode, selectedEdge, nodeProblems = [], onNodeChange, onNodeIdChange, onEdgeChange, spi, width, onResizeStart }: PropertiesPanelProps) {
   const { actionTypes, loading: actionTypesLoading } = useActionTypes(spi);
 
+  // Wrap every panel state in a common shell that carries the (optionally
+  // drag-resized) width and the resize handle, so the panel behaves the same
+  // whether a node, an edge, or nothing is selected.
+  const wrap = (children: React.ReactNode) => (
+    <div className="properties-panel" style={width != null ? { width } : undefined}>
+      {onResizeStart && (
+        <div className="properties-panel__resize-handle" onMouseDown={onResizeStart} />
+      )}
+      {children}
+    </div>
+  );
+
   if (!selectedNode && !selectedEdge) {
-    return (
-      <div className="properties-panel">
-        <div className="properties-panel__empty">
-          Select a node or edge to view its properties
-        </div>
-      </div>
+    return wrap(
+      <div className="properties-panel__empty">
+        Select a node or edge to view its properties
+      </div>,
     );
   }
 
   if (selectedNode) {
-    return (
-      <div className="properties-panel">
+    return wrap(
+      <>
         <div className="properties-panel__header">
           {selectedNode.data.nodeType} Node
         </div>
@@ -605,13 +619,13 @@ export function PropertiesPanel({ selectedNode, selectedEdge, nodeProblems = [],
             </div>
           </>
         )}
-      </div>
+      </>,
     );
   }
 
   if (selectedEdge) {
-    return (
-      <div className="properties-panel">
+    return wrap(
+      <>
         <div className="properties-panel__header">Edge</div>
         <div className="properties-panel__field">
           <label>Label</label>
@@ -651,7 +665,7 @@ export function PropertiesPanel({ selectedNode, selectedEdge, nodeProblems = [],
           <label>Edge ID</label>
           <input type="text" value={selectedEdge.id} disabled />
         </div>
-      </div>
+      </>,
     );
   }
 
