@@ -16,6 +16,7 @@ import { type EditorSpi } from '../../types/spi.ts';
 import { type ActionTypeDescriptor } from '../../types/spi.ts';
 import { type HumanTaskOutput, type OutputOption, type OutputWidget } from '../../types/workflow.ts';
 import { type ValidationProblem } from '../../types/validation.ts';
+import { mapToPairs, pairsToMap, duplicateKeys, type KeyValuePair } from '../../utils/mapInputs.ts';
 import './PropertiesPanel.css';
 
 interface PropertiesPanelProps {
@@ -335,6 +336,106 @@ function HumanTaskOutputsEditor({ outputs, onChange }: {
   );
 }
 
+/**
+ * Editor for a map-based input list (a `Record<string, string>` of key → value/EL-expression). The
+ * list is edited internally as an ordered array of `{ key, value }` pairs — identified by position,
+ * not by key — so that empty-key and duplicate-key entries can coexist without the silent data loss
+ * a plain map suffers (an empty "+ Add input" overwriting the previous one, or a rename colliding
+ * with an existing key). The map is reconstructed (last-wins) only when persisting via `onChange`,
+ * and collisions are surfaced inline so the user can resolve them.
+ */
+function MapInputsEditor({ map, onChange, nodeId, keyPlaceholder, valuePlaceholder }: {
+  map: Record<string, string> | undefined;
+  onChange: (map: Record<string, string>) => void;
+  nodeId: string;
+  keyPlaceholder: string;
+  valuePlaceholder: string;
+}) {
+  const [pairs, setPairs] = useState<KeyValuePair[]>(() => mapToPairs(map));
+  const [sync, setSync] = useState<{ nodeId: string; map: Record<string, string> | undefined }>({ nodeId, map });
+  // The exact map object this editor last emitted. The parent stores it verbatim
+  // (see WorkflowEditor.onNodeDataChange), so it comes back by reference — letting
+  // us tell our own echoed output apart from a genuine external change.
+  const [lastEmitted, setLastEmitted] = useState<Record<string, string> | undefined>(undefined);
+
+  // Adjusting state during render (rather than in an effect) is React's recommended pattern for
+  // resetting state on prop change and avoids a cascading re-render.
+  if (sync.nodeId !== nodeId) {
+    // Node switch: always re-initialize from the new node's map. The previous node's in-progress
+    // pairs must never carry over, even when both nodes happen to serialize to an equal map.
+    setSync({ nodeId, map });
+    setPairs(mapToPairs(map));
+  } else if (sync.map !== map) {
+    // Same node, but the incoming map reference changed. Adopt genuine external changes (undo/redo,
+    // source-view edit); ignore only this editor's own serialized output echoed back by the parent,
+    // so in-progress duplicate/empty rows survive round-tripping.
+    setSync({ nodeId, map });
+    if (map !== lastEmitted) {
+      setPairs(mapToPairs(map));
+    }
+  }
+
+  const dupes = duplicateKeys(pairs);
+
+  const commit = (next: KeyValuePair[]) => {
+    const nextMap = pairsToMap(next);
+    setLastEmitted(nextMap);
+    setPairs(next);
+    onChange(nextMap);
+  };
+
+  return (
+    <div className="properties-panel__inputs-list">
+      {pairs.map((pair, i) => {
+        const isDuplicate = dupes.has(pair.key);
+        const isEmpty = pair.key === '';
+        return (
+          <div key={i} className="properties-panel__input-item">
+            <div className="properties-panel__input-row">
+              <input
+                type="text"
+                className={isDuplicate ? 'properties-panel__input-invalid' : undefined}
+                value={pair.key}
+                placeholder={keyPlaceholder}
+                onChange={(e) => commit(pairs.map((p, j) => (j === i ? { ...p, key: e.target.value } : p)))}
+              />
+              <button
+                className="properties-panel__match-remove"
+                title="Remove input"
+                onClick={() => commit(pairs.filter((_, j) => j !== i))}
+              >
+                &times;
+              </button>
+            </div>
+            <input
+              type="text"
+              value={pair.value}
+              placeholder={valuePlaceholder}
+              onChange={(e) => commit(pairs.map((p, j) => (j === i ? { ...p, value: e.target.value } : p)))}
+            />
+            {isDuplicate && (
+              <div className="properties-panel__input-warning">
+                Duplicate key "{pair.key}" — only the last entry will be saved.
+              </div>
+            )}
+            {isEmpty && (
+              <div className="properties-panel__input-warning">
+                Key is empty — enter a name so this entry is saved.
+              </div>
+            )}
+          </div>
+        );
+      })}
+      <button
+        className="properties-panel__match-add"
+        onClick={() => commit([...pairs, { key: '', value: '' }])}
+      >
+        + Add input
+      </button>
+    </div>
+  );
+}
+
 export function PropertiesPanel({ selectedNode, selectedEdge, nodeProblems = [], onNodeChange, onNodeIdChange, onEdgeChange, spi, width, onResizeStart }: PropertiesPanelProps) {
   const { actionTypes, loading: actionTypesLoading } = useActionTypes(spi);
 
@@ -473,61 +574,15 @@ export function PropertiesPanel({ selectedNode, selectedEdge, nodeProblems = [],
             </div>
             <div className="properties-panel__field">
               <label>Inputs (values to display)</label>
-              <div className="properties-panel__inputs-list">
-                {Object.entries((selectedNode.data.config.inputs as Record<string, string>) || {}).map(([name, expr], i) => (
-                  <div key={i} className="properties-panel__input-item">
-                    <div className="properties-panel__input-row">
-                      <input
-                        type="text"
-                        value={name}
-                        placeholder="Label"
-                        onChange={(e) => {
-                          const entries = Object.entries((selectedNode.data.config.inputs as Record<string, string>) || {});
-                          entries[i] = [e.target.value, entries[i][1]];
-                          onNodeChange(selectedNode.id, {
-                            config: { ...selectedNode.data.config, inputs: Object.fromEntries(entries) },
-                          });
-                        }}
-                      />
-                      <button
-                        className="properties-panel__match-remove"
-                        title="Remove input"
-                        onClick={() => {
-                          const entries = Object.entries((selectedNode.data.config.inputs as Record<string, string>) || {}).filter((_, j) => j !== i);
-                          onNodeChange(selectedNode.id, {
-                            config: { ...selectedNode.data.config, inputs: Object.fromEntries(entries) },
-                          });
-                        }}
-                      >
-                        &times;
-                      </button>
-                    </div>
-                    <input
-                      type="text"
-                      value={expr}
-                      placeholder="e.g. context.creditScore"
-                      onChange={(e) => {
-                        const entries = Object.entries((selectedNode.data.config.inputs as Record<string, string>) || {});
-                        entries[i] = [entries[i][0], e.target.value];
-                        onNodeChange(selectedNode.id, {
-                          config: { ...selectedNode.data.config, inputs: Object.fromEntries(entries) },
-                        });
-                      }}
-                    />
-                  </div>
-                ))}
-                <button
-                  className="properties-panel__match-add"
-                  onClick={() => {
-                    const inputs = { ...((selectedNode.data.config.inputs as Record<string, string>) || {}), '': '' };
-                    onNodeChange(selectedNode.id, {
-                      config: { ...selectedNode.data.config, inputs },
-                    });
-                  }}
-                >
-                  + Add input
-                </button>
-              </div>
+              <MapInputsEditor
+                map={selectedNode.data.config.inputs as Record<string, string> | undefined}
+                nodeId={selectedNode.id}
+                keyPlaceholder="Label"
+                valuePlaceholder="e.g. context.creditScore"
+                onChange={(inputs) => onNodeChange(selectedNode.id, {
+                  config: { ...selectedNode.data.config, inputs },
+                })}
+              />
             </div>
             <div className="properties-panel__field">
               <label>Outputs (form fields for completion)</label>
@@ -803,61 +858,15 @@ function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading 
         <>
           <div className="properties-panel__field">
             <label>Inputs (values to pass to executor)</label>
-            <div className="properties-panel__inputs-list">
-              {Object.entries((node.data.config.inputs as Record<string, string>) || {}).map(([name, expr], i) => (
-                <div key={i} className="properties-panel__input-item">
-                  <div className="properties-panel__input-row">
-                    <input
-                      type="text"
-                      value={name}
-                      placeholder="Label"
-                      onChange={(e) => {
-                        const entries = Object.entries((node.data.config.inputs as Record<string, string>) || {});
-                        entries[i] = [e.target.value, entries[i][1]];
-                        onNodeChange(node.id, {
-                          config: { ...node.data.config, inputs: Object.fromEntries(entries) },
-                        });
-                      }}
-                    />
-                    <button
-                      className="properties-panel__match-remove"
-                      title="Remove input"
-                      onClick={() => {
-                        const entries = Object.entries((node.data.config.inputs as Record<string, string>) || {}).filter((_, j) => j !== i);
-                        onNodeChange(node.id, {
-                          config: { ...node.data.config, inputs: Object.fromEntries(entries) },
-                        });
-                      }}
-                    >
-                      &times;
-                    </button>
-                  </div>
-                  <input
-                    type="text"
-                    value={expr}
-                    placeholder="e.g. context.loanAmount"
-                    onChange={(e) => {
-                      const entries = Object.entries((node.data.config.inputs as Record<string, string>) || {});
-                      entries[i] = [entries[i][0], e.target.value];
-                      onNodeChange(node.id, {
-                        config: { ...node.data.config, inputs: Object.fromEntries(entries) },
-                      });
-                    }}
-                  />
-                </div>
-              ))}
-              <button
-                className="properties-panel__match-add"
-                onClick={() => {
-                  const inputs = { ...((node.data.config.inputs as Record<string, string>) || {}), '': '' };
-                  onNodeChange(node.id, {
-                    config: { ...node.data.config, inputs },
-                  });
-                }}
-              >
-                + Add input
-              </button>
-            </div>
+            <MapInputsEditor
+              map={node.data.config.inputs as Record<string, string> | undefined}
+              nodeId={node.id}
+              keyPlaceholder="Label"
+              valuePlaceholder="e.g. context.loanAmount"
+              onChange={(inputs) => onNodeChange(node.id, {
+                config: { ...node.data.config, inputs },
+              })}
+            />
           </div>
           <div className="properties-panel__field">
             <label>Outputs (expected results)</label>

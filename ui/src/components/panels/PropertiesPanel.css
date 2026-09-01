@@ -258,3 +258,11 @@
   padding: 1px 5px;
   border-radius: 3px;
 }
+.properties-panel__input-warning {
+  font-size: 12px;
+  color: var(--flow-status-warning, #f0ab00);
+  margin-top: 4px;
+}
+.properties-panel__input-row input[type="text"].properties-panel__input-invalid {
+  border-color: var(--flow-status-warning, #f0ab00);
+}
