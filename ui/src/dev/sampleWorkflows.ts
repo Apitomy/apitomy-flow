@@ -134,6 +134,28 @@ export const completedTriageInstance: WorkflowInstance = {
   updatedOn: '2024-01-01T00:02:30Z',
 };
 
+/**
+ * A run of {@link cveTriage} that loops back through "Analyze CVE" and "Triage
+ * Decision" before settling. Both nodes appear multiple times in the history,
+ * exercising the viewer's per-node visit selector.
+ */
+export const loopingTriageInstance: WorkflowInstance = {
+  id: 'inst-3',
+  workflowId: 'cve-triage',
+  currentNodeId: 'triage',
+  status: 'waiting',
+  context: { cveId: 'CVE-2024-1234', severity: 'high', affectedVersions: '1.0.0 - 1.3.2' },
+  history: [
+    { nodeId: 'start', nodeName: 'Start', enteredOn: '2024-01-01T00:00:00Z', completedOn: '2024-01-01T00:00:00Z' },
+    { nodeId: 'analyze', nodeName: 'Analyze CVE', edgeId: 'e1', enteredOn: '2024-01-01T00:00:01Z', completedOn: '2024-01-01T00:00:05Z', output: { severity: 'medium', affectedVersions: '1.0.0 - 1.2.0' } },
+    { nodeId: 'triage', nodeName: 'Triage Decision', edgeId: 'e2', enteredOn: '2024-01-01T00:00:05Z', completedOn: '2024-01-01T00:01:00Z', output: { affected: false, triageNotes: 'Needs a closer look at newer versions.' } },
+    { nodeId: 'analyze', nodeName: 'Analyze CVE', edgeId: 'e2', enteredOn: '2024-01-01T00:01:00Z', completedOn: '2024-01-01T00:01:20Z', output: { severity: 'high', affectedVersions: '1.0.0 - 1.3.2' } },
+    { nodeId: 'triage', nodeName: 'Triage Decision', edgeId: 'e2', enteredOn: '2024-01-01T00:01:20Z' },
+  ],
+  createdOn: '2024-01-01T00:00:00Z',
+  updatedOn: '2024-01-01T00:01:20Z',
+};
+
 export const emptyWorkflow: Workflow = {
   id: 'new',
   name: 'New Workflow',

@@ -5,6 +5,7 @@ import { type HistoryEntry, type InstanceStatus } from '../types/instance.ts';
 import { type Workflow } from '../types/workflow.ts';
 import { type WorkflowInstance } from '../types/instance.ts';
 import { toReactFlowNodes, toReactFlowEdges } from '../utils/conversion.ts';
+import { nodeVisits } from '../utils/nodeHistory.ts';
 import { type FlowTheme } from './WorkflowEditor.tsx';
 import { nodeTypes } from './nodes/nodeTypes.ts';
 import { edgeTypes } from './edges/edgeTypes.ts';
@@ -110,6 +111,10 @@ function WorkflowViewerInner({ workflow, instance, theme = 'light', nodeContextM
   const [collapsed, setCollapsed] = useState(false);
   const [panelWidth, setPanelWidth] = useState(320);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  // Index of the visit shown in the node-detail panel. `null` means "follow the
+  // most recent visit", which keeps live-updating viewers pinned to the latest
+  // pass as new history entries arrive.
+  const [selectedVisitIndex, setSelectedVisitIndex] = useState<number | null>(null);
   const [contextMenu, setContextMenu] = useState<{ nodeId: string; x: number; y: number } | null>(null);
   const isResizing = useRef(false);
 
@@ -120,10 +125,15 @@ function WorkflowViewerInner({ workflow, instance, theme = 'light', nodeContextM
       : nodeContextMenuItems;
   }, [nodeContextMenuItems]);
 
-  const selectedNodeHistory = useMemo(() => {
-    if (!selectedNodeId) return null;
-    return instance.history.find(h => h.nodeId === selectedNodeId) ?? null;
-  }, [selectedNodeId, instance.history]);
+  const selectedNodeVisits = useMemo(
+    () => nodeVisits(instance.history, selectedNodeId),
+    [selectedNodeId, instance.history],
+  );
+
+  // Default to the most recent visit; honor an explicit selection when present.
+  const effectiveVisitIndex = selectedVisitIndex ?? Math.max(0, selectedNodeVisits.length - 1);
+
+  const selectedNodeHistory = selectedNodeVisits[effectiveVisitIndex] ?? null;
 
   const selectedWorkflowNode = useMemo(() => {
     if (!selectedNodeId) return null;
@@ -132,11 +142,13 @@ function WorkflowViewerInner({ workflow, instance, theme = 'light', nodeContextM
 
   const onNodeClick = useCallback((_: any, node: Node) => {
     setSelectedNodeId(node.id);
+    setSelectedVisitIndex(null);
     if (collapsed) setCollapsed(false);
   }, [collapsed]);
 
   const onPaneClick = useCallback(() => {
     setSelectedNodeId(null);
+    setSelectedVisitIndex(null);
     setContextMenu(null);
   }, []);
 
@@ -221,7 +233,7 @@ function WorkflowViewerInner({ workflow, instance, theme = 'light', nodeContextM
                 <button
                   className="workflow-viewer__collapse-btn"
                   title="Back to instance context"
-                  onClick={() => setSelectedNodeId(null)}
+                  onClick={() => { setSelectedNodeId(null); setSelectedVisitIndex(null); }}
                 >
                   &times;
                 </button>
@@ -239,6 +251,9 @@ function WorkflowViewerInner({ workflow, instance, theme = 'light', nodeContextM
             <NodeDetail
               node={selectedWorkflowNode}
               history={selectedNodeHistory}
+              visits={selectedNodeVisits}
+              visitIndex={effectiveVisitIndex}
+              onSelectVisit={setSelectedVisitIndex}
               isCurrent={selectedNodeId === instance.currentNodeId}
               instanceStatus={instance.status}
             />
@@ -270,9 +285,12 @@ function formatValue(value: unknown): string {
   return String(value);
 }
 
-function NodeDetail({ node, history, isCurrent, instanceStatus }: {
+function NodeDetail({ node, history, visits, visitIndex, onSelectVisit, isCurrent, instanceStatus }: {
   node: WorkflowViewerProps['workflow']['nodes'][number] | null;
   history: HistoryEntry | null;
+  visits: HistoryEntry[];
+  visitIndex: number;
+  onSelectVisit: (index: number) => void;
   isCurrent: boolean;
   instanceStatus: InstanceStatus;
 }) {
@@ -284,6 +302,20 @@ function NodeDetail({ node, history, isCurrent, instanceStatus }: {
 
   return (
     <div className="workflow-viewer__node-detail">
+      {visits.length > 1 && (
+        <select
+          className="workflow-viewer__visit-select"
+          value={visitIndex}
+          onChange={(e) => onSelectVisit(Number(e.target.value))}
+          aria-label="Select visit"
+        >
+          {visits.map((visit, index) => (
+            <option key={index} value={index}>
+              Visit {index + 1} of {visits.length} — {new Date(visit.enteredOn).toLocaleString()}
+            </option>
+          ))}
+        </select>
+      )}
       <div className="workflow-viewer__context-entry">
         <span className="workflow-viewer__context-key">Type</span>
         <span className="workflow-viewer__context-value">{node.type}</span>

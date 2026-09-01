@@ -142,6 +142,15 @@
   flex-direction: column;
   gap: 8px;
 }
+.workflow-viewer__visit-select {
+  width: 100%;
+  font-size: 12px;
+  padding: 4px 8px;
+  color: var(--flow-text, #151515);
+  background: var(--flow-bg-secondary, #f5f5f5);
+  border: 1px solid var(--flow-border, #d2d2d2);
+  border-radius: 4px;
+}
 .workflow-viewer__section-label {
   font-size: 13px;
   font-weight: 600;
