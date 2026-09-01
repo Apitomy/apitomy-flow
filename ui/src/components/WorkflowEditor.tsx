@@ -64,6 +64,8 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ node: Node<FlowNodeData>; position: { x: number; y: number } } | null>(null);
+  const [panelWidth, setPanelWidth] = useState(320);
+  const isResizing = useRef(false);
   const snapshotNeededRef = useRef(false);
   const changeNeededRef = useRef(false);
   const mountedRef = useRef(false);
@@ -323,6 +325,28 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [handleUndo, handleRedo]);
 
+  const onResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizing.current = true;
+    const startX = e.clientX;
+    const startWidth = panelWidth;
+
+    const onMouseMove = (e: MouseEvent) => {
+      if (!isResizing.current) return;
+      const newWidth = Math.max(200, Math.min(600, startWidth + (startX - e.clientX)));
+      setPanelWidth(newWidth);
+    };
+
+    const onMouseUp = () => {
+      isResizing.current = false;
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  }, [panelWidth]);
+
   const onProblemClick = useCallback((problem: ValidationProblem) => {
     if (problem.nodeId) {
       setSelectedNodeId(problem.nodeId);
@@ -395,6 +419,8 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
           onNodeIdChange={onNodeIdChange}
           onEdgeChange={onEdgeDataChange}
           spi={spi}
+          width={panelWidth}
+          onResizeStart={onResizeStart}
         />
       </div>
       <ProblemsPanel problems={validationProblems} onProblemClick={onProblemClick} />
