@@ -48,7 +48,7 @@
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.5",
     "@vitejs/plugin-react": "4.7.0",
-    "@xyflow/react": "12.11.5",
+    "@xyflow/react": "12.11.6",
     "eslint": "10.9.1",
     "eslint-plugin-react-hooks": "7.1.1",
     "react": "19.2.8",
