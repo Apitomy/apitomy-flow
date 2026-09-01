@@ -395,7 +395,22 @@ public class WorkflowEngine {
             }
 
             // For START and ACTION nodes, or nodes we've already entered, continue with normal edge selection
-            WorkflowEdge selectedEdge = selectEdge(workflow, instance, currentNode);
+            WorkflowEdge selectedEdge;
+            try {
+                selectedEdge = selectEdge(workflow, instance, currentNode);
+            } catch (ConditionEvaluationException e) {
+                // Condition evaluation failed — hand the failing expression and node context
+                // to the error handler so the failure can be diagnosed.
+                ErrorResolution resolution;
+                try {
+                    resolution = errorHandler.handleNodeError(instance, currentNode, null, e);
+                } catch (Exception handlerError) {
+                    return failWorkflow(instance, "Error handler threw: " + handlerError.getMessage(), handlerError);
+                }
+                instance = applyResolution(workflow, instance, currentNode, resolution);
+                if (instance.status() != InstanceStatus.RUNNING) return instance;
+                continue;
+            }
             if (selectedEdge == null) {
                 // No matching edge — call error handler
                 ErrorResolution resolution;
@@ -576,8 +591,8 @@ public class WorkflowEngine {
                 }
             } catch (ConditionEvaluationException e) {
                 log.warn("Condition evaluation failed for edge {}: {}", edge.id(), e.getMessage());
-                // Treated as node error per spec
-                return null;
+                // Propagate so the error handler receives the failing expression and node context.
+                throw e;
             }
         }
 
