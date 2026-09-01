@@ -383,6 +383,7 @@ public class WorkflowValidator {
                         "Human task node has no outputs defined", node.id()));
                 } else if (outputsVal instanceof List<?> outputs) {
                     validateOutputNames(outputs, node.id(), problems);
+                    validateHumanTaskOutputMetadata(outputs, node.id(), problems);
                 }
             });
 
@@ -450,6 +451,78 @@ public class WorkflowValidator {
                 }
             }
         }
+    }
+
+    /**
+     * Validates the optional presentation metadata carried by human-task outputs. All problems are
+     * warnings; the metadata is advisory and never blocks execution. Applies only to human-task
+     * nodes so action-node outputs are unaffected.
+     *
+     * @param outputDefs the raw {@code config.outputs} list
+     * @param nodeId     the human-task node id
+     * @param problems   the accumulating problem list
+     */
+    private void validateHumanTaskOutputMetadata(List<?> outputDefs, String nodeId,
+                                                  List<ValidationProblem> problems) {
+        for (Object defObj : outputDefs) {
+            if (!(defObj instanceof Map<?, ?> def)) {
+                continue;
+            }
+            String name = def.get("name") != null ? String.valueOf(def.get("name")) : "(unnamed)";
+            String type = def.get("type") instanceof String t && !t.isBlank() ? t : "string";
+            String widget = def.get("widget") instanceof String w && !w.isBlank() ? w : null;
+
+            // widget only meaningfully applies to string-typed outputs
+            if (widget != null && !"string".equals(type)) {
+                problems.add(ValidationProblem.warning("WIDGET_TYPE_MISMATCH",
+                    "Output \"" + name + "\" declares widget \"" + widget
+                        + "\" but its type is \"" + type + "\"; widget applies to string outputs", nodeId));
+            }
+
+            // select widgets need options
+            if ("select".equals(widget)) {
+                Object optionsVal = def.get("options");
+                if (!(optionsVal instanceof List<?> options) || options.isEmpty()) {
+                    problems.add(ValidationProblem.warning("SELECT_MISSING_OPTIONS",
+                        "Output \"" + name + "\" uses widget \"select\" but declares no options", nodeId));
+                }
+            }
+
+            // options entries must carry a value
+            if (def.get("options") instanceof List<?> options) {
+                for (Object optObj : options) {
+                    if (optObj instanceof Map<?, ?> opt
+                        && (opt.get("value") == null
+                            || (opt.get("value") instanceof String vs && vs.isBlank()))) {
+                        problems.add(ValidationProblem.warning("MALFORMED_OUTPUT_OPTION",
+                            "Output \"" + name + "\" has a select option with no value", nodeId));
+                    }
+                }
+            }
+
+            // defaultValue should match the declared semantic type
+            Object defaultValue = def.get("defaultValue");
+            if (defaultValue != null && !valueMatchesType(defaultValue, type)) {
+                problems.add(ValidationProblem.warning("DEFAULT_VALUE_TYPE_MISMATCH",
+                    "Output \"" + name + "\" default value does not match declared type \"" + type + "\"", nodeId));
+            }
+        }
+    }
+
+    /**
+     * Tests whether a value is compatible with a declared semantic output type.
+     *
+     * @param value the candidate value
+     * @param type  the declared semantic type
+     * @return {@code true} when the value is compatible with the type
+     */
+    private boolean valueMatchesType(Object value, String type) {
+        return switch (type == null ? "string" : type) {
+            case "number" -> value instanceof Number;
+            case "boolean" -> value instanceof Boolean;
+            case "object" -> value instanceof Map || value instanceof List;
+            default -> value instanceof String;
+        };
     }
 
     private boolean hasSameEventConfig(WorkflowNode a, WorkflowNode b) {

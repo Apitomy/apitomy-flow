@@ -209,11 +209,7 @@ public class WorkflowEngine {
             outputs = outputDefs.stream()
                 .filter(Map.class::isInstance)
                 .map(o -> (Map<?, ?>) o)
-                .map(o -> new OutputDefinition(
-                    String.valueOf(o.get("name")),
-                    o.get("type") != null ? String.valueOf(o.get("type")) : "string",
-                    Boolean.TRUE.equals(o.get("required"))
-                ))
+                .map(this::mapHumanTaskOutput)
                 .toList();
         }
 
@@ -644,6 +640,55 @@ public class WorkflowEngine {
                 log.warn("Event listener threw exception", e);
             }
         }
+    }
+
+    /**
+     * Maps a single raw {@code config.outputs} entry for a human-task node into an
+     * {@link OutputDefinition}, applying the documented defaults: {@code label} falls back to
+     * {@code name}, {@code widget} is inferred from {@code type} when omitted, and {@code options}
+     * are parsed into {@link OutputOption} records. Unknown/omitted metadata is left {@code null}.
+     *
+     * @param o the raw output definition map
+     * @return the resolved output definition
+     */
+    private OutputDefinition mapHumanTaskOutput(Map<?, ?> o) {
+        String name = String.valueOf(o.get("name"));
+        String type = o.get("type") != null ? String.valueOf(o.get("type")) : "string";
+        boolean required = Boolean.TRUE.equals(o.get("required"));
+        String label = o.get("label") instanceof String l && !l.isBlank() ? l : name;
+        String description = o.get("description") instanceof String d ? d : null;
+        String widget = o.get("widget") instanceof String w && !w.isBlank() ? w : inferWidget(type);
+        Object defaultValue = o.get("defaultValue");
+
+        List<OutputOption> options = null;
+        if (o.get("options") instanceof List<?> rawOptions) {
+            options = rawOptions.stream()
+                .filter(Map.class::isInstance)
+                .map(opt -> (Map<?, ?>) opt)
+                .map(opt -> new OutputOption(
+                    opt.get("label") != null ? String.valueOf(opt.get("label")) : null,
+                    opt.get("value") != null ? String.valueOf(opt.get("value")) : null
+                ))
+                .toList();
+        }
+
+        return new OutputDefinition(name, type, required, label, description, widget, defaultValue, options);
+    }
+
+    /**
+     * Infers the default rendering widget for a human-task output from its semantic type when no
+     * explicit {@code widget} is declared.
+     *
+     * @param type the semantic type ({@code string}/{@code number}/{@code boolean}/{@code object})
+     * @return the inferred widget hint
+     */
+    private String inferWidget(String type) {
+        return switch (type == null ? "string" : type) {
+            case "number" -> "number";
+            case "boolean" -> "checkbox";
+            case "object" -> "textarea";
+            default -> "text";
+        };
     }
 
     private Map<String, Object> resolveNodeInputs(WorkflowNode node, Map<String, Object> context) {

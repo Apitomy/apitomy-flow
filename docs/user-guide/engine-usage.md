@@ -123,9 +123,35 @@ Returns a `HumanTaskInfo` record when the instance is waiting at a human-task no
 | `nodeName` | String | The human-task node name |
 | `description` | String | Instructions for the person completing the task |
 | `inputs` | Map<String, Object> | Display labels as keys, resolved context values as values |
-| `outputs` | List<OutputDefinition> | Expected outputs, each with `name`, `type`, and `required` |
+| `outputs` | List<OutputDefinition> | The form fields to complete the task (see below) |
 
 Input EL expressions (from the node's config) are evaluated against the instance context automatically — the caller receives fully resolved values.
+
+### Output field metadata
+
+Each `OutputDefinition` describes one form field a person fills in to complete the task. Only `name`
+is required; every other attribute is optional and backward-compatible — an output that declares only
+`{name, type, required}` behaves exactly as before, and the engine derives sensible defaults for
+anything omitted. Hosts (such as Axiom) use this metadata to render the runtime completion form.
+
+| Field | Required | Meaning | Default when omitted |
+|-------|----------|---------|----------------------|
+| `name` | yes | context key the answer is stored under | — |
+| `type` | no | semantic type: `string`/`number`/`boolean`/`object` | `string` |
+| `required` | no | must be provided to complete | `false` |
+| `label` | no | human-readable field label | `name` |
+| `description` | no | help/hint text shown under the field | none |
+| `widget` | no | rendering hint: `text`/`textarea`/`select` (string types only) | inferred from `type` |
+| `defaultValue` | no | pre-filled value | none |
+| `options` | no | `List<OutputOption>` (`label`, `value`) — choices for `widget: select` | none |
+
+**Default widget inference** (when `widget` is omitted): `string` → `text`, `number` → `number`,
+`boolean` → `checkbox`, `object` → `textarea`. `widget` only meaningfully applies to `string`-typed
+outputs, and `select` requires `options`. The values in `HumanTaskInfo.outputs` are fully resolved —
+`label` and `widget` are populated with their defaults so the caller never has to re-derive them.
+
+These attributes are authoring metadata only. As before, the engine does **not** validate submitted
+human answers against the declared outputs — hosts remain responsible for validating submissions.
 
 ## Getting Receive Event Info
 

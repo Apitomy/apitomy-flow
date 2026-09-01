@@ -99,3 +99,11 @@ state management, type safety, cross-component consistency, and test coverage.
 | 25 | Open | UI | **Clone `config` object in `conversion.ts`** instead of sharing by reference. |
 | 26 | Open | UI | **Define discriminated config types per node type** to replace `Record<string, any>`. |
 | 27 | Open | Cross-cutting | **Add `WorkflowInput` record to Java model** to match TypeScript's typed definition. |
+
+---
+
+## FEATURES / ENHANCEMENTS
+
+| # | Status | Ships in | Component | Description |
+|---|--------|----------|-----------|-------------|
+| 28 | Done (#55) | `1.0.3-SNAPSHOT` | Cross-cutting | **Human-task outputs carry optional rich metadata** (`label`, `description`, `widget`, `defaultValue`, `options`). Fully optional and backward-compatible: `{name, type, required}` outputs behave exactly as before, with defaults derived by the engine (`label`→`name`, `widget` inferred from `type`). Extends `OutputDefinition` + new `OutputOption` record, `WorkflowEngine#getHumanTaskInfo` mapping, human-task validator warnings (`WIDGET_TYPE_MISMATCH`, `SELECT_MISSING_OPTIONS`, `MALFORMED_OUTPUT_OPTION`, `DEFAULT_VALUE_TYPE_MISMATCH`), the `@apitomy/flow-ui` `HumanTaskOutput`/`OutputOption` types, the `PropertiesPanel` outputs editor (progressive disclosure), and mirrored TS validation. Driven by Axiom's Phase 3 human-task integration. |
