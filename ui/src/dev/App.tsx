@@ -6,7 +6,7 @@ import '@xyflow/react/dist/style.css';
 import { FileAltIcon, SearchIcon, ExternalLinkAltIcon } from '@patternfly/react-icons';
 import { WorkflowEditor } from '../components/WorkflowEditor.tsx';
 import { WorkflowViewer, type WorkflowViewerNodeMenuItem } from '../components/WorkflowViewer.tsx';
-import { cveTriage, triageInstance, completedTriageInstance } from './sampleWorkflows.ts';
+import { cveTriage, triageInstance, completedTriageInstance, loopingTriageInstance } from './sampleWorkflows.ts';
 import { type Workflow } from '../types/workflow.ts';
 import { type FlowTheme } from '../components/WorkflowEditor.tsx';
 import { type EditorSpi } from '../types/spi.ts';
@@ -150,7 +150,12 @@ function App() {
   const [tab, setTab] = useState<'editor' | 'viewer' | 'json'>('editor');
   const [workflow, setWorkflow] = useState<Workflow>(cveTriage);
   const [theme, setTheme] = useState<FlowTheme>('light');
-  const [completed, setCompleted] = useState(false);
+  const [instanceKey, setInstanceKey] = useState<'running' | 'completed' | 'looping'>('running');
+
+  const viewerInstance =
+    instanceKey === 'completed' ? completedTriageInstance
+    : instanceKey === 'looping' ? loopingTriageInstance
+    : triageInstance;
 
   return (
     <div className={`dev-app ${theme === 'dark' ? 'dev-app--dark' : ''}`}>
@@ -169,12 +174,15 @@ function App() {
         <div className="dev-app__toggles">
           {tab === 'viewer' && (
             <label className="dev-app__theme-toggle">
-              <input
-                type="checkbox"
-                checked={completed}
-                onChange={(e) => setCompleted(e.target.checked)}
-              />
-              Completed run
+              Instance
+              <select
+                value={instanceKey}
+                onChange={(e) => setInstanceKey(e.target.value as 'running' | 'completed' | 'looping')}
+              >
+                <option value="running">Running</option>
+                <option value="completed">Completed run</option>
+                <option value="looping">Looping run</option>
+              </select>
             </label>
           )}
           <label className="dev-app__theme-toggle">
@@ -194,7 +202,7 @@ function App() {
         {tab === 'viewer' && (
           <WorkflowViewer
             workflow={cveTriage}
-            instance={completed ? completedTriageInstance : triageInstance}
+            instance={viewerInstance}
             theme={theme}
             nodeContextMenuItems={nodeContextMenuItems}
           />
