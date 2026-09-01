@@ -300,6 +300,11 @@ function NodeDetail({ node, history, visits, visitIndex, onSelectVisit, isCurren
 
   const wasVisited = !!history;
 
+  // The node is only "current" for the visit actually in progress — i.e. the
+  // most recent visit. An earlier visit of a looping node has completed, even
+  // when the node happens to be the instance's current node.
+  const isCurrentVisit = isCurrent && visitIndex >= visits.length - 1;
+
   return (
     <div className="workflow-viewer__node-detail">
       {visits.length > 1 && (
@@ -327,7 +332,7 @@ function NodeDetail({ node, history, visits, visitIndex, onSelectVisit, isCurren
       <div className="workflow-viewer__context-entry">
         <span className="workflow-viewer__context-key">Status</span>
         <span className="workflow-viewer__context-value">
-          {isCurrent
+          {isCurrentVisit
             ? (instanceStatus === 'completed' ? 'Completed'
               : instanceStatus === 'failed' ? 'Failed'
               : instanceStatus === 'cancelled' ? 'Cancelled'
