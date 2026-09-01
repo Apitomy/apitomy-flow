@@ -15,7 +15,7 @@ React Flow and PatternFly 6.
   labels.
 - **Auto-layout** -- automatic dagre-based node layout on load, plus a "Tidy up" button in the
   editor.
-- **Validation** -- four-pass client-side validation (49 rules) covering structural integrity,
+- **Validation** -- four-pass client-side validation (53 rules) covering structural integrity,
   connectivity, edge conditions, and semantic correctness.
 - **EditorSpi** -- host extension interface for supplying action-type descriptors (with typed
   inputs/outputs) and/or a custom `validate` function whose problems merge with the built-in ones.
