@@ -194,9 +194,8 @@ public class WorkflowEngine {
         if (node.config().get("inputs") instanceof Map<?, ?> inputExprs) {
             for (Map.Entry<?, ?> entry : inputExprs.entrySet()) {
                 String label = String.valueOf(entry.getKey());
-                String expression = String.valueOf(entry.getValue());
                 try {
-                    resolvedInputs.put(label, conditionEvaluator.resolve(expression, instance.context()));
+                    resolvedInputs.put(label, resolveInputValue(entry.getValue(), instance.context()));
                 } catch (Exception e) {
                     log.warn("Failed to resolve human task input '{}': {}", label, e.getMessage());
                     resolvedInputs.put(label, null);
@@ -699,15 +698,27 @@ public class WorkflowEngine {
         Map<String, Object> resolved = new LinkedHashMap<>();
         for (Map.Entry<?, ?> entry : inputExprs.entrySet()) {
             String label = String.valueOf(entry.getKey());
-            String expression = String.valueOf(entry.getValue());
             try {
-                resolved.put(label, conditionEvaluator.resolve(expression, context));
+                resolved.put(label, resolveInputValue(entry.getValue(), context));
             } catch (Exception e) {
                 log.warn("Failed to resolve action input '{}': {}", label, e.getMessage());
                 resolved.put(label, null);
             }
         }
         return Collections.unmodifiableMap(resolved);
+    }
+
+    /**
+     * Resolves a single input value. Only {@link String} values are treated as EL
+     * expressions and passed to the condition evaluator. Non-string values (such as
+     * {@link Map}, {@link List}, numbers or booleans) are literal values and are
+     * returned as-is, avoiding corruption via {@code String.valueOf}.
+     */
+    private Object resolveInputValue(Object rawValue, Map<String, Object> context) {
+        if (rawValue instanceof String expression) {
+            return conditionEvaluator.resolve(expression, context);
+        }
+        return rawValue;
     }
 
     private String validateNodeOutputs(WorkflowNode node, Map<String, Object> output) {
