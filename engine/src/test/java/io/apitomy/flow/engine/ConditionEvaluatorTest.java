@@ -142,4 +142,21 @@ class ConditionEvaluatorTest {
         assertTrue(evaluator.evaluate("context.eventPayload.pull_request.author.login == 'alice'", context));
         assertTrue(evaluator.evaluate("context.eventPayload.pull_request.merged", context));
     }
+
+    @Test
+    void jacksonArrayAccessBracketAndDotNotation() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        JsonNode payload = mapper.readTree("""
+            {
+                "labels": ["bug", "urgent"]
+            }
+            """);
+        Map<String, Object> context = Map.of("eventPayload", payload);
+
+        // Bracket notation and dot notation should behave equivalently for arrays.
+        assertTrue(evaluator.evaluate("context.eventPayload.labels[0] == 'bug'", context));
+        assertTrue(evaluator.evaluate("context.eventPayload.labels.0 == 'bug'", context));
+        assertTrue(evaluator.evaluate("context.eventPayload.labels[1] == 'urgent'", context));
+        assertTrue(evaluator.evaluate("context.eventPayload.labels.1 == 'urgent'", context));
+    }
 }
