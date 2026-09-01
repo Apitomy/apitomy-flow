@@ -83,7 +83,13 @@ A panel on the right side shows configuration fields for the selected node or ed
 - Name (all node types)
 - Action Type (action nodes)
 - Event Type (receive-event nodes)
-- Description, Inputs (label/expression pairs), Outputs (name, type dropdown, required checkbox per field) (human task nodes)
+- Description, Inputs (label/expression pairs), and Outputs (human task nodes). Each output is a
+  form field the assignee fills in to complete the task and supports rich authoring metadata: name,
+  type dropdown, required checkbox, label, help/description text, a widget (`text` / `textarea` /
+  `select`), a default value, and — for the `select` widget — an editable list of label/value
+  options. Only the name is required; the rest are optional and drive the runtime completion form
+  the host renders. See [Engine Usage](engine-usage.md#output-field-metadata) for the full field
+  reference.
 - Duration (ISO 8601 string) (wait nodes)
 - Node ID (read-only)
 

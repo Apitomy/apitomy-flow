@@ -111,6 +111,10 @@ problems.
 | `MISSING_TASK_OUTPUTS` | Human task node has no outputs defined |
 | `EMPTY_TASK_INPUT_EXPRESSION` | Human task input has an empty or blank EL expression |
 | `MISSING_WAIT_DURATION` | Wait node has no duration configured |
+| `WIDGET_TYPE_MISMATCH` | Human-task output declares a `widget` but its `type` is not `string` (widgets apply to string outputs) |
+| `SELECT_MISSING_OPTIONS` | Human-task output uses `widget: select` but declares no options |
+| `MALFORMED_OUTPUT_OPTION` | Human-task output has a `select` option with no value |
+| `DEFAULT_VALUE_TYPE_MISMATCH` | Human-task output `defaultValue` does not match the declared `type` |
 
 ## ValidationProblem
 
@@ -126,8 +130,8 @@ public record ValidationProblem(
 
 ## Rule Coverage
 
-The engine's Java `WorkflowValidator` implements all **51** rules. The TypeScript validator used by
-the visual editor implements **49** of them — every rule except `MISSING_EDGE_SOURCE` and
+The engine's Java `WorkflowValidator` implements all **55** rules. The TypeScript validator used by
+the visual editor implements **53** of them — every rule except `MISSING_EDGE_SOURCE` and
 `MISSING_EDGE_TARGET`, which cannot occur through the editor UI (it never produces an edge without a
 source and target).
 

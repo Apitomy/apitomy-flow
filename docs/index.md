@@ -11,7 +11,7 @@ Apitomy Flow is a standalone library designed to integrate into [Apitomy](https:
 - **Human-in-the-loop** tasks and external event correlation
 - **Visual editor** with drag-and-drop node placement and real-time validation
 - **Read-only viewer** for monitoring workflow instance progress
-- **51 validation rules** catch structural and semantic problems at design time
+- **55 validation rules** catch structural and semantic problems at design time
 
 ## Two Components
 
