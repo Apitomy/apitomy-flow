@@ -32,13 +32,16 @@ function MyWorkflowEditor() {
 | `workflow` | `Workflow` | Yes | The workflow definition to edit |
 | `onChange` | `(workflow: Workflow) => void` | Yes | Called on every change with the updated definition |
 | `theme` | `FlowTheme` | No | `'light'` or `'dark'` (default: `'light'`). Controls the color scheme of the editor and React Flow canvas |
-| `onValidationChange` | `(problems: ValidationProblem[]) => void` | No | Called when validation results change (e.g. to disable a Save button when errors exist) |
+| `onValidationChange` | `(problems: ValidationProblem[]) => void` | No | Called when validation results change (e.g. to disable a Save button when errors exist). Receives the merged built-in and host problems |
+| `spi` | `EditorSpi` | No | Host extension object. Supplies action-type descriptors (`actionTypes`) and/or a custom `validate` function. See [Host Extension (SPI)](#host-extension-spi) |
 
 ## Features
 
 ### Node Palette
 
-A toolbar at the top lists all five node types. Drag a node type from the palette onto the canvas to add it.
+A toolbar at the top lists all six node types. Drag a node type from the palette onto the canvas to add it.
+
+The toolbar also has a **Tidy up** button that runs auto-layout (see [Auto-Layout](#auto-layout) below).
 
 ### Canvas
 
@@ -99,10 +102,73 @@ Click the canvas background to deselect and hide the properties panel.
 The editor runs the TypeScript workflow validator on every change. Validation feedback is displayed in two ways:
 
 **Inline indicators:** Nodes with errors show a red border. Nodes with warnings show an amber border.
+Each affected node also shows a small corner badge in the top-right — red for errors, amber for
+warnings — carrying the highest-severity problem for that node, with the message available on hover.
 
 **Problems panel:** A collapsible panel at the bottom lists all validation problems grouped by severity (errors first). Click a problem to select and center the affected node or edge on the canvas.
 
-### Host-provided validation
+### Auto-Layout
+
+The editor can arrange nodes automatically using a layered graph layout (powered by
+[dagre](https://github.com/dagrejs/dagre)), so you never have to position nodes by hand.
+
+- **Tidy up button** — click **Tidy up** in the toolbar at any time to re-flow the whole graph
+  left-to-right and fit it to the viewport.
+- **Automatic on load** — when a workflow is opened whose nodes have no positions (or whose nodes
+  all overlap at the same coordinates), the editor lays it out automatically and emits the computed
+  positions through `onChange`. Workflows that already have valid positions are left untouched.
+
+This means a host can construct a `Workflow` without assigning any `position` values and the editor
+will produce a sensible layout on first render.
+
+### Host Extension (SPI)
+
+A host application can extend the editor by passing an `EditorSpi` object to the `spi` prop:
+
+```ts
+import { type EditorSpi } from '@apitomy/flow-ui';
+
+const spi: EditorSpi = {
+  actionTypes: [ /* ... */ ],
+  validate: async (workflow) => [ /* ... */ ],
+};
+```
+
+```ts
+interface EditorSpi {
+  actionTypes?: ActionTypeProvider;   // action-type descriptors for the properties panel
+  validate?: WorkflowValidator;       // host-contributed validation
+}
+```
+
+Both fields are optional; provide either or both.
+
+#### Action-type descriptors
+
+`actionTypes` supplies the set of action types a host understands, so the properties panel can offer
+them as choices and render typed input/output fields. It is either an array of descriptors or a
+function returning a `Promise` of them (so the list can be fetched from a backend):
+
+```ts
+type ActionTypeProvider = ActionTypeDescriptor[] | (() => Promise<ActionTypeDescriptor[]>);
+
+interface ActionTypeDescriptor {
+  value: string;                 // stored in the node's actionType config
+  label: string;                 // shown in the dropdown
+  description?: string;
+  inputs?: ActionTypeField[];
+  outputs?: ActionTypeField[];
+}
+
+interface ActionTypeField {
+  name: string;
+  type: 'string' | 'number' | 'boolean' | 'object';
+  required?: boolean;
+  description?: string;
+}
+```
+
+#### Host-provided validation
 
 In addition to the editor's built-in validation, a host application can contribute its own
 validations through the `validate` function on the editor SPI. Problems it returns are merged

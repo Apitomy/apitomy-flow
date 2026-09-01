@@ -50,6 +50,8 @@ problems.
 | `NO_END_NODE` | At least one end node is required |
 | `INVALID_EDGE_SOURCE` | Edge references a source node ID that doesn't exist |
 | `INVALID_EDGE_TARGET` | Edge references a target node ID that doesn't exist |
+| `MISSING_EDGE_SOURCE` | Edge has no source node ID (null or blank) — _engine only_ |
+| `MISSING_EDGE_TARGET` | Edge has no target node ID (null or blank) — _engine only_ |
 | `DUPLICATE_NODE_ID` | Two or more nodes share the same ID |
 | `DUPLICATE_EDGE_ID` | Two or more edges share the same ID |
 | `START_HAS_INCOMING` | Start node must not have incoming edges |
@@ -84,7 +86,7 @@ problems.
 | `SINGLE_CONDITIONAL_EDGE` | Node has a single outgoing edge with a condition but no fallback |
 | `NO_DEFAULT_EDGE` | Node has multiple conditional edges but no default fallback |
 | `MULTIPLE_DEFAULT_EDGES` | Node has more than one default edge |
-| `INVALID_CONDITION` | Edge condition is not syntactically valid EL (Java only) |
+| `INVALID_CONDITION` | Edge condition is not syntactically valid EL |
 | `DUPLICATE_EDGE_PRIORITY` | Multiple edges from the same node share the same priority |
 
 ### Semantic (WARNING)
@@ -122,8 +124,14 @@ public record ValidationProblem(
 ) {}
 ```
 
-## TypeScript Validator Notes
+## Rule Coverage
 
-The TypeScript implementation covers all rules except `INVALID_CONDITION`, which requires parsing
-Jakarta EL expressions (a Java library). All other rules are structural or semantic checks that
-work identically in both languages.
+The engine's Java `WorkflowValidator` implements all **51** rules. The TypeScript validator used by
+the visual editor implements **49** of them — every rule except `MISSING_EDGE_SOURCE` and
+`MISSING_EDGE_TARGET`, which cannot occur through the editor UI (it never produces an edge without a
+source and target).
+
+`INVALID_CONDITION` is implemented in **both**. The Java engine parses the expression with Jakarta EL;
+the TypeScript validator applies a lightweight syntax check (balanced parentheses, brackets, and
+quotes) so obviously malformed conditions are caught at design time. A condition that passes the
+editor's check but is still invalid EL will be rejected by the engine at runtime.

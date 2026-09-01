@@ -8,14 +8,17 @@ React Flow and PatternFly 6.
 - **WorkflowEditor** -- full visual editor with drag-and-drop node palette, property inspector,
   conditional edge editing, undo/redo, right-click context menu, and real-time validation.
 - **WorkflowViewer** -- read-only instance viewer showing execution trace with visited/current/
-  unvisited node styling and animated edges.
+  unvisited node styling, status-aware current-node highlighting (with an animated ring), animated
+  edges, and a host-augmentable node right-click menu (`nodeContextMenuItems`).
 - **Six node types** -- Start, End, Action, Human Task, Receive Event, and Wait.
 - **Conditional edges** -- configure EL condition expressions, priority, default-edge flag, and
   labels.
-- **Validation** -- four-pass client-side validation covering structural integrity, connectivity,
-  edge conditions, and semantic correctness.
-- **EditorSpi** -- extension interface for providing action type descriptors with typed
-  inputs/outputs.
+- **Auto-layout** -- automatic dagre-based node layout on load, plus a "Tidy up" button in the
+  editor.
+- **Validation** -- four-pass client-side validation (49 rules) covering structural integrity,
+  connectivity, edge conditions, and semantic correctness.
+- **EditorSpi** -- host extension interface for supplying action-type descriptors (with typed
+  inputs/outputs) and/or a custom `validate` function whose problems merge with the built-in ones.
 - **Theming** -- light and dark mode via CSS custom properties.
 
 ## Installation

@@ -8,7 +8,7 @@ Add the engine dependency to your Maven project:
 <dependency>
     <groupId>io.apitomy</groupId>
     <artifactId>apitomy-flow-engine</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
+    <version>1.0.2</version>
 </dependency>
 ```
 

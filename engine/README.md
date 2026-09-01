@@ -17,7 +17,8 @@ and event listeners.
   expressions.
 - **Pluggable SPI** -- `NodeExecutor` for action execution, `WorkflowErrorHandler` for
   fail/retry/transition strategies, and `WorkflowEventListener` for lifecycle hooks.
-- **Validation** -- structural correctness checks before execution.
+- **Validation** -- 51 structural and semantic correctness checks run before execution
+  (`startWorkflow` rejects definitions with ERROR-level problems).
 - **JSON serialization** -- workflows and instances serialize to/from JSON via Jackson.
 
 ## Installation
@@ -26,7 +27,7 @@ and event listeners.
 <dependency>
     <groupId>io.apitomy</groupId>
     <artifactId>apitomy-flow-engine</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.2</version>
 </dependency>
 ```
 
