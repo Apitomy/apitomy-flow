@@ -4,7 +4,8 @@
     "noEmit": false,
     "declaration": true,
     "declarationDir": "./dist",
-    "emitDeclarationOnly": true
+    "emitDeclarationOnly": true,
+    "rootDir": "./src"
   },
   "include": ["src"],
   "exclude": ["src/dev", "src/**/*.test.ts", "src/**/*.test.tsx"]
