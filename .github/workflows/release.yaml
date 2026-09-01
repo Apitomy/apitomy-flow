@@ -112,6 +112,9 @@ jobs:
 
   npm-publish:
     needs: release
+    permissions:
+      id-token: write
+      contents: read
     uses: ./.github/workflows/npm-publish.yaml
     with:
       release-version: ${{ needs.release.outputs.release-version }}
