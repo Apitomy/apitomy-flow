@@ -358,6 +358,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             defaultEdgeOptions={{ type: 'conditional' }}
+            deleteKeyCode={['Backspace', 'Delete']}
             colorMode={theme}
             fitView
           >
