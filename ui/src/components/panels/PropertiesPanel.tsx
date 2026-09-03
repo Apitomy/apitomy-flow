@@ -16,7 +16,7 @@ import { type EditorSpi } from '../../types/spi.ts';
 import { type ActionTypeDescriptor } from '../../types/spi.ts';
 import { type HumanTaskOutput, type OutputOption, type OutputWidget } from '../../types/workflow.ts';
 import { type ValidationProblem } from '../../types/validation.ts';
-import { mapToPairs, pairsToMap, duplicateKeys, type KeyValuePair } from '../../utils/mapInputs.ts';
+import { mapToPairs, pairsToMap, duplicateKeys, nextPairId, type KeyValuePair } from '../../utils/mapInputs.ts';
 import './PropertiesPanel.css';
 
 interface PropertiesPanelProps {
@@ -389,7 +389,7 @@ function MapInputsEditor({ map, onChange, nodeId, keyPlaceholder, valuePlacehold
         const isDuplicate = dupes.has(pair.key);
         const isEmpty = pair.key === '';
         return (
-          <div key={i} className="properties-panel__input-item">
+          <div key={pair.id} className="properties-panel__input-item">
             <div className="properties-panel__input-row">
               <input
                 type="text"
@@ -427,7 +427,7 @@ function MapInputsEditor({ map, onChange, nodeId, keyPlaceholder, valuePlacehold
       })}
       <button
         className="properties-panel__match-add"
-        onClick={() => commit([...pairs, { key: '', value: '' }])}
+        onClick={() => commit([...pairs, { id: nextPairId(), key: '', value: '' }])}
       >
         + Add input
       </button>
