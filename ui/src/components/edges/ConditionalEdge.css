@@ -18,3 +18,23 @@
 .edge-condition-badge.has-error {
   border-color: var(--flow-status-danger, #c9190b);
 }
+
+/* Transient simulation outcome styling (never persisted). */
+.edge-condition-badge.sim-matched,
+.edge-condition-badge.sim-true {
+  border-color: var(--flow-status-success, #3e8635);
+  color: var(--flow-status-success, #3e8635);
+  font-weight: 600;
+}
+.edge-condition-badge.sim-false {
+  border-color: var(--flow-status-danger, #c9190b);
+  opacity: 0.7;
+}
+.edge-condition-badge.sim-skipped {
+  opacity: 0.4;
+}
+.edge-condition-badge.sim-error {
+  border-color: var(--flow-status-danger, #c9190b);
+  color: #fff;
+  background: var(--flow-status-danger, #c9190b);
+}
