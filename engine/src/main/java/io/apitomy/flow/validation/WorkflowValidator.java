@@ -539,9 +539,13 @@ public class WorkflowValidator {
         // cycle corresponds to a non-trivial strongly connected component (SCC): either two or
         // more action nodes that are mutually reachable, or a single action node with a self-edge.
         // Reporting one problem per SCC ensures all cycles are surfaced, not just the first.
+        // Nodes with a null id are reported separately (MISSING_NODE_ID) and cannot participate
+        // in the SCC traversal, since the traversal stack (ArrayDeque) forbids null elements.
         Set<String> actionNodeIds = workflow.nodes().stream()
             .filter(n -> n.type() == NodeType.ACTION)
-            .map(WorkflowNode::id).collect(Collectors.toSet());
+            .map(WorkflowNode::id)
+            .filter(Objects::nonNull)
+            .collect(Collectors.toSet());
 
         Set<String> visited = new HashSet<>();
         Deque<String> stack = new ArrayDeque<>();
@@ -552,7 +556,7 @@ public class WorkflowValidator {
 
         // Iterate in node declaration order for deterministic reporting.
         for (WorkflowNode node : workflow.nodes()) {
-            if (node.type() == NodeType.ACTION && !visited.contains(node.id())) {
+            if (node.type() == NodeType.ACTION && node.id() != null && !visited.contains(node.id())) {
                 strongConnect(workflow, node.id(), actionNodeIds, visited, stack, onStack,
                     index, lowlink, cycleComponents);
             }

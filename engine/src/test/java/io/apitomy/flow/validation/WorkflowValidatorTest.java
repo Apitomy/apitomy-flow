@@ -320,6 +320,25 @@ class WorkflowValidatorTest {
         assertFalse(hasCode(validate(w), "AUTOMATED_CYCLE"));
     }
 
+    @Test
+    void nullIdActionNodeDoesNotBreakCycleDetection() {
+        // A null-id action node must not crash the SCC traversal (ArrayDeque forbids null
+        // elements); it is reported via MISSING_NODE_ID while real cycles are still detected.
+        WorkflowNode noId = new WorkflowNode(null, NodeType.ACTION, "N",
+            Map.of("actionType", "test"), new Position(0, 0));
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), noId,
+                actionNode("a1", "t"), actionNode("a2", "t"), endNode("end")),
+            List.of(
+                edge("e1", "start", "a1"),
+                edge("e2", "a1", "a2"),
+                edge("e3", "a2", "a1"),
+                edge("e4", "a2", "end")));
+        List<ValidationProblem> problems = validate(w);
+        assertTrue(hasCode(problems, "MISSING_NODE_ID"));
+        assertEquals(1, countCode(problems, "AUTOMATED_CYCLE"));
+    }
+
     // --- Valid workflow produces no errors ---
 
     @Test
