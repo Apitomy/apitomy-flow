@@ -337,6 +337,42 @@ class WorkflowEngineErrorTest {
         assertTrue(result.failureReason().contains("START"));
     }
 
+    // --- Bug fix: condition evaluation failure preserves error context (#50) ---
+
+    @Test
+    void conditionEvaluationFailureReportsFailingExpression() {
+        Exception[] capturedException = {null};
+        WorkflowNode[] capturedNode = {null};
+
+        WorkflowErrorHandler capturingHandler = new WorkflowErrorHandler() {
+            public ErrorResolution handleNodeError(WorkflowInstance i, WorkflowNode n,
+                                                    NodeResult r, Exception e) {
+                capturedException[0] = e;
+                capturedNode[0] = n;
+                return ErrorResolution.fail();
+            }
+            public ErrorResolution handleNoMatchingEdge(WorkflowInstance i, WorkflowNode n) {
+                return ErrorResolution.fail();
+            }
+        };
+
+        String badCondition = "1 +";
+        Workflow workflow = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), endNode("end")),
+            List.of(edge("e1", "start", "end", badCondition, 0)));
+
+        WorkflowEngine engine = new WorkflowEngine(
+            NodeExecutorProvider.fromList(), List.of(), capturingHandler);
+        WorkflowInstance result = engine.startWorkflow(workflow, Map.of());
+
+        assertEquals(InstanceStatus.FAILED, result.status());
+        assertNotNull(capturedException[0], "Error handler should receive the evaluation exception");
+        assertInstanceOf(ConditionEvaluationException.class, capturedException[0]);
+        assertEquals(badCondition, ((ConditionEvaluationException) capturedException[0]).expression());
+        assertNotNull(capturedNode[0], "Error handler should receive the node context");
+        assertEquals("start", capturedNode[0].id());
+    }
+
     // --- Bug fix: infinite retry loop ---
 
     @Test
