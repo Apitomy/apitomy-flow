@@ -142,4 +142,35 @@ class ConditionEvaluatorTest {
         assertTrue(evaluator.evaluate("context.eventPayload.pull_request.author.login == 'alice'", context));
         assertTrue(evaluator.evaluate("context.eventPayload.pull_request.merged", context));
     }
+
+    @Test
+    void jacksonArrayAccessBracketNotation() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        JsonNode payload = mapper.readTree("""
+            {
+                "labels": ["bug", "urgent"]
+            }
+            """);
+        Map<String, Object> context = Map.of("eventPayload", payload);
+
+        // Array elements are accessed via bracket notation, matching standard Jakarta EL.
+        assertTrue(evaluator.evaluate("context.eventPayload.labels[0] == 'bug'", context));
+        assertTrue(evaluator.evaluate("context.eventPayload.labels[1] == 'urgent'", context));
+    }
+
+    @Test
+    void jacksonArrayAccessDotNotationUnsupported() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        JsonNode payload = mapper.readTree("""
+            {
+                "labels": ["bug", "urgent"]
+            }
+            """);
+        Map<String, Object> context = Map.of("eventPayload", payload);
+
+        // Array indices must use bracket notation. Dot notation (arr.0) is not valid
+        // Jakarta EL syntax and is rejected at parse time, so it never reaches the resolver.
+        assertThrows(ConditionEvaluationException.class,
+            () -> evaluator.evaluate("context.eventPayload.labels.0 == 'bug'", context));
+    }
 }
