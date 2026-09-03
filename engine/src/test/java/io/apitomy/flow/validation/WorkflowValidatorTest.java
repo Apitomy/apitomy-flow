@@ -34,6 +34,10 @@ class WorkflowValidatorTest {
         return problems.stream().anyMatch(p -> p.code().equals(code));
     }
 
+    private long countCode(List<ValidationProblem> problems, String code) {
+        return problems.stream().filter(p -> p.code().equals(code)).count();
+    }
+
     // --- Structural ---
 
     @Test
@@ -270,6 +274,69 @@ class WorkflowValidatorTest {
             List.of(startNode("start"), endNode("end")),
             List.of(edge("e1", "start", "end")));
         assertTrue(hasCode(validate(w), "MISSING_START_INPUTS"));
+    }
+
+    // --- Automated cycle detection ---
+
+    @Test
+    void detectsSingleAutomatedCycle() {
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), actionNode("a1", "t"), actionNode("a2", "t"), endNode("end")),
+            List.of(
+                edge("e1", "start", "a1"),
+                edge("e2", "a1", "a2"),
+                edge("e3", "a2", "a1"),
+                edge("e4", "a2", "end")));
+        assertEquals(1, countCode(validate(w), "AUTOMATED_CYCLE"));
+    }
+
+    @Test
+    void detectsAllIndependentAutomatedCycles() {
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start"),
+                actionNode("a1", "t"), actionNode("a2", "t"),
+                actionNode("b1", "t"), actionNode("b2", "t"),
+                endNode("end")),
+            List.of(
+                edge("e1", "start", "a1"),
+                edge("e2", "a1", "a2"),
+                edge("e3", "a2", "a1"),
+                edge("e4", "a2", "b1"),
+                edge("e5", "b1", "b2"),
+                edge("e6", "b2", "b1"),
+                edge("e7", "b2", "end")));
+        // Two independent cycles ({a1,a2} and {b1,b2}) should both be reported.
+        assertEquals(2, countCode(validate(w), "AUTOMATED_CYCLE"));
+    }
+
+    @Test
+    void noAutomatedCycleForAcyclicActions() {
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), actionNode("a1", "t"), actionNode("a2", "t"), endNode("end")),
+            List.of(
+                edge("e1", "start", "a1"),
+                edge("e2", "a1", "a2"),
+                edge("e3", "a2", "end")));
+        assertFalse(hasCode(validate(w), "AUTOMATED_CYCLE"));
+    }
+
+    @Test
+    void nullIdActionNodeDoesNotBreakCycleDetection() {
+        // A null-id action node must not crash the SCC traversal (ArrayDeque forbids null
+        // elements); it is reported via MISSING_NODE_ID while real cycles are still detected.
+        WorkflowNode noId = new WorkflowNode(null, NodeType.ACTION, "N",
+            Map.of("actionType", "test"), new Position(0, 0));
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), noId,
+                actionNode("a1", "t"), actionNode("a2", "t"), endNode("end")),
+            List.of(
+                edge("e1", "start", "a1"),
+                edge("e2", "a1", "a2"),
+                edge("e3", "a2", "a1"),
+                edge("e4", "a2", "end")));
+        List<ValidationProblem> problems = validate(w);
+        assertTrue(hasCode(problems, "MISSING_NODE_ID"));
+        assertEquals(1, countCode(problems, "AUTOMATED_CYCLE"));
     }
 
     // --- Valid workflow produces no errors ---
