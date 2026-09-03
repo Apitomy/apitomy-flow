@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static io.apitomy.flow.TestWorkflows.*;
 import static org.junit.jupiter.api.Assertions.*;
@@ -95,6 +96,46 @@ class WorkflowEngineCompleteTest {
 
         WorkflowInstance result = engine.cancelWorkflow(workflow, completed);
         assertEquals(InstanceStatus.COMPLETED, result.status());
+    }
+
+    @Test
+    void nonStringInputValuesPassedThroughUnchanged() {
+        AtomicReference<Map<String, Object>> captured = new AtomicReference<>();
+        NodeExecutor executor = new NodeExecutor() {
+            public String actionType() { return "capture"; }
+            public NodeResult execute(NodeExecutionContext ctx) {
+                captured.set(ctx.inputs());
+                return new NodeResult(NodeResultStatus.COMPLETED, Map.of());
+            }
+        };
+        WorkflowEngine engine = engine(executor);
+
+        Map<String, Object> nestedMap = Map.of("key", "value");
+        List<String> listValue = List.of("a", "b");
+        Map<String, Object> inputs = Map.of(
+            "mapInput", nestedMap,
+            "listInput", listValue,
+            "numberInput", 42,
+            "boolInput", true,
+            "stringExpr", "context.foo"
+        );
+        WorkflowNode action = new WorkflowNode("action", NodeType.ACTION, "action",
+            Map.of("actionType", "capture", "inputs", inputs), new Position(100, 0));
+        Workflow workflow = new Workflow("wf", "W", null, null,
+            List.of(startNode("start"), action, endNode("end")),
+            List.of(edge("e1", "start", "action"), edge("e2", "action", "end")));
+
+        engine.startWorkflow(workflow, Map.of("foo", "bar"));
+
+        Map<String, Object> resolved = captured.get();
+        assertNotNull(resolved);
+        // Non-string values are preserved as-is (not mangled via String.valueOf)
+        assertEquals(nestedMap, resolved.get("mapInput"));
+        assertEquals(listValue, resolved.get("listInput"));
+        assertEquals(42, resolved.get("numberInput"));
+        assertEquals(true, resolved.get("boolInput"));
+        // String values are still resolved as EL expressions
+        assertEquals("bar", resolved.get("stringExpr"));
     }
 
     @Test
