@@ -6,7 +6,7 @@
 
     <groupId>io.apitomy</groupId>
     <artifactId>apitomy-flow-engine</artifactId>
-    <version>1.0.4-SNAPSHOT</version>
+    <version>1.0.4</version>
     <packaging>jar</packaging>
 
     <name>Apitomy Flow Engine</name>
