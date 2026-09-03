@@ -535,38 +535,89 @@ public class WorkflowValidator {
     }
 
     private void detectAutomatedCycles(Workflow workflow, List<ValidationProblem> problems) {
-        // Find cycles using DFS, then check if any cycle contains only action nodes
+        // Detect every independent cycle in the subgraph induced by action nodes. Each such
+        // cycle corresponds to a non-trivial strongly connected component (SCC): either two or
+        // more action nodes that are mutually reachable, or a single action node with a self-edge.
+        // Reporting one problem per SCC ensures all cycles are surfaced, not just the first.
         Set<String> actionNodeIds = workflow.nodes().stream()
             .filter(n -> n.type() == NodeType.ACTION)
             .map(WorkflowNode::id).collect(Collectors.toSet());
 
         Set<String> visited = new HashSet<>();
-        Set<String> inStack = new HashSet<>();
+        Deque<String> stack = new ArrayDeque<>();
+        Set<String> onStack = new HashSet<>();
+        Map<String, Integer> index = new HashMap<>();
+        Map<String, Integer> lowlink = new HashMap<>();
+        List<List<String>> cycleComponents = new ArrayList<>();
 
+        // Iterate in node declaration order for deterministic reporting.
         for (WorkflowNode node : workflow.nodes()) {
             if (node.type() == NodeType.ACTION && !visited.contains(node.id())) {
-                if (hasAutomatedCycle(workflow, node.id(), actionNodeIds, visited, inStack)) {
-                    problems.add(ValidationProblem.warning("AUTOMATED_CYCLE",
-                        "Cycle detected containing only action nodes", node.id()));
-                    return;
-                }
+                strongConnect(workflow, node.id(), actionNodeIds, visited, stack, onStack,
+                    index, lowlink, cycleComponents);
+            }
+        }
+
+        for (List<String> component : cycleComponents) {
+            // Report against the component member that appears first in declaration order.
+            String representative = firstInDeclarationOrder(workflow, component);
+            problems.add(ValidationProblem.warning("AUTOMATED_CYCLE",
+                "Cycle detected containing only action nodes", representative));
+        }
+    }
+
+    /**
+     * Tarjan's strongly connected components algorithm, restricted to the subgraph of action
+     * nodes. Components that represent a cycle (size &gt; 1, or a single node with a self-edge)
+     * are collected into {@code cycleComponents}.
+     */
+    private void strongConnect(Workflow workflow, String nodeId, Set<String> actionNodeIds,
+                               Set<String> visited, Deque<String> stack, Set<String> onStack,
+                               Map<String, Integer> index, Map<String, Integer> lowlink,
+                               List<List<String>> cycleComponents) {
+        int idx = index.size();
+        index.put(nodeId, idx);
+        lowlink.put(nodeId, idx);
+        visited.add(nodeId);
+        stack.push(nodeId);
+        onStack.add(nodeId);
+
+        boolean hasSelfLoop = false;
+        for (WorkflowEdge edge : workflow.getOutgoingEdges(nodeId)) {
+            String target = edge.target();
+            if (!actionNodeIds.contains(target)) continue;
+            if (target.equals(nodeId)) hasSelfLoop = true;
+            if (!index.containsKey(target)) {
+                strongConnect(workflow, target, actionNodeIds, visited, stack, onStack,
+                    index, lowlink, cycleComponents);
+                lowlink.put(nodeId, Math.min(lowlink.get(nodeId), lowlink.get(target)));
+            } else if (onStack.contains(target)) {
+                lowlink.put(nodeId, Math.min(lowlink.get(nodeId), index.get(target)));
+            }
+        }
+
+        if (lowlink.get(nodeId).equals(index.get(nodeId))) {
+            List<String> component = new ArrayList<>();
+            String member;
+            do {
+                member = stack.pop();
+                onStack.remove(member);
+                component.add(member);
+            } while (!member.equals(nodeId));
+
+            if (component.size() > 1 || hasSelfLoop) {
+                cycleComponents.add(component);
             }
         }
     }
 
-    private boolean hasAutomatedCycle(Workflow workflow, String nodeId, Set<String> actionNodeIds,
-                                      Set<String> visited, Set<String> inStack) {
-        visited.add(nodeId);
-        inStack.add(nodeId);
-        for (WorkflowEdge edge : workflow.getOutgoingEdges(nodeId)) {
-            String target = edge.target();
-            if (!actionNodeIds.contains(target)) continue;
-            if (inStack.contains(target)) return true;
-            if (!visited.contains(target) && hasAutomatedCycle(workflow, target, actionNodeIds, visited, inStack)) {
-                return true;
+    private String firstInDeclarationOrder(Workflow workflow, List<String> nodeIds) {
+        Set<String> members = new HashSet<>(nodeIds);
+        for (WorkflowNode node : workflow.nodes()) {
+            if (members.contains(node.id())) {
+                return node.id();
             }
         }
-        inStack.remove(nodeId);
-        return false;
+        return nodeIds.get(0);
     }
 }
