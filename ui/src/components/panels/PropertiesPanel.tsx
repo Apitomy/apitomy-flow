@@ -365,14 +365,13 @@ function MapInputsEditor({ map, onChange, nodeId, keyPlaceholder, valuePlacehold
     // pairs must never carry over, even when both nodes happen to serialize to an equal map.
     setSync({ nodeId, map });
     setPairs(mapToPairs(map));
-  } else if (sync.map !== map) {
-    // Same node, but the incoming map reference changed. Adopt genuine external changes (undo/redo,
-    // source-view edit); ignore only this editor's own serialized output echoed back by the parent,
-    // so in-progress duplicate/empty rows survive round-tripping.
+  } else if (sync.map !== map && map !== lastEmitted) {
+    // Same node, and the incoming map reference changed to one we did not emit — a genuine external
+    // change (undo/redo, source-view edit). Adopt it. Our own serialized output echoed back by the
+    // parent (map === lastEmitted) is skipped entirely, so it neither resets in-progress
+    // duplicate/empty rows nor schedules an extra render just to re-sync a reference we already know.
     setSync({ nodeId, map });
-    if (map !== lastEmitted) {
-      setPairs(mapToPairs(map));
-    }
+    setPairs(mapToPairs(map));
   }
 
   const dupes = duplicateKeys(pairs);
