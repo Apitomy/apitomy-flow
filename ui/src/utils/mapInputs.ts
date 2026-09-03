@@ -9,10 +9,28 @@
  * can coexist — and converts to/from the map only at the serialization boundary.
  */
 
-/** A single map entry while being edited. Rows are identified by array position, not by `key`. */
+/**
+ * A single map entry while being edited. Rows are identified by array position, not by `key`, so
+ * empty-key and duplicate-key rows can coexist. The `id` is a stable per-row identity used only as
+ * the React key when rendering, so rows reconcile by identity rather than position (keeping focus/IME
+ * with the correct logical entry when a non-last row is removed or reordered).
+ */
 export interface KeyValuePair {
+  id: string;
   key: string;
   value: string;
+}
+
+let pairIdCounter = 0;
+
+/**
+ * Mints a stable, unique id for a newly created {@link KeyValuePair}. Used both when converting from
+ * a map and when appending a fresh row in the editor.
+ *
+ * @return a unique row id
+ */
+export function nextPairId(): string {
+  return `pair-${pairIdCounter++}`;
 }
 
 /**
@@ -26,7 +44,7 @@ export function mapToPairs(map: Record<string, string> | null | undefined): KeyV
   if (!map) {
     return [];
   }
-  return Object.entries(map).map(([key, value]) => ({ key, value }));
+  return Object.entries(map).map(([key, value]) => ({ id: nextPairId(), key, value }));
 }
 
 /**
