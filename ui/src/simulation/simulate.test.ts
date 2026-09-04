@@ -200,3 +200,23 @@ describe('end-to-end with the cveTriage sample', () => {
         expect(state.edgeEvaluations['e4'].result).toBe('matched');
     });
 });
+
+describe('active-branch model — linear parity', () => {
+    it('runs a linear flow on the root branch with attributed history', () => {
+        const wf = workflow(
+            [node('start', 'start'), node('act', 'action'), node('end', 'end')],
+            [edge('e1', 'start', 'act'), edge('e2', 'act', 'end')],
+        );
+        let state = startSimulation(wf, {});
+        expect(state.activeBranches).toEqual([{ branchId: 'root', nodeId: 'start' }]);
+        state = runSimulation(wf, state);
+        expect(state.status).toBe('blocked');
+        expect(state.currentNodeId).toBe('act');
+        expect(state.blockedOn?.nodeId).toBe('act');
+        expect(state.activeBranches).toEqual([{ branchId: 'root', nodeId: 'act' }]);
+        state = resumeSimulation(wf, state, { output: { done: true } });
+        state = runSimulation(wf, state);
+        expect(state.status).toBe('completed');
+        expect(state.history.every(h => h.branchId === 'root')).toBe(true);
+    });
+});
