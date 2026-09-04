@@ -94,6 +94,11 @@ public record WorkflowInstance(
             return this;
         }
 
+        public Builder clearJoinArrivals(String joinNodeId) {
+            this.joinArrivals.remove(joinNodeId);
+            return this;
+        }
+
         public Builder mergeContext(Map<String, Object> output) {
             if (output != null) this.context.putAll(output);
             return this;

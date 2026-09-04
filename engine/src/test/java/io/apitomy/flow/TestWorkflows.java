@@ -93,4 +93,26 @@ public class TestWorkflows {
             List.of(edge("e1", "start", "a1"), edge("e2", "start", "a2"),
                 edge("e3", "a1", "j"), edge("e4", "a2", "j"), edge("e5", "j", "end")));
     }
+
+    /**
+     * Nested fork/join. The OUTER fork (start) fans out to branch A ("A") and branch B ("B"). Branch A is
+     * itself an INNER fork ("A" → "A1", "A2") that re-converges at the inner join ("innerJoin"); the inner
+     * join then flows to the outer join ("outerJoin"), where it re-converges with branch B. The outer join
+     * flows to a single END.
+     *
+     * <p>Action types: A="a", B="b", A1="a1", A2="a2", innerJoin="ij", outerJoin="oj".
+     */
+    public static Workflow nestedForkJoinWorkflow() {
+        return new Workflow("wf-nested", "Nested", null, null,
+            List.of(startNode("start"),
+                actionNode("A", "a"), actionNode("B", "b"),
+                actionNode("A1", "a1"), actionNode("A2", "a2"),
+                actionNode("innerJoin", "ij"), actionNode("outerJoin", "oj"),
+                endNode("end")),
+            List.of(edge("e1", "start", "A"), edge("e2", "start", "B"),
+                edge("e3", "A", "A1"), edge("e4", "A", "A2"),
+                edge("e5", "A1", "innerJoin"), edge("e6", "A2", "innerJoin"),
+                edge("e7", "innerJoin", "outerJoin"), edge("e8", "B", "outerJoin"),
+                edge("e9", "outerJoin", "end")));
+    }
 }

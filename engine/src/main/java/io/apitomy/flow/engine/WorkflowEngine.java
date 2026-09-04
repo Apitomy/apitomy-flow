@@ -106,7 +106,7 @@ public class WorkflowEngine {
             .orElseThrow(() -> new IllegalStateException("Node not found: " + nodeId));
 
         if (result.status() == NodeResultStatus.FAILED) {
-            return handleFailedCompletion(workflow, instance, node, result);
+            return handleFailedCompletion(workflow, instance, branch.branchId(), node, result);
         }
         if (result.status() == NodeResultStatus.PENDING) {
             WorkflowInstance reparked = instance;
@@ -148,7 +148,8 @@ public class WorkflowEngine {
     }
 
     private WorkflowInstance handleFailedCompletion(Workflow workflow, WorkflowInstance instance,
-                                                    WorkflowNode actionNode, NodeResult result) {
+                                                    String branchId, WorkflowNode actionNode,
+                                                    NodeResult result) {
         ErrorResolution resolution;
         try {
             resolution = errorHandler.handleNodeError(instance, actionNode, result, null);
@@ -163,7 +164,7 @@ public class WorkflowEngine {
                 .status(InstanceStatus.RUNNING)
                 .updatedOn(Instant.now())
                 .build();
-            WorkflowInstance executed = executeActionNode(workflow, running, actionNode);
+            WorkflowInstance executed = executeActionNode(workflow, running, branchId, actionNode);
             if (executed.status() != InstanceStatus.RUNNING) {
                 return executed;
             }
@@ -175,7 +176,7 @@ public class WorkflowEngine {
             .status(InstanceStatus.RUNNING)
             .updatedOn(Instant.now())
             .build();
-        WorkflowInstance resolved = applyResolution(workflow, running, actionNode, resolution);
+        WorkflowInstance resolved = applyResolution(workflow, running, branchId, actionNode, resolution);
         if (resolved.status() != InstanceStatus.RUNNING) {
             return resolved;
         }
@@ -201,11 +202,46 @@ public class WorkflowEngine {
         return conditionEvaluator.resolve(expression, context);
     }
 
+    /**
+     * Returns the human-task info for the instance's single current node, or — when multiple branches are
+     * parked concurrently ({@code currentNodeId == null}) — the first parked HUMAN_TASK branch (in
+     * {@link WorkflowInstance#activeBranches()} order), or {@code null} if none.
+     *
+     * @param workflow the workflow definition
+     * @param instance the WAITING instance
+     * @return the resolved human-task info, or {@code null}
+     */
     public HumanTaskInfo getHumanTaskInfo(Workflow workflow, WorkflowInstance instance) {
+        if (instance.currentNodeId() != null) {
+            return getHumanTaskInfo(workflow, instance, instance.currentNodeId());
+        }
         if (instance.status() != InstanceStatus.WAITING) {
             return null;
         }
-        WorkflowNode node = workflow.findNodeById(instance.currentNodeId()).orElse(null);
+        for (ActiveBranch branch : instance.activeBranches()) {
+            HumanTaskInfo info = getHumanTaskInfo(workflow, instance, branch.nodeId());
+            if (info != null) {
+                return info;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Returns the human-task info for a specific parked branch node. Use this when multiple branches may be
+     * waiting concurrently and the caller needs to address one by its node id.
+     *
+     * @param workflow the workflow definition
+     * @param instance the WAITING instance
+     * @param nodeId   the id of the parked node to resolve (must correspond to an active branch)
+     * @return the human-task info, or {@code null} if the instance is not WAITING or the node is not a
+     *         HUMAN_TASK
+     */
+    public HumanTaskInfo getHumanTaskInfo(Workflow workflow, WorkflowInstance instance, String nodeId) {
+        if (instance.status() != InstanceStatus.WAITING) {
+            return null;
+        }
+        WorkflowNode node = workflow.findNodeById(nodeId).orElse(null);
         if (node == null || node.type() != NodeType.HUMAN_TASK) {
             return null;
         }
@@ -238,11 +274,46 @@ public class WorkflowEngine {
             Collections.unmodifiableMap(resolvedInputs), outputs);
     }
 
+    /**
+     * Returns the receive-event info for the instance's single current node, or — when multiple branches are
+     * parked concurrently ({@code currentNodeId == null}) — the first parked RECEIVE_EVENT branch (in
+     * {@link WorkflowInstance#activeBranches()} order), or {@code null} if none.
+     *
+     * @param workflow the workflow definition
+     * @param instance the WAITING instance
+     * @return the resolved receive-event info, or {@code null}
+     */
     public ReceiveEventInfo getReceiveEventInfo(Workflow workflow, WorkflowInstance instance) {
+        if (instance.currentNodeId() != null) {
+            return getReceiveEventInfo(workflow, instance, instance.currentNodeId());
+        }
         if (instance.status() != InstanceStatus.WAITING) {
             return null;
         }
-        WorkflowNode node = workflow.findNodeById(instance.currentNodeId()).orElse(null);
+        for (ActiveBranch branch : instance.activeBranches()) {
+            ReceiveEventInfo info = getReceiveEventInfo(workflow, instance, branch.nodeId());
+            if (info != null) {
+                return info;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Returns the receive-event info for a specific parked branch node. Use this when multiple branches may
+     * be waiting concurrently and the caller needs to address one by its node id.
+     *
+     * @param workflow the workflow definition
+     * @param instance the WAITING instance
+     * @param nodeId   the id of the parked node to resolve (must correspond to an active branch)
+     * @return the receive-event info, or {@code null} if the instance is not WAITING or the node is not a
+     *         RECEIVE_EVENT
+     */
+    public ReceiveEventInfo getReceiveEventInfo(Workflow workflow, WorkflowInstance instance, String nodeId) {
+        if (instance.status() != InstanceStatus.WAITING) {
+            return null;
+        }
+        WorkflowNode node = workflow.findNodeById(nodeId).orElse(null);
         if (node == null || node.type() != NodeType.RECEIVE_EVENT) {
             return null;
         }
@@ -260,11 +331,45 @@ public class WorkflowEngine {
         return new ReceiveEventInfo(node.id(), node.name(), eventType, matchExpressions);
     }
 
+    /**
+     * Returns the wait info for the instance's single current node, or — when multiple branches are parked
+     * concurrently ({@code currentNodeId == null}) — the first parked WAIT branch (in
+     * {@link WorkflowInstance#activeBranches()} order), or {@code null} if none.
+     *
+     * @param workflow the workflow definition
+     * @param instance the WAITING instance
+     * @return the resolved wait info, or {@code null}
+     */
     public WaitInfo getWaitInfo(Workflow workflow, WorkflowInstance instance) {
+        if (instance.currentNodeId() != null) {
+            return getWaitInfo(workflow, instance, instance.currentNodeId());
+        }
         if (instance.status() != InstanceStatus.WAITING) {
             return null;
         }
-        WorkflowNode node = workflow.findNodeById(instance.currentNodeId()).orElse(null);
+        for (ActiveBranch branch : instance.activeBranches()) {
+            WaitInfo info = getWaitInfo(workflow, instance, branch.nodeId());
+            if (info != null) {
+                return info;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Returns the wait info for a specific parked branch node. Use this when multiple branches may be waiting
+     * concurrently and the caller needs to address one by its node id.
+     *
+     * @param workflow the workflow definition
+     * @param instance the WAITING instance
+     * @param nodeId   the id of the parked node to resolve (must correspond to an active branch)
+     * @return the wait info, or {@code null} if the instance is not WAITING or the node is not a WAIT
+     */
+    public WaitInfo getWaitInfo(Workflow workflow, WorkflowInstance instance, String nodeId) {
+        if (instance.status() != InstanceStatus.WAITING) {
+            return null;
+        }
+        WorkflowNode node = workflow.findNodeById(nodeId).orElse(null);
         if (node == null || node.type() != NodeType.WAIT) {
             return null;
         }
@@ -281,11 +386,45 @@ public class WorkflowEngine {
         return new WaitInfo(node.id(), node.name(), duration);
     }
 
+    /**
+     * Returns the action info for the instance's single current node, or — when multiple branches are parked
+     * concurrently ({@code currentNodeId == null}) — the first parked ACTION branch (in
+     * {@link WorkflowInstance#activeBranches()} order), or {@code null} if none.
+     *
+     * @param workflow the workflow definition
+     * @param instance the WAITING instance
+     * @return the resolved action info, or {@code null}
+     */
     public ActionInfo getActionInfo(Workflow workflow, WorkflowInstance instance) {
+        if (instance.currentNodeId() != null) {
+            return getActionInfo(workflow, instance, instance.currentNodeId());
+        }
         if (instance.status() != InstanceStatus.WAITING) {
             return null;
         }
-        WorkflowNode node = workflow.findNodeById(instance.currentNodeId()).orElse(null);
+        for (ActiveBranch branch : instance.activeBranches()) {
+            ActionInfo info = getActionInfo(workflow, instance, branch.nodeId());
+            if (info != null) {
+                return info;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Returns the action info for a specific parked branch node. Use this when multiple branches may be
+     * waiting concurrently and the caller needs to address one by its node id.
+     *
+     * @param workflow the workflow definition
+     * @param instance the WAITING instance
+     * @param nodeId   the id of the parked node to resolve (must correspond to an active branch)
+     * @return the action info, or {@code null} if the instance is not WAITING or the node is not an ACTION
+     */
+    public ActionInfo getActionInfo(Workflow workflow, WorkflowInstance instance, String nodeId) {
+        if (instance.status() != InstanceStatus.WAITING) {
+            return null;
+        }
+        WorkflowNode node = workflow.findNodeById(nodeId).orElse(null);
         if (node == null || node.type() != NodeType.ACTION) {
             return null;
         }
@@ -311,12 +450,49 @@ public class WorkflowEngine {
             resolvedInputs, expectedOutputs);
     }
 
+    /**
+     * Tests whether the given event matches a parked RECEIVE_EVENT branch. When the instance has a single
+     * current node ({@code currentNodeId != null}), it tests that node; when multiple branches are parked
+     * concurrently ({@code currentNodeId == null}), it returns true if ANY parked RECEIVE_EVENT branch
+     * matches.
+     *
+     * @param workflow the workflow definition
+     * @param instance the WAITING instance
+     * @param event    the incoming event
+     * @return true if a parked RECEIVE_EVENT branch matches the event
+     */
     public boolean matchesEvent(Workflow workflow, WorkflowInstance instance, Map<String, Object> event) {
+        if (instance.currentNodeId() != null) {
+            return matchesEvent(workflow, instance, instance.currentNodeId(), event);
+        }
+        if (instance.status() != InstanceStatus.WAITING) {
+            return false;
+        }
+        for (ActiveBranch branch : instance.activeBranches()) {
+            if (matchesEvent(workflow, instance, branch.nodeId(), event)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Tests whether the given event matches a specific parked RECEIVE_EVENT branch node. Use this when
+     * multiple branches may be waiting concurrently and the caller needs to address one by its node id.
+     *
+     * @param workflow the workflow definition
+     * @param instance the WAITING instance
+     * @param nodeId   the id of the parked node to test (must correspond to an active branch)
+     * @param event    the incoming event
+     * @return true if the given node is a RECEIVE_EVENT that matches the event
+     */
+    public boolean matchesEvent(Workflow workflow, WorkflowInstance instance, String nodeId,
+                                Map<String, Object> event) {
         if (instance.status() != InstanceStatus.WAITING) {
             return false;
         }
 
-        WorkflowNode currentNode = workflow.findNodeById(instance.currentNodeId()).orElse(null);
+        WorkflowNode currentNode = workflow.findNodeById(nodeId).orElse(null);
         if (currentNode == null || currentNode.type() != NodeType.RECEIVE_EVENT) {
             return false;
         }
@@ -401,14 +577,14 @@ public class WorkflowEngine {
                 try {
                     selected = selectEdge(workflow, instance, node);
                 } catch (ConditionEvaluationException e) {
-                    instance = resolveEdgeError(workflow, instance, node, null, e);
+                    instance = resolveEdgeError(workflow, instance, branch.branchId(), node, null, e);
                     if (instance.status() != InstanceStatus.RUNNING) return instance;
                     // re-run from the resolution target as a fresh single-branch continue
                     work = new ArrayDeque<>(instance.activeBranches());
                     continue;
                 }
                 if (selected == null) {
-                    instance = resolveNoEdge(workflow, instance, node);
+                    instance = resolveNoEdge(workflow, instance, branch.branchId(), node);
                     if (instance.status() != InstanceStatus.RUNNING) return instance;
                     work = new ArrayDeque<>(instance.activeBranches());
                     continue;
@@ -467,10 +643,13 @@ public class WorkflowEngine {
             Set<String> required = regions.incomingEdgeIds(target.id());
             Set<String> arrived = new HashSet<>(instance.joinArrivals().getOrDefault(target.id(), List.of()));
             if (arrived.containsAll(required)) {
-                // All branches converged — one continuing branch enters the join.
+                // All branches converged — one continuing branch enters the join. Clear this join's
+                // arrival record so a legitimate loop-back re-entry to the same fork/join starts clean
+                // (prevents premature firing on a second pass).
                 String continuingId = target.id() + "#join";
                 instance = instance.toBuilder()
                     .addActiveBranch(new ActiveBranch(continuingId, target.id()))
+                    .clearJoinArrivals(target.id())
                     .build();
                 return enterNode(workflow, instance, continuingId, target, edge, regions, work);
             }
@@ -517,7 +696,7 @@ public class WorkflowEngine {
 
         switch (node.type()) {
             case ACTION -> {
-                instance = executeActionNode(workflow, instance, node);
+                instance = executeActionNode(workflow, instance, branchId, node);
                 if (instance.status() == InstanceStatus.RUNNING) {
                     // The branch may have moved via an error-handler TRANSITION inside
                     // executeActionNode (which enters and executes the recovery target). Continue
@@ -596,20 +775,22 @@ public class WorkflowEngine {
      *
      * @param workflow the workflow definition
      * @param instance the instance being advanced
+     * @param branchId the id of the branch whose edge condition failed
      * @param node     the node whose outgoing edge condition failed
      * @param result   the node result (may be {@code null})
      * @param e        the failure that occurred
      * @return the resolved instance
      */
     private WorkflowInstance resolveEdgeError(Workflow workflow, WorkflowInstance instance,
-                                              WorkflowNode node, NodeResult result, Exception e) {
+                                              String branchId, WorkflowNode node, NodeResult result,
+                                              Exception e) {
         ErrorResolution resolution;
         try {
             resolution = errorHandler.handleNodeError(instance, node, result, e);
         } catch (Exception handlerError) {
             return failWorkflow(instance, "Error handler threw: " + handlerError.getMessage(), handlerError);
         }
-        return applyResolution(workflow, instance, node, resolution);
+        return applyResolution(workflow, instance, branchId, node, resolution);
     }
 
     /**
@@ -617,21 +798,23 @@ public class WorkflowEngine {
      *
      * @param workflow the workflow definition
      * @param instance the instance being advanced
+     * @param branchId the id of the branch with no matching outgoing edge
      * @param node     the node with no matching outgoing edge
      * @return the resolved instance
      */
-    private WorkflowInstance resolveNoEdge(Workflow workflow, WorkflowInstance instance, WorkflowNode node) {
+    private WorkflowInstance resolveNoEdge(Workflow workflow, WorkflowInstance instance, String branchId,
+                                           WorkflowNode node) {
         ErrorResolution resolution;
         try {
             resolution = errorHandler.handleNoMatchingEdge(instance, node);
         } catch (Exception e) {
             return failWorkflow(instance, "Error handler threw: " + e.getMessage(), e);
         }
-        return applyResolution(workflow, instance, node, resolution);
+        return applyResolution(workflow, instance, branchId, node, resolution);
     }
 
     private WorkflowInstance executeActionNode(Workflow workflow, WorkflowInstance instance,
-                                               WorkflowNode actionNode) {
+                                               String branchId, WorkflowNode actionNode) {
         String actionType = actionNode.config().get("actionType") instanceof String at ? at : null;
         NodeExecutor executor = executorProvider.getExecutor(actionType);
         if (executor == null) {
@@ -661,7 +844,7 @@ public class WorkflowEngine {
                     }
                     continue;
                 }
-                return applyResolution(workflow, instance, actionNode, resolution);
+                return applyResolution(workflow, instance, branchId, actionNode, resolution);
             }
 
             if (result.status() == NodeResultStatus.FAILED) {
@@ -679,7 +862,7 @@ public class WorkflowEngine {
                     }
                     continue;
                 }
-                return applyResolution(workflow, instance, actionNode, resolution);
+                return applyResolution(workflow, instance, branchId, actionNode, resolution);
             }
 
             if (result.status() == NodeResultStatus.PENDING) {
@@ -711,11 +894,12 @@ public class WorkflowEngine {
                     }
                     continue;
                 }
-                return applyResolution(workflow, instance, actionNode, resolution);
+                return applyResolution(workflow, instance, branchId, actionNode, resolution);
             }
 
             // Success — record output on history, merge into context, fire completed
-            instance = completeCurrentHistoryEntry(instance, Instant.now(), result.output());
+            instance = completeHistoryEntry(instance, branchId, actionNode.id(), Instant.now(),
+                result.output());
             instance = instance.toBuilder()
                 .mergeContext(result.output())
                 .updatedOn(Instant.now())
@@ -752,7 +936,19 @@ public class WorkflowEngine {
         return defaultEdge;
     }
 
-    private WorkflowInstance applyResolution(Workflow workflow, WorkflowInstance instance,
+    /**
+     * Applies an error-handler resolution to the branch that produced the error. TRANSITION operates on the
+     * ACTUAL failing branch (identified by {@code branchId}), so recovery works correctly even when the
+     * failing node sits inside a parallel region.
+     *
+     * @param workflow   the workflow definition
+     * @param instance   the instance being advanced
+     * @param branchId   the id of the branch that produced the error
+     * @param node       the node the error occurred at
+     * @param resolution the error handler's chosen resolution
+     * @return the resolved instance
+     */
+    private WorkflowInstance applyResolution(Workflow workflow, WorkflowInstance instance, String branchId,
                                              WorkflowNode node, ErrorResolution resolution) {
         return switch (resolution.action()) {
             case FAIL -> failWorkflow(instance, "Workflow failed at node: " + node.id(), null);
@@ -764,10 +960,13 @@ public class WorkflowEngine {
                     yield failWorkflow(instance,
                         "Error handler TRANSITION target not found: " + resolution.targetNodeId(), null);
                 }
-                // Error-handler transitions apply to the single-branch (non-parallel) error path.
-                String branchId = instance.activeBranches().size() == 1
-                    ? instance.activeBranches().getFirst().branchId() : "root";
-                // Complete the source node's open history entry before leaving it (parity with the
+                // Fail-safe: the token driver always supplies the failing branch's id. A null/blank
+                // branchId indicates a programming error; never fabricate a "root" branch.
+                if (branchId == null || branchId.isBlank()) {
+                    yield failWorkflow(instance,
+                        "Cannot apply TRANSITION recovery: no branch id for failing node " + node.id(), null);
+                }
+                // Complete the failing branch's open history entry before leaving it (parity with the
                 // old single-cursor engine, which closed the source entry on every transition).
                 WorkflowInstance sourceCompleted =
                     completeHistoryEntry(instance, branchId, node.id(), Instant.now(), null);
@@ -794,10 +993,6 @@ public class WorkflowEngine {
         return failed;
     }
 
-    private WorkflowInstance completeCurrentHistoryEntry(WorkflowInstance instance, Instant completedOn) {
-        return completeCurrentHistoryEntry(instance, completedOn, null);
-    }
-
     /**
      * Completes the most recent open history entry matching the given branch and node (sets completedOn and,
      * when provided, output). Replaces the single-cursor "last entry is the current node" assumption for
@@ -820,21 +1015,6 @@ public class WorkflowEngine {
                 history.set(i, new HistoryEntry(h.nodeId(), h.nodeName(), h.edgeId(), h.edgeCondition(),
                     h.enteredOn(), completedOn, output != null ? output : h.output(), h.branchId()));
                 break;
-            }
-        }
-        return instance.toBuilder().history(history).build();
-    }
-
-    private WorkflowInstance completeCurrentHistoryEntry(WorkflowInstance instance, Instant completedOn,
-                                                         Map<String, Object> output) {
-        List<HistoryEntry> history = new ArrayList<>(instance.history());
-        if (!history.isEmpty()) {
-            HistoryEntry last = history.getLast();
-            if (last.completedOn() == null) {
-                history.set(history.size() - 1, new HistoryEntry(
-                    last.nodeId(), last.nodeName(), last.edgeId(), last.edgeCondition(),
-                    last.enteredOn(), completedOn, output != null ? output : last.output(),
-                    last.branchId()));
             }
         }
         return instance.toBuilder().history(history).build();
