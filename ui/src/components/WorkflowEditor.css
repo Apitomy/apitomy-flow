@@ -48,6 +48,28 @@
   opacity: 0.4;
   cursor: default;
 }
+.workflow-editor__import-error {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 520px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #fff;
+  background: var(--flow-status-danger, #c9190b);
+  border-radius: 4px;
+  box-shadow: 0 2px 8px var(--flow-shadow-heavy, rgba(0, 0, 0, 0.15));
+}
+.workflow-editor__import-error button {
+  flex: 0 0 auto;
+  padding: 0 4px;
+  font-size: 16px;
+  line-height: 1;
+  color: #fff;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
 .react-flow__node { transition: box-shadow 0.15s, filter 0.15s; cursor: pointer; }
 .react-flow__edge { cursor: pointer; }
 .react-flow__edge:hover .react-flow__edge-path { stroke-width: 3; }
