@@ -94,8 +94,8 @@ public final class ParallelRegions {
 
     /**
      * Finds the synchronizing join for a fork: the first node where every branch leaving the fork
-     * re-converges. Adds a {@code FORK_WITHOUT_JOIN} / {@code PARALLEL_BRANCH_REACHES_END} /
-     * {@code UNBALANCED_PARALLEL} problem when no single balanced convergence node exists.
+     * re-converges. Adds a {@code FORK_WITHOUT_JOIN} / {@code PARALLEL_BRANCH_REACHES_END}
+     * problem when no single balanced convergence node exists.
      */
     private static String findJoin(Workflow workflow, String forkId, List<Problem> problems) {
         List<WorkflowEdge> branches = workflow.getOutgoingEdges(forkId);
@@ -189,9 +189,9 @@ public final class ParallelRegions {
 
     /** @return the incoming edge ids a join must collect before it fires. */
     public Set<String> incomingEdgeIds(String joinNodeId) {
-        return joinIncomingEdgeIds.getOrDefault(joinNodeId, Set.of());
+        return Set.copyOf(joinIncomingEdgeIds.getOrDefault(joinNodeId, Set.of()));
     }
 
     /** @return the structural problems discovered during analysis. */
-    public List<Problem> problems() { return problems; }
+    public List<Problem> problems() { return List.copyOf(problems); }
 }

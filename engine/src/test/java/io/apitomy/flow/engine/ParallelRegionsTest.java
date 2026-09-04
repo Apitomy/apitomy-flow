@@ -68,4 +68,22 @@ class ParallelRegionsTest {
         assertTrue(regions.problems().stream()
             .anyMatch(p -> p.code().equals("FORK_WITHOUT_JOIN") || p.code().equals("PARALLEL_BRANCH_REACHES_END")));
     }
+
+    @Test
+    void problemsListIsUnmodifiable() {
+        Workflow wf = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), actionNode("a", "t"), actionNode("b", "t2"), endNode("end")),
+            List.of(edge("e1", "start", "a"), edge("e2", "start", "b", "context.x == 1", 1),
+                edge("e3", "a", "end"), edge("e4", "b", "end")));
+        ParallelRegions regions = ParallelRegions.analyze(wf);
+        assertThrows(UnsupportedOperationException.class,
+            () -> regions.problems().add(new ParallelRegions.Problem("FAKE", "fake")));
+    }
+
+    @Test
+    void incomingEdgeIdsSetIsUnmodifiable() {
+        ParallelRegions regions = ParallelRegions.analyze(diamond());
+        assertThrows(UnsupportedOperationException.class,
+            () -> regions.incomingEdgeIds("j").add("fake"));
+    }
 }
