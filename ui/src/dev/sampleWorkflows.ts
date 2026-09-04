@@ -94,6 +94,8 @@ export const triageInstance: WorkflowInstance = {
   id: 'inst-1',
   workflowId: 'cve-triage',
   currentNodeId: 'triage',
+  activeBranches: [{ branchId: 'root', nodeId: 'triage' }],
+  joinArrivals: {},
   status: 'waiting',
   context: { cveId: 'CVE-2024-1234', severity: 'high', affectedVersions: '1.0.0 - 1.3.2' },
   history: [
@@ -114,6 +116,8 @@ export const completedTriageInstance: WorkflowInstance = {
   id: 'inst-2',
   workflowId: 'cve-triage',
   currentNodeId: 'end-mitigated',
+  activeBranches: [{ branchId: 'root', nodeId: 'end-mitigated' }],
+  joinArrivals: {},
   status: 'completed',
   context: {
     cveId: 'CVE-2024-1234',
@@ -143,6 +147,8 @@ export const loopingTriageInstance: WorkflowInstance = {
   id: 'inst-3',
   workflowId: 'cve-triage',
   currentNodeId: 'triage',
+  activeBranches: [{ branchId: 'root', nodeId: 'triage' }],
+  joinArrivals: {},
   status: 'waiting',
   context: { cveId: 'CVE-2024-1234', severity: 'high', affectedVersions: '1.0.0 - 1.3.2' },
   history: [
