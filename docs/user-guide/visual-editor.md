@@ -42,8 +42,9 @@ function MyWorkflowEditor() {
 A toolbar at the top lists all six node types. Drag a node type from the palette onto the canvas to add it.
 
 The toolbar also has a **Tidy up** button that runs auto-layout (see [Auto-Layout](#auto-layout)
-below) and a **Simulate** button that opens interactive routing simulation (see
-[Simulation and Condition Testing](#simulation-and-condition-testing) below).
+below), **Import** / **Export** / **Image** buttons for moving definitions in and out of the editor
+(see [Import and Export](#import-and-export) below), and a **Simulate** button that opens interactive
+routing simulation (see [Simulation and Condition Testing](#simulation-and-condition-testing) below).
 
 ### Canvas
 
@@ -126,6 +127,35 @@ The editor can arrange nodes automatically using a layered graph layout (powered
 - **Automatic on load** — when a workflow is opened whose nodes have no positions (or whose nodes
   all overlap at the same coordinates), the editor lays it out automatically and emits the computed
   positions through `onChange`. Workflows that already have valid positions are left untouched.
+
+### Import and Export
+
+Workflow definitions are portable artifacts — plain JSON that can be moved between environments,
+shared, checked into source control, or seeded as examples. The editor toolbar provides three
+affordances for this:
+
+- **Import** — load a workflow definition from a `.json` file into the editor. Import is defensive:
+  the file is parsed and run through the built-in validation *before* it is rendered. Malformed JSON
+  or a definition that is missing required structure (`id`, `name`, `nodes`, `edges`) is rejected
+  with an error banner, and a definition with error-severity validation problems is refused rather
+  than loading a broken graph. A successfully imported definition replaces the canvas contents and is
+  emitted through `onChange`; nodes without positions are auto-laid-out.
+- **Export** — download the current definition as a pretty-printed JSON file, named after the
+  workflow's id.
+- **Image** — export the current canvas as a PNG image, framed to fit the whole graph. Useful for
+  documentation, PR descriptions, and design discussions.
+
+The JSON helpers are also exported for host reuse:
+
+```ts
+import { serializeWorkflow, parseWorkflow, downloadWorkflowJson } from '@apitomy/flow-ui';
+
+const json = serializeWorkflow(workflow);        // pretty-printed, portable JSON
+const result = parseWorkflow(json);              // { workflow?, problems, error? }
+if (result.workflow) {
+  // accepted: no fatal error and no error-severity validation problems
+}
+```
 
 ### Simulation and Condition Testing
 

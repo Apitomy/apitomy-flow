@@ -4,6 +4,7 @@ export type { ValidationProblem, ValidationSeverity } from './types/validation.t
 export type { EditorSpi, ActionTypeDescriptor, ActionTypeField, ActionTypeProvider, WorkflowValidator } from './types/spi.ts';
 export { WorkflowEditor, type WorkflowEditorProps, type FlowTheme } from './components/WorkflowEditor.tsx';
 export { WorkflowViewer, type WorkflowViewerProps, type WorkflowViewerNodeMenuItem } from './components/WorkflowViewer.tsx';
+export { serializeWorkflow, parseWorkflow, downloadWorkflowJson, workflowFileName, type ImportResult } from './utils/workflowIo.ts';
 export {
   evaluateCondition,
   resolveExpression,
