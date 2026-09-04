@@ -84,4 +84,13 @@ public class TestWorkflows {
             List.of(startNode("start"), humanTaskNode("task"), endNode("end")),
             List.of(edge("e1", "start", "task"), edge("e2", "task", "end")));
     }
+
+    /** start → (fork) a1, a2 → (AND-join) j → end. Actions use the given action types. */
+    public static Workflow diamondForkJoinWorkflow(String t1, String t2, String tj) {
+        return new Workflow("wf-diamond", "Diamond", null, null,
+            List.of(startNode("start"), actionNode("a1", t1), actionNode("a2", t2),
+                actionNode("j", tj), endNode("end")),
+            List.of(edge("e1", "start", "a1"), edge("e2", "start", "a2"),
+                edge("e3", "a1", "j"), edge("e4", "a2", "j"), edge("e5", "j", "end")));
+    }
 }
