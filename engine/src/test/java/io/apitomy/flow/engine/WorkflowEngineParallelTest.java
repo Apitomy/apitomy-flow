@@ -98,4 +98,35 @@ class WorkflowEngineParallelTest {
             .distinct().count();
         assertEquals(2, branches);
     }
+
+    @Test
+    void resumingOneBranchLeavesSiblingWaiting() {
+        // two human tasks fork from start, join at j
+        Workflow wf = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), humanTaskNode("t1"), humanTaskNode("t2"),
+                actionNode("j", "tj"), endNode("end")),
+            List.of(edge("e1", "start", "t1"), edge("e2", "start", "t2"),
+                edge("e3", "t1", "j"), edge("e4", "t2", "j"), edge("e5", "j", "end")));
+        WorkflowEngine engine = engine(new NodeExecutor() {
+            public String actionType() { return "tj"; }
+            public NodeResult execute(NodeExecutionContext ctx) {
+                return new NodeResult(NodeResultStatus.COMPLETED, Map.of("joined", true));
+            }
+        });
+        WorkflowInstance waiting = engine.startWorkflow(wf, Map.of());
+        assertEquals(InstanceStatus.WAITING, waiting.status());
+        assertEquals(2, waiting.activeBranches().size());
+
+        // resume t1 only — t2 still parked, join not fired
+        WorkflowInstance afterT1 = engine.completeNode(wf, waiting, "t1",
+            new NodeResult(NodeResultStatus.COMPLETED, Map.of("a", 1)));
+        assertEquals(InstanceStatus.WAITING, afterT1.status());
+        assertFalse(afterT1.context().containsKey("joined"));
+
+        // resume t2 — join fires, workflow completes
+        WorkflowInstance done = engine.completeNode(wf, afterT1, "t2",
+            new NodeResult(NodeResultStatus.COMPLETED, Map.of("b", 2)));
+        assertEquals(InstanceStatus.COMPLETED, done.status());
+        assertEquals(true, done.context().get("joined"));
+    }
 }

@@ -81,49 +81,70 @@ public class WorkflowEngine {
         return advance(workflow, instance);
     }
 
+    /**
+     * Completes a specific parked branch (identified by its node id) and resumes execution from it, leaving
+     * any sibling branches parked. Use this when more than one branch may be waiting concurrently.
+     *
+     * @param workflow the workflow definition
+     * @param instance the WAITING instance
+     * @param nodeId   the id of the parked node/branch to complete
+     * @param result   the node result delivering the branch's output
+     * @return the advanced instance
+     */
+    public WorkflowInstance completeNode(Workflow workflow, WorkflowInstance instance, String nodeId,
+                                         NodeResult result) {
+        if (instance.status() != InstanceStatus.WAITING) {
+            throw new IllegalStateException(
+                "Cannot complete node: instance is not in WAITING status (current: " + instance.status() + ")");
+        }
+        ActiveBranch branch = instance.activeBranches().stream()
+            .filter(b -> b.nodeId().equals(nodeId))
+            .findFirst()
+            .orElseThrow(() -> new IllegalStateException("No parked branch at node: " + nodeId));
+
+        WorkflowNode node = workflow.findNodeById(nodeId)
+            .orElseThrow(() -> new IllegalStateException("Node not found: " + nodeId));
+
+        if (result.status() == NodeResultStatus.FAILED) {
+            return handleFailedCompletion(workflow, instance, node, result);
+        }
+        if (result.status() == NodeResultStatus.PENDING) {
+            WorkflowInstance reparked = instance;
+            if (result.output() != null && !result.output().isEmpty()) {
+                reparked = reparked.toBuilder().mergeContext(result.output()).build();
+            }
+            return reparked.toBuilder().status(InstanceStatus.WAITING).updatedOn(Instant.now()).build();
+        }
+
+        // COMPLETED — record output on the branch's history entry, merge context, then continue this branch.
+        WorkflowInstance updated = completeHistoryEntry(instance, branch.branchId(), nodeId,
+            Instant.now(), result.output());
+        updated = updated.toBuilder()
+            .mergeContext(result.output())
+            .status(InstanceStatus.RUNNING)
+            .updatedOn(Instant.now())
+            .build();
+        WorkflowInstance completedInstance = updated;
+        fireEvent(l -> l.onNodeCompleted(completedInstance, node, result));
+
+        Deque<ActiveBranch> work = new ArrayDeque<>();
+        work.add(branch); // continue only the resumed branch
+        return advanceBranches(workflow, updated, work, ParallelRegions.analyze(workflow));
+    }
+
     public WorkflowInstance completeCurrentNode(Workflow workflow, WorkflowInstance instance,
                                                  NodeResult result) {
         if (instance.status() != InstanceStatus.WAITING) {
             throw new IllegalStateException(
                 "Cannot complete node: instance is not in WAITING status (current: " + instance.status() + ")");
         }
-
-        WorkflowNode currentNode = workflow.findNodeById(instance.currentNodeId())
-            .orElseThrow(() -> new IllegalStateException("Current node not found: " + instance.currentNodeId()));
-
-        // A FAILED result must route through the same error-handling semantics as the
-        // synchronous action path (error handler + retry + failWorkflow), otherwise a
-        // failed async action would silently drive the instance to COMPLETED.
-        if (result.status() == NodeResultStatus.FAILED) {
-            return handleFailedCompletion(workflow, instance, currentNode, result);
+        String nodeId = instance.currentNodeId();
+        if (nodeId == null) {
+            // Parallel wait with no single current node — caller must use completeNode(nodeId).
+            throw new IllegalStateException(
+                "Multiple branches are waiting; use completeNode(workflow, instance, nodeId, result)");
         }
-
-        // A PENDING result re-parks the instance in WAITING (optionally merging output),
-        // allowing the outcome to be delivered again later.
-        if (result.status() == NodeResultStatus.PENDING) {
-            WorkflowInstance reparked = instance;
-            if (result.output() != null && !result.output().isEmpty()) {
-                reparked = reparked.toBuilder().mergeContext(result.output()).build();
-            }
-            return reparked.toBuilder()
-                .status(InstanceStatus.WAITING)
-                .updatedOn(Instant.now())
-                .build();
-        }
-
-        // COMPLETED — record output on history, merge into context
-        WorkflowInstance withHistory = completeCurrentHistoryEntry(instance, Instant.now(), result.output());
-        WorkflowInstance updated = withHistory.toBuilder()
-            .mergeContext(result.output())
-            .status(InstanceStatus.RUNNING)
-            .updatedOn(Instant.now())
-            .build();
-
-        // Fire completed event
-        fireEvent(l -> l.onNodeCompleted(updated, currentNode, result));
-
-        // Advance
-        return advance(workflow, updated);
+        return completeNode(workflow, instance, nodeId, result);
     }
 
     private WorkflowInstance handleFailedCompletion(Workflow workflow, WorkflowInstance instance,
