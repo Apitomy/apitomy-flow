@@ -43,8 +43,26 @@ const STATUS_LABEL: Record<SimStatus, string> = {
 };
 
 /**
+ * Picks a sensible placeholder value for a declared output, based on its semantic type, so the
+ * scaffold is valid JSON of the right shape rather than an empty string for every field. An
+ * explicit author-supplied {@code defaultValue} is honored when present.
+ */
+function sampleValueForOutput(output: { type?: unknown; defaultValue?: unknown }): unknown {
+  if (output.defaultValue !== undefined) {
+    return output.defaultValue;
+  }
+  switch (output.type) {
+    case 'number': return -1;
+    case 'boolean': return false;
+    case 'object': return {};
+    case 'string':
+    default: return '';
+  }
+}
+
+/**
  * Builds a JSON scaffold for a blocking node's mock output, seeded from the node's declared
- * outputs (if any) so the author sees the expected shape.
+ * outputs (if any) so the author sees the expected shape with type-aware placeholder values.
  */
 function scaffoldOutputs(node: WorkflowNode | undefined): string {
   const outputs = node?.config?.outputs;
@@ -52,7 +70,7 @@ function scaffoldOutputs(node: WorkflowNode | undefined): string {
     const obj: Record<string, unknown> = {};
     for (const output of outputs) {
       if (output && typeof (output as { name?: unknown }).name === 'string') {
-        obj[(output as { name: string }).name] = '';
+        obj[(output as { name: string }).name] = sampleValueForOutput(output as { type?: unknown; defaultValue?: unknown });
       }
     }
     return JSON.stringify(obj, null, 2);
