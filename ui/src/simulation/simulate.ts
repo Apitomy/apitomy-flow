@@ -1,6 +1,7 @@
 import { type Workflow, type WorkflowEdge, type WorkflowNode, type NodeType } from '../types/workflow.ts';
 import { type HistoryEntry, type ActiveBranch } from '../types/instance.ts';
 import { evaluateCondition, ElEvaluationError, type ElScope } from './elEvaluator.ts';
+import { analyzeParallelRegions, type ParallelAnalysis } from './parallelRegions.ts';
 
 /**
  * Pure, side-effect-free simulation of a workflow's routing logic, mirroring the Java
@@ -141,6 +142,33 @@ export function stepSimulation(workflow: Workflow, state: SimState): SimState {
         }));
     }
 
+    const regions = analyzeParallelRegions(workflow);
+
+    // Fork: retire this branch and fan out one child branch per outgoing edge.
+    if (regions.isFork(node.id)) {
+        const forkEdges = workflow.edges.filter(e => e.source === node.id);
+        const forkEvals: EdgeEvaluation[] = forkEdges.map(e => ({
+            edgeId: e.id, condition: e.condition, isDefault: false, result: 'matched',
+        }));
+        let next: SimState = {
+            ...state,
+            history: completeBranchEntry(state.history, branch.branchId, node.id),
+            edgeEvaluations: mergeEvaluations(state.edgeEvaluations, forkEvals),
+            transitions: state.transitions + 1,
+            activeBranches: state.activeBranches.filter(b => b.branchId !== branch.branchId),
+        };
+        let childIndex = 0;
+        for (const edge of forkEdges) {
+            const childBranchId = `${branch.branchId}.${childIndex++}`;
+            next = { ...next, activeBranches: [...next.activeBranches, { branchId: childBranchId, nodeId: node.id }] };
+            next = moveBranch(workflow, next, childBranchId, edge, regions);
+            if (next.status !== 'running') {
+                return derive(workflow, next); // END/failure inside a branch cancels the rest
+            }
+        }
+        return quiesce(workflow, next);
+    }
+
     // Resolve the single outgoing edge (fork handling is added in Task 5).
     let selection: EdgeSelection;
     try {
@@ -171,6 +199,7 @@ export function stepSimulation(workflow: Workflow, state: SimState): SimState {
         { ...state, history, edgeEvaluations, transitions: state.transitions + 1 },
         branch.branchId,
         selection.edge,
+        regions,
     );
     return quiesce(workflow, moved);
 }
@@ -310,11 +339,42 @@ function moveBranch(
     state: SimState,
     branchId: string,
     edge: WorkflowEdge,
+    regions: ParallelAnalysis,
 ): SimState {
     const target = findNode(workflow, edge.target);
     if (!target) {
         return fail(state, { message: `Edge target not found: ${edge.target}`, edgeId: edge.id });
     }
+
+    if (regions.isJoin(target.id)) {
+        // Record arrival; retire the arriving branch.
+        const arrived = [...(state.joinArrivals[target.id] ?? []), edge.id];
+        const withArrival: SimState = {
+            ...state,
+            joinArrivals: { ...state.joinArrivals, [target.id]: arrived },
+            activeBranches: state.activeBranches.filter(b => b.branchId !== branchId),
+            parkedBranchIds: state.parkedBranchIds.filter(id => id !== branchId),
+        };
+        const required = regions.incomingEdgeIds(target.id);
+        const arrivedSet = new Set(arrived);
+        const allArrived = [...required].every(id => arrivedSet.has(id));
+        if (!allArrived) {
+            return withArrival; // absorbed; wait for the remaining branches
+        }
+        // All branches converged: one continuing branch enters the join. Clear this join's arrivals
+        // so a legitimate loop-back to the same region starts clean.
+        const clearedArrivals = { ...withArrival.joinArrivals };
+        delete clearedArrivals[target.id];
+        const continuingId = `${target.id}#join`;
+        const fired: SimState = {
+            ...withArrival,
+            joinArrivals: clearedArrivals,
+            activeBranches: [...withArrival.activeBranches, { branchId: continuingId, nodeId: target.id }],
+        };
+        return enterNode(fired, workflow, continuingId, target, edge);
+    }
+
+    // Sequential / fork-child arrival at a normal node.
     const activeBranches = state.activeBranches
         .filter(b => b.branchId !== branchId)
         .concat({ branchId, nodeId: target.id });

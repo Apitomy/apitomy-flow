@@ -220,3 +220,80 @@ describe('active-branch model — linear parity', () => {
         expect(state.history.every(h => h.branchId === 'root')).toBe(true);
     });
 });
+
+describe('fork / AND-join', () => {
+    // start -> f(fork) -> a, b ; a -> j, b -> j ; j -> end. a and b are actions (block for a mock).
+    function forkJoin(): Workflow {
+        return workflow(
+            [node('start', 'start'), node('f', 'wait'), node('a', 'action'), node('b', 'action'),
+                node('j', 'wait'), node('end', 'end')],
+            [edge('s', 'start', 'f'), edge('fa', 'f', 'a'), edge('fb', 'f', 'b'),
+                edge('aj', 'a', 'j'), edge('bj', 'b', 'j'), edge('je', 'j', 'end')],
+        );
+    }
+
+    it('fans out into both branches and parks each on its action', () => {
+        const state = runSimulation(forkJoin(), startSimulation(forkJoin(), {}));
+        expect(state.status).toBe('blocked');
+        const parkedNodes = state.activeBranches
+            .filter(b => state.parkedBranchIds.includes(b.branchId))
+            .map(b => b.nodeId)
+            .sort();
+        expect(parkedNodes).toEqual(['a', 'b']);
+        expect(state.currentNodeId).toBe(''); // two active branches -> no single current node
+    });
+
+    it('waits for all branches, then fires the join once and completes', () => {
+        const wf = forkJoin();
+        let state = runSimulation(wf, startSimulation(wf, {}));
+        // resume branch at 'a' only -> join must NOT fire yet; sibling 'b' still blocked
+        state = resumeSimulation(wf, state, { output: { fromA: 1 } }, 'a');
+        state = runSimulation(wf, state);
+        expect(state.status).toBe('blocked');
+        expect(state.visitedNodeIds.filter(id => id === 'j')).toHaveLength(0);
+        // resume branch at 'b' -> all arrived -> join fires once -> end
+        state = resumeSimulation(wf, state, { output: { fromB: 2 } }, 'b');
+        state = runSimulation(wf, state);
+        expect(state.status).toBe('completed');
+        expect(state.visitedNodeIds.filter(id => id === 'j')).toHaveLength(1);
+        expect(state.context).toMatchObject({ fromA: 1, fromB: 2 });
+    });
+
+    it('attributes branch history to distinct child branch ids', () => {
+        const wf = forkJoin();
+        const state = runSimulation(wf, startSimulation(wf, {}));
+        const branchIds = new Set(state.history.map(h => h.branchId));
+        expect(branchIds.has('root.0')).toBe(true);
+        expect(branchIds.has('root.1')).toBe(true);
+    });
+
+    it('fails the whole simulation when one branch cannot route', () => {
+        // branch 'b' leads to a node with a condition that never matches and no default -> no edge.
+        const wf = workflow(
+            [node('start', 'start'), node('f', 'wait'), node('a', 'wait'), node('b', 'wait'),
+                node('j', 'wait'), node('dead', 'wait'), node('end', 'end')],
+            [edge('s', 'start', 'f'), edge('fa', 'f', 'a'), edge('fb', 'f', 'b'),
+                edge('aj', 'a', 'j'), edge('bd', 'b', 'dead', { condition: 'context.never == true' }),
+                edge('je', 'j', 'end')],
+        );
+        const state = runSimulation(wf, startSimulation(wf, {}));
+        expect(state.status).toBe('failed');
+        expect(state.error?.message).toContain('No matching outgoing edge');
+    });
+
+    it('handles a nested fork/join and completes once', () => {
+        // start -> f -> a, g(inner fork) ; g -> c, d ; c -> ij, d -> ij ; ij -> j ; a -> j ; j -> end
+        const wf = workflow(
+            [node('start', 'start'), node('f', 'wait'), node('a', 'wait'), node('g', 'wait'),
+                node('c', 'wait'), node('d', 'wait'), node('ij', 'wait'), node('j', 'wait'),
+                node('end', 'end')],
+            [edge('s', 'start', 'f'), edge('fa', 'f', 'a'), edge('fg', 'f', 'g'),
+                edge('gc', 'g', 'c'), edge('gd', 'g', 'd'), edge('cij', 'c', 'ij'), edge('dij', 'd', 'ij'),
+                edge('ijj', 'ij', 'j'), edge('aj', 'a', 'j'), edge('je', 'j', 'end')],
+        );
+        const state = runSimulation(wf, startSimulation(wf, {}));
+        expect(state.status).toBe('completed');
+        expect(state.visitedNodeIds.filter(id => id === 'j')).toHaveLength(1);
+        expect(state.visitedNodeIds.filter(id => id === 'ij')).toHaveLength(1);
+    });
+});
