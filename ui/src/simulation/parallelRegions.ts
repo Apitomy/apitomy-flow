@@ -117,13 +117,11 @@ function findJoin(workflow: Workflow, forkId: string, problems: ParallelProblem[
         reachablePerBranch.push(reachable);
     }
 
-    // Common = nodes reachable from ALL branches (excluding END nodes, which aren't valid joins).
+    // The join is the earliest node reachable from ALL branches.
     let common = new Set<string>(reachablePerBranch[0]);
     for (let i = 1; i < reachablePerBranch.length; i++) {
         common = new Set([...common].filter(n => reachablePerBranch[i].has(n)));
     }
-    // Filter out END nodes from the common set.
-    common = new Set([...common].filter(n => !isEndNode(workflow, n)));
     if (common.size === 0) {
         problems.push({
             code: anyBranchReachesEnd ? 'PARALLEL_BRANCH_REACHES_END' : 'FORK_WITHOUT_JOIN',

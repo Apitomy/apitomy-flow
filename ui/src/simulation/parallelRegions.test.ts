@@ -77,13 +77,13 @@ describe('analyzeParallelRegions', () => {
             && (p.code === 'FORK_WITHOUT_JOIN' || p.code === 'PARALLEL_BRANCH_REACHES_END'))).toBe(true);
     });
 
-    it('reports PARALLEL_BRANCH_REACHES_END when a branch can hit END before the join', () => {
-        // start forks to a and b; a -> j, b -> end (bypasses the join), j has a and (would-be) b
+    it('reports PARALLEL_BRANCH_REACHES_END when a branch reaches END without re-converging', () => {
+        // start forks to a and b; a -> j -> end1, b -> end2 (separate ends; branches never re-converge)
         const w = workflow(
             [node('start', 'start'), node('a', 'action'), node('b', 'action'),
-                node('j', 'wait'), node('end', 'end')],
+                node('j', 'wait'), node('end1', 'end'), node('end2', 'end')],
             [edge('fa', 'start', 'a'), edge('fb', 'start', 'b'),
-                edge('aj', 'a', 'j'), edge('be', 'b', 'end'), edge('je', 'j', 'end')],
+                edge('aj', 'a', 'j'), edge('be', 'b', 'end2'), edge('je', 'j', 'end1')],
         );
         const r = analyzeParallelRegions(w);
         expect(r.problems.some(p => p.nodeId === 'start' && p.code === 'PARALLEL_BRANCH_REACHES_END'))
