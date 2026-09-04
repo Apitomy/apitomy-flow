@@ -1,0 +1,73 @@
+/*
+ * A lightweight JSON code editor (react-simple-code-editor + a small bundled JSON highlighter). Token
+ * colors are scoped to `.flow-json-editor` so the library never ships global highlighting styles that
+ * could clash with a host.
+ */
+.flow-json-editor {
+  box-sizing: border-box;
+  border: 1px solid var(--flow-border, #d2d2d2);
+  border-radius: 4px;
+  background: var(--flow-bg-secondary, #f5f5f5);
+  color: var(--flow-text, #151515);
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow: auto;
+}
+
+/* react-simple-code-editor renders a <textarea> layered over a highlighted <pre>. Both must share
+   identical metrics so the caret aligns with the highlighted text. */
+.flow-json-editor__textarea,
+.flow-json-editor__pre {
+  font-family: inherit !important;
+  font-size: inherit !important;
+  line-height: inherit !important;
+  tab-size: 2;
+}
+.flow-json-editor__textarea {
+  outline: none;
+}
+.flow-json-editor__textarea:focus {
+  outline: none;
+}
+
+/* Read-only variant (e.g. the evolving simulation context): visually muted, caret hidden, and
+   height-capped so a large context scrolls instead of pushing the panel. */
+.flow-json-editor--readonly {
+  background: var(--flow-bg-secondary, #f5f5f5);
+  max-height: 240px;
+}
+.flow-json-editor--readonly .flow-json-editor__textarea {
+  cursor: default;
+  caret-color: transparent;
+}
+
+/* Token colors — a compact, theme-neutral JSON palette. */
+.flow-json-editor .token.property {
+  color: var(--flow-json-key, #0451a5);
+}
+.flow-json-editor .token.string {
+  color: var(--flow-json-string, #a31515);
+}
+.flow-json-editor .token.number {
+  color: var(--flow-json-number, #098658);
+}
+.flow-json-editor .token.boolean,
+.flow-json-editor .token.null {
+  color: var(--flow-json-keyword, #0000ff);
+}
+
+/* Dark theme adjustments to keep tokens legible on a dark surface. */
+[data-flow-theme='dark'] .flow-json-editor .token.property {
+  color: var(--flow-json-key, #9cdcfe);
+}
+[data-flow-theme='dark'] .flow-json-editor .token.string {
+  color: var(--flow-json-string, #ce9178);
+}
+[data-flow-theme='dark'] .flow-json-editor .token.number {
+  color: var(--flow-json-number, #b5cea8);
+}
+[data-flow-theme='dark'] .flow-json-editor .token.boolean,
+[data-flow-theme='dark'] .flow-json-editor .token.null {
+  color: var(--flow-json-keyword, #569cd6);
+}

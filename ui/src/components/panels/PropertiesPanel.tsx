@@ -17,6 +17,8 @@ import { type ActionTypeDescriptor } from '../../types/spi.ts';
 import { type HumanTaskOutput, type OutputOption, type OutputWidget } from '../../types/workflow.ts';
 import { type ValidationProblem } from '../../types/validation.ts';
 import { mapToPairs, pairsToMap, duplicateKeys, nextPairId, type KeyValuePair } from '../../utils/mapInputs.ts';
+import { evaluateCondition, ElEvaluationError } from '../../simulation/elEvaluator.ts';
+import { JsonCodeEditor } from '../common/JsonCodeEditor.tsx';
 import './PropertiesPanel.css';
 
 interface PropertiesPanelProps {
@@ -27,6 +29,8 @@ interface PropertiesPanelProps {
   onNodeIdChange: (oldId: string, newId: string) => void;
   onEdgeChange: (id: string, data: Record<string, any>) => void;
   spi?: EditorSpi;
+  /** A sample context used to seed the inline "Test condition" affordance. */
+  sampleContext?: Record<string, unknown>;
   /** Current panel width in pixels. When omitted, the CSS default width is used. */
   width?: number;
   /** Starts a drag-resize when the user presses the panel's resize handle. */
@@ -435,7 +439,7 @@ function MapInputsEditor({ map, onChange, nodeId, keyPlaceholder, valuePlacehold
   );
 }
 
-export function PropertiesPanel({ selectedNode, selectedEdge, nodeProblems = [], onNodeChange, onNodeIdChange, onEdgeChange, spi, width, onResizeStart }: PropertiesPanelProps) {
+export function PropertiesPanel({ selectedNode, selectedEdge, nodeProblems = [], onNodeChange, onNodeIdChange, onEdgeChange, spi, sampleContext, width, onResizeStart }: PropertiesPanelProps) {
   const { actionTypes, loading: actionTypesLoading } = useActionTypes(spi);
 
   // Wrap every panel state in a common shell that carries the (optionally
@@ -696,6 +700,10 @@ export function PropertiesPanel({ selectedNode, selectedEdge, nodeProblems = [],
             value={(selectedEdge.data?.condition as string) || ''}
             onChange={(e) => onEdgeChange(selectedEdge.id, { condition: e.target.value })}
           />
+          <ConditionTester
+            condition={(selectedEdge.data?.condition as string) || ''}
+            sampleContext={sampleContext}
+          />
         </div>
         <div className="properties-panel__field">
           <label>Priority</label>
@@ -724,6 +732,72 @@ export function PropertiesPanel({ selectedNode, selectedEdge, nodeProblems = [],
   }
 
   return null;
+}
+
+/**
+ * An inline affordance for spot-checking a single edge condition against a pasted/sample context,
+ * using the same {@code evaluateCondition} the simulator (and the Java engine) uses. Shows the
+ * evaluated boolean or a clear evaluation error, without needing a full simulation run.
+ */
+function ConditionTester({ condition, sampleContext }: {
+  condition: string;
+  sampleContext?: Record<string, unknown>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [contextText, setContextText] = useState(() => JSON.stringify(sampleContext ?? {}, null, 2));
+  const [result, setResult] = useState<{ value: boolean } | { error: string } | null>(null);
+
+  const evaluate = () => {
+    let context: unknown;
+    try {
+      context = contextText.trim() === '' ? {} : JSON.parse(contextText);
+    } catch (e) {
+      setResult({ error: `Invalid JSON: ${(e as Error).message}` });
+      return;
+    }
+    if (context === null || typeof context !== 'object' || Array.isArray(context)) {
+      setResult({ error: 'Context must be a JSON object' });
+      return;
+    }
+    try {
+      const value = evaluateCondition(condition, { context: context as Record<string, unknown> });
+      setResult({ value });
+    } catch (e) {
+      const message = e instanceof ElEvaluationError ? e.message : (e as Error).message;
+      setResult({ error: message });
+    }
+  };
+
+  if (!open) {
+    return (
+      <button className="properties-panel__test-toggle" onClick={() => setOpen(true)}>
+        Test condition
+      </button>
+    );
+  }
+
+  return (
+    <div className="properties-panel__test">
+      <JsonCodeEditor
+        value={contextText}
+        onChange={setContextText}
+        minRows={4}
+        ariaLabel="Sample context (JSON)"
+      />
+      <div className="properties-panel__test-actions">
+        <button onClick={evaluate}>Evaluate</button>
+        <button onClick={() => { setOpen(false); setResult(null); }}>Close</button>
+      </div>
+      {result && 'value' in result && (
+        <div className={`properties-panel__test-result is-${result.value}`}>
+          Result: {String(result.value)}
+        </div>
+      )}
+      {result && 'error' in result && (
+        <div className="properties-panel__test-result is-error">{result.error}</div>
+      )}
+    </div>
+  );
 }
 
 function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading }: {

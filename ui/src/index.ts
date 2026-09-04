@@ -4,3 +4,23 @@ export type { ValidationProblem, ValidationSeverity } from './types/validation.t
 export type { EditorSpi, ActionTypeDescriptor, ActionTypeField, ActionTypeProvider, WorkflowValidator } from './types/spi.ts';
 export { WorkflowEditor, type WorkflowEditorProps, type FlowTheme } from './components/WorkflowEditor.tsx';
 export { WorkflowViewer, type WorkflowViewerProps, type WorkflowViewerNodeMenuItem } from './components/WorkflowViewer.tsx';
+export {
+  evaluateCondition,
+  resolveExpression,
+  isValidExpression,
+  ElEvaluationError,
+  type ElScope,
+} from './simulation/elEvaluator.ts';
+export {
+  startSimulation,
+  stepSimulation,
+  runSimulation,
+  resumeSimulation,
+  MAX_TRANSITIONS,
+  type SimState,
+  type SimStatus,
+  type SimError,
+  type SimMock,
+  type EdgeEvaluation,
+  type EdgeResult,
+} from './simulation/simulate.ts';

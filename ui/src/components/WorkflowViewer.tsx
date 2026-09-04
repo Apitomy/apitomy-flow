@@ -109,7 +109,7 @@ function WorkflowViewerInner({ workflow, instance, theme = 'light', nodeContextM
   }, [workflow.edges, visitedEdgeIds, instance.history, isTerminal]);
 
   const [collapsed, setCollapsed] = useState(false);
-  const [panelWidth, setPanelWidth] = useState(320);
+  const [panelWidth, setPanelWidth] = useState(340);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   // Index of the visit shown in the node-detail panel. `null` means "follow the
   // most recent visit", which keeps live-updating viewers pinned to the latest

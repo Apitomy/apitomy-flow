@@ -3,6 +3,7 @@ import {
   ReactFlow,
   Background,
   Controls,
+  ControlButton,
   Panel,
   useNodesState,
   useEdgesState,
@@ -15,7 +16,8 @@ import {
   useReactFlow,
   ReactFlowProvider,
 } from '@xyflow/react';
-import { UndoIcon, RedoIcon } from '@patternfly/react-icons';
+import { Switch } from '@patternfly/react-core';
+import { UndoIcon, RedoIcon, LockIcon, LockOpenIcon } from '@patternfly/react-icons';
 import { type Workflow } from '../types/workflow.ts';
 import { type ValidationProblem } from '../types/validation.ts';
 import { type EditorSpi } from '../types/spi.ts';
@@ -29,12 +31,66 @@ import { edgeTypes } from './edges/edgeTypes.ts';
 import { NodePalette } from './panels/NodePalette.tsx';
 import { PropertiesPanel } from './panels/PropertiesPanel.tsx';
 import { ProblemsPanel } from './panels/ProblemsPanel.tsx';
+import { SimulationPanel } from './panels/SimulationPanel.tsx';
 import { NodeContextMenu } from './NodeContextMenu.tsx';
 import { useUndoRedo } from '../hooks/useUndoRedo.ts';
+import {
+  startSimulation,
+  stepSimulation,
+  runSimulation,
+  resumeSimulation,
+  type SimState,
+  type SimMock,
+} from '../simulation/simulate.ts';
 import './theme.css';
 import './WorkflowEditor.css';
 
 export type FlowTheme = 'light' | 'dark';
+
+/** A plausible sample value for a declared start-node input, based on its type (and name hints). */
+function sampleValueForInput(input: { name: string; type?: string }): unknown {
+  switch (input.type) {
+    case 'number': return 0;
+    case 'boolean': return true;
+    case 'object': return {};
+    case 'string':
+    default: {
+      const name = input.name.toLowerCase();
+      if (name.includes('email')) return 'user@example.com';
+      if (name.includes('url')) return 'https://example.com';
+      if (name.endsWith('id')) return `sample-${input.name}`;
+      return `sample ${input.name}`;
+    }
+  }
+}
+
+/**
+ * Builds a pretty-printed sample start-context JSON from the workflow's start-node declared inputs,
+ * so the author gets a ready-to-run context with the right property names and plausible values.
+ */
+function generateSampleContext(workflow: Workflow): string {
+  const startNode = workflow.nodes.find(n => n.type === 'start');
+  const inputs = startNode?.config?.inputs;
+  const context: Record<string, unknown> = {};
+  if (Array.isArray(inputs)) {
+    for (const input of inputs) {
+      if (input && typeof input.name === 'string') {
+        context[input.name] = sampleValueForInput(input);
+      }
+    }
+  }
+  return JSON.stringify(context, null, 2);
+}
+
+/** The path-highlight class for a node given the current simulation state. */
+function simNodeClass(nodeId: string, state: SimState, visited: ReadonlySet<string>): string {
+  if (nodeId === state.currentNodeId) {
+    if (state.status === 'failed') return 'flow-sim-node-failed';
+    if (state.status === 'blocked') return 'flow-sim-node-blocked';
+    return 'flow-sim-node-current';
+  }
+  return visited.has(nodeId) ? 'flow-sim-node-visited' : 'flow-sim-node-idle';
+}
 
 export interface WorkflowEditorProps {
   workflow: Workflow;
@@ -64,7 +120,14 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ node: Node<FlowNodeData>; position: { x: number; y: number } } | null>(null);
-  const [panelWidth, setPanelWidth] = useState(320);
+  const [panelWidth, setPanelWidth] = useState(340);
+  const [simActive, setSimActive] = useState(false);
+  const [simState, setSimState] = useState<SimState | null>(null);
+  const [simContextText, setSimContextText] = useState('{\n  \n}');
+  // Canvas interactivity (drag/connect/select). Locked automatically while simulating so the graph
+  // can't be edited mid-run; otherwise controlled by the lower-left lock button.
+  const [interactive, setInteractive] = useState(true);
+  const interactivityEnabled = interactive && !simActive;
   const isResizing = useRef(false);
   const snapshotNeededRef = useRef(false);
   const changeNeededRef = useRef(false);
@@ -361,14 +424,95 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
     }
   }, [nodes, fitView]);
 
+  // --- Simulation ---------------------------------------------------------
+  const focusNode = useCallback((nodeId: string) => {
+    setSelectedNodeId(nodeId);
+    setSelectedEdgeId(null);
+    const node = nodes.find(n => n.id === nodeId);
+    if (node) fitView({ nodes: [node], duration: 300 });
+  }, [nodes, fitView]);
+
+  const focusEdge = useCallback((edgeId: string) => {
+    setSelectedEdgeId(edgeId);
+    setSelectedNodeId(null);
+  }, []);
+
+  const beginSim = useCallback((context: Record<string, unknown>) => {
+    setSimState(startSimulation(currentWorkflow, context));
+  }, [currentWorkflow]);
+
+  const stepSim = useCallback(() => {
+    setSimState(prev => (prev ? stepSimulation(currentWorkflow, prev) : prev));
+  }, [currentWorkflow]);
+
+  const runSim = useCallback(() => {
+    setSimState(prev => (prev ? runSimulation(currentWorkflow, prev) : prev));
+  }, [currentWorkflow]);
+
+  const resumeSim = useCallback((mock: SimMock) => {
+    setSimState(prev => (prev ? resumeSimulation(currentWorkflow, prev, mock) : prev));
+  }, [currentWorkflow]);
+
+  const resetSim = useCallback(() => setSimState(null), []);
+
+  const toggleSim = useCallback(() => {
+    setSimActive(prev => {
+      const next = !prev;
+      if (!next) {
+        setSimState(null); // leaving sim mode clears the run and its overlays
+      } else {
+        // Entering sim mode: auto-generate a sample start context, unless the author has already
+        // supplied one (i.e. the context has at least one key). Invalid JSON is left untouched so
+        // an in-progress edit is not discarded.
+        setSimContextText(current => {
+          try {
+            const parsed = JSON.parse(current || '{}');
+            const hasKeys = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+              && Object.keys(parsed).length > 0;
+            return hasKeys ? current : generateSampleContext(currentWorkflow);
+          } catch {
+            return current;
+          }
+        });
+      }
+      return next;
+    });
+  }, [currentWorkflow]);
+
+  // A best-effort parse of the sample context, shared with the inline condition tester.
+  const sampleContext = useMemo<Record<string, unknown>>(() => {
+    try {
+      const parsed = JSON.parse(simContextText || '{}');
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }, [simContextText]);
+
+  // Overlay the simulation path onto the canvas nodes/edges. Transient only: the edge overlay is
+  // written to a copy, so toWorkflowEdges never persists it into the saved workflow.
+  const displayNodes = useMemo(() => {
+    if (!simActive || !simState) return nodesWithValidation;
+    const visited = new Set(simState.visitedNodeIds);
+    return nodesWithValidation.map(n => ({ ...n, className: simNodeClass(n.id, simState, visited) }));
+  }, [nodesWithValidation, simActive, simState]);
+
+  const displayEdges = useMemo(() => {
+    if (!simActive || !simState) return edges;
+    return edges.map(e => {
+      const evaluation = simState.edgeEvaluations[e.id];
+      return { ...e, data: { ...e.data, simState: evaluation?.result } };
+    });
+  }, [edges, simActive, simState]);
+
   return (
     <div className="workflow-editor" data-flow-theme={theme}>
       <NodePalette />
       <div className="workflow-editor__body">
-        <div className="workflow-editor__canvas">
+        <div className={`workflow-editor__canvas${simActive ? ' workflow-editor__canvas--simulating' : ''}`}>
           <ReactFlow
-            nodes={nodesWithValidation}
-            edges={edges}
+            nodes={displayNodes}
+            edges={displayEdges}
             onNodesChange={handleNodesChange}
             onEdgesChange={handleEdgesChange}
             onConnect={onConnect}
@@ -383,11 +527,23 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
             edgeTypes={edgeTypes}
             defaultEdgeOptions={{ type: 'conditional' }}
             deleteKeyCode={['Backspace', 'Delete']}
+            nodesDraggable={interactivityEnabled}
+            nodesConnectable={interactivityEnabled}
+            elementsSelectable={interactivityEnabled}
             colorMode={theme}
             fitView
           >
             <Background />
-            <Controls />
+            <Controls showInteractive={false}>
+              <ControlButton
+                title="Toggle Interactivity"
+                aria-label="Toggle Interactivity"
+                disabled={simActive}
+                onClick={() => setInteractive(v => !v)}
+              >
+                {interactivityEnabled ? <LockOpenIcon /> : <LockIcon />}
+              </ControlButton>
+            </Controls>
             <Panel position="top-right">
               <div className="workflow-editor__toolbar">
                 <button title="Undo (Ctrl+Z)" disabled={!canUndo} onClick={handleUndo}>
@@ -399,6 +555,14 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
                 <button title="Tidy up (auto-layout)" onClick={handleTidyUp}>
                   Tidy up
                 </button>
+                <Switch
+                  id="workflow-editor-simulate-switch"
+                  className="workflow-editor__sim-switch"
+                  label="Simulate"
+                  aria-label="Simulate routing against a sample context"
+                  isChecked={simActive}
+                  onChange={toggleSim}
+                />
               </div>
             </Panel>
           </ReactFlow>
@@ -412,17 +576,37 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
             />
           )}
         </div>
-        <PropertiesPanel
-          selectedNode={selectedNode}
-          selectedEdge={selectedEdge}
-          nodeProblems={selectedNodeProblems}
-          onNodeChange={onNodeDataChange}
-          onNodeIdChange={onNodeIdChange}
-          onEdgeChange={onEdgeDataChange}
-          spi={spi}
-          width={panelWidth}
-          onResizeStart={onResizeStart}
-        />
+        {simActive ? (
+          <SimulationPanel
+            workflow={currentWorkflow}
+            simState={simState}
+            contextText={simContextText}
+            onContextTextChange={setSimContextText}
+            onStart={beginSim}
+            onStep={stepSim}
+            onRun={runSim}
+            onReset={resetSim}
+            onResume={resumeSim}
+            onClose={toggleSim}
+            onFocusNode={focusNode}
+            onFocusEdge={focusEdge}
+            width={panelWidth}
+            onResizeStart={onResizeStart}
+          />
+        ) : (
+          <PropertiesPanel
+            selectedNode={selectedNode}
+            selectedEdge={selectedEdge}
+            nodeProblems={selectedNodeProblems}
+            onNodeChange={onNodeDataChange}
+            onNodeIdChange={onNodeIdChange}
+            onEdgeChange={onEdgeDataChange}
+            spi={spi}
+            sampleContext={sampleContext}
+            width={panelWidth}
+            onResizeStart={onResizeStart}
+          />
+        )}
       </div>
       <ProblemsPanel problems={validationProblems} onProblemClick={onProblemClick} />
     </div>
