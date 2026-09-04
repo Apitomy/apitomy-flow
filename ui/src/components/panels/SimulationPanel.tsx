@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { PlayIcon, StepForwardIcon, FastForwardIcon, SyncAltIcon } from '@patternfly/react-icons';
 import { type Workflow, type WorkflowNode } from '../../types/workflow.ts';
 import { type SimState, type SimMock, type SimStatus } from '../../simulation/simulate.ts';
+import { JsonCodeEditor } from '../common/JsonCodeEditor.tsx';
 import './SimulationPanel.css';
 
 interface SimulationPanelProps {
@@ -143,12 +144,11 @@ export function SimulationPanel({
       <div className="simulation-panel__body">
         <div className="simulation-panel__field">
           <label>Sample start context (JSON)</label>
-          <textarea
-            className="simulation-panel__code"
-            rows={6}
+          <JsonCodeEditor
             value={contextText}
-            onChange={(e) => onContextTextChange(e.target.value)}
-            spellCheck={false}
+            onChange={onContextTextChange}
+            minRows={6}
+            ariaLabel="Sample start context (JSON)"
           />
           {contextError && <div className="simulation-panel__error-text">{contextError}</div>}
         </div>
@@ -191,12 +191,11 @@ export function SimulationPanel({
               <span className="simulation-panel__kind">({simState.blockedOn.kind})</span>
             </div>
             <label>Mock output — merged into context (JSON)</label>
-            <textarea
-              className="simulation-panel__code"
-              rows={5}
+            <JsonCodeEditor
               value={mockText}
-              onChange={(e) => setMockText(e.target.value)}
-              spellCheck={false}
+              onChange={setMockText}
+              minRows={5}
+              ariaLabel="Mock output (JSON)"
             />
             {mockError && <div className="simulation-panel__error-text">{mockError}</div>}
             <button className="simulation-panel__primary" onClick={handleContinue}>
@@ -242,7 +241,12 @@ export function SimulationPanel({
         {simState && (
           <div className="simulation-panel__field">
             <label>Context</label>
-            <pre className="simulation-panel__context">{JSON.stringify(simState.context, null, 2)}</pre>
+            <JsonCodeEditor
+              value={JSON.stringify(simState.context, null, 2)}
+              readOnly
+              minRows={4}
+              ariaLabel="Current simulation context (read-only)"
+            />
           </div>
         )}
       </div>

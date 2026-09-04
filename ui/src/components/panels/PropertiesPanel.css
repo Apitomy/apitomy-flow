@@ -285,18 +285,6 @@
   border-radius: 4px;
   background: var(--flow-bg-secondary, #f5f5f5);
 }
-.properties-panel__test-context {
-  width: 100%;
-  box-sizing: border-box;
-  font-family: monospace;
-  font-size: 12px;
-  padding: 6px;
-  border: 1px solid var(--flow-border, #d2d2d2);
-  border-radius: 4px;
-  background: var(--flow-bg-primary, #fff);
-  color: var(--flow-text, #151515);
-  resize: vertical;
-}
 .properties-panel__test-actions {
   display: flex;
   gap: 6px;

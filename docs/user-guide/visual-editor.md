@@ -41,7 +41,9 @@ function MyWorkflowEditor() {
 
 A toolbar at the top lists all six node types. Drag a node type from the palette onto the canvas to add it.
 
-The toolbar also has a **Tidy up** button that runs auto-layout (see [Auto-Layout](#auto-layout) below).
+The toolbar also has a **Tidy up** button that runs auto-layout (see [Auto-Layout](#auto-layout)
+below) and a **Simulate** button that opens interactive routing simulation (see
+[Simulation and Condition Testing](#simulation-and-condition-testing) below).
 
 ### Canvas
 
@@ -96,7 +98,8 @@ A panel on the right side shows configuration fields for the selected node or ed
 **Edge properties:**
 
 - Label
-- Condition (EL expression)
+- Condition (EL expression), with an inline **Test condition** affordance (see
+  [Simulation and Condition Testing](#simulation-and-condition-testing))
 - Priority
 - Default edge checkbox
 - Edge ID (read-only)
@@ -123,6 +126,45 @@ The editor can arrange nodes automatically using a layered graph layout (powered
 - **Automatic on load** — when a workflow is opened whose nodes have no positions (or whose nodes
   all overlap at the same coordinates), the editor lays it out automatically and emits the computed
   positions through `onChange`. Workflows that already have valid positions are left untouched.
+
+### Simulation and Condition Testing
+
+The **Simulate** button in the toolbar opens an interactive simulation of the workflow's routing
+logic against a sample context — without deploying or running a real instance. It answers "which
+branch does this input take?" and "does my condition evaluate the way I think?" entirely at
+authoring time. The routing and condition semantics match the Java engine exactly (priority-ordered
+edge selection, `isDefault` fallback, and Jakarta EL condition evaluation), so the path you see in
+the editor is the path a real instance would take.
+
+**Running a simulation:**
+
+1. Click **Simulate** to open the simulation panel on the right.
+2. Enter a **sample start context** as JSON.
+3. Click **Start**, then **Step** (advance one transition) or **Run** (run to the next block or a
+   terminal state). **Reset** clears the run.
+4. Where a node would block for real work — `action`, `human-task`, or `receive-event` — the
+   simulation pauses so you can supply a **mock output** (JSON). The output is merged into the
+   context, exactly as a real node's output would be, and the run continues. `wait` nodes route
+   through immediately (no input needed).
+
+**What the canvas shows:**
+
+- **Path taken** — visited nodes stay fully opaque; unvisited nodes dim; the current node is ringed.
+  A blocked node is ringed in amber and a failed node in red.
+- **Edge outcomes** — the edge that was taken is drawn in green; conditions that evaluated false are
+  dimmed/dashed in red; edges skipped after an earlier match are faded; an edge whose condition
+  threw an error is highlighted in red.
+
+The panel also shows the run **status**, the **path** (click any step to focus that node), the
+evolving **context**, and any **error** — tied to the offending node or edge, with a jump-to link.
+
+**Inline condition testing:** when an edge is selected (outside simulation mode), the properties
+panel shows a **Test condition** affordance below the condition field. Paste or edit a sample
+context and click **Evaluate** to see the condition's boolean result — or a clear evaluation error —
+for that one edge, using the same evaluator as the full simulation.
+
+> Simulation executes routing logic only. It never runs real host node executors or side effects,
+> and simulation state is transient — it is never persisted into the saved workflow.
 
 This means a host can construct a `Workflow` without assigning any `position` values and the editor
 will produce a sensible layout on first render.

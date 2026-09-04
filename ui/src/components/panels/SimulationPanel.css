@@ -59,19 +59,6 @@
   color: var(--flow-text-subtle, #6a6e73);
 }
 
-.simulation-panel__code {
-  width: 100%;
-  box-sizing: border-box;
-  font-family: monospace;
-  font-size: 12px;
-  padding: 6px;
-  border: 1px solid var(--flow-border, #d2d2d2);
-  border-radius: 4px;
-  background: var(--flow-bg-secondary, #f5f5f5);
-  color: var(--flow-text, #151515);
-  resize: vertical;
-}
-
 .simulation-panel__controls {
   display: flex;
   flex-wrap: wrap;
@@ -184,20 +171,6 @@
 }
 .simulation-panel__path li {
   margin-bottom: 2px;
-}
-
-.simulation-panel__context {
-  margin: 0;
-  font-family: monospace;
-  font-size: 12px;
-  padding: 6px;
-  border: 1px solid var(--flow-border, #d2d2d2);
-  border-radius: 4px;
-  background: var(--flow-bg-secondary, #f5f5f5);
-  max-height: 220px;
-  overflow: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
 }
 
 /* Simulation path highlight applied to canvas nodes while simulating. */

@@ -18,6 +18,7 @@ import { type HumanTaskOutput, type OutputOption, type OutputWidget } from '../.
 import { type ValidationProblem } from '../../types/validation.ts';
 import { mapToPairs, pairsToMap, duplicateKeys, nextPairId, type KeyValuePair } from '../../utils/mapInputs.ts';
 import { evaluateCondition, ElEvaluationError } from '../../simulation/elEvaluator.ts';
+import { JsonCodeEditor } from '../common/JsonCodeEditor.tsx';
 import './PropertiesPanel.css';
 
 interface PropertiesPanelProps {
@@ -777,13 +778,11 @@ function ConditionTester({ condition, sampleContext }: {
 
   return (
     <div className="properties-panel__test">
-      <textarea
-        className="properties-panel__test-context"
-        rows={4}
+      <JsonCodeEditor
         value={contextText}
-        onChange={(e) => setContextText(e.target.value)}
-        spellCheck={false}
-        placeholder="Sample context (JSON)"
+        onChange={setContextText}
+        minRows={4}
+        ariaLabel="Sample context (JSON)"
       />
       <div className="properties-panel__test-actions">
         <button onClick={evaluate}>Evaluate</button>
