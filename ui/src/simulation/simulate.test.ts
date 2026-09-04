@@ -296,4 +296,25 @@ describe('fork / AND-join', () => {
         expect(state.visitedNodeIds.filter(id => id === 'j')).toHaveLength(1);
         expect(state.visitedNodeIds.filter(id => id === 'ij')).toHaveLength(1);
     });
+
+    it('assigns child branch ids in priority order, not array order', () => {
+        // Fork edges declared in REVERSE priority order (array: high-pri first, low-pri last).
+        // Correct: root.0 -> 'a' (priority 1), root.1 -> 'b' (priority 2).
+        // Buggy (raw array order): root.0 -> 'b' (array[0]), root.1 -> 'a' (array[1]).
+        const wf = workflow(
+            [node('start', 'start'), node('f', 'wait'), node('a', 'wait'), node('b', 'wait'),
+                node('j', 'wait'), node('end', 'end')],
+            [edge('s', 'start', 'f'),
+                edge('fb', 'f', 'b', { priority: 2 }), // declared first but priority 2
+                edge('fa', 'f', 'a', { priority: 1 }), // declared second but priority 1
+                edge('aj', 'a', 'j'), edge('bj', 'b', 'j'), edge('je', 'j', 'end')],
+        );
+        const state = runSimulation(wf, startSimulation(wf, {}));
+        // Child branch root.0 must correspond to the lowest-priority edge (priority 1 -> 'a').
+        const root0History = state.history.filter(h => h.branchId === 'root.0');
+        expect(root0History.some(h => h.nodeId === 'a')).toBe(true);
+        // Child branch root.1 must correspond to the higher-priority edge (priority 2 -> 'b').
+        const root1History = state.history.filter(h => h.branchId === 'root.1');
+        expect(root1History.some(h => h.nodeId === 'b')).toBe(true);
+    });
 });

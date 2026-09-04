@@ -146,7 +146,9 @@ export function stepSimulation(workflow: Workflow, state: SimState): SimState {
 
     // Fork: retire this branch and fan out one child branch per outgoing edge.
     if (regions.isFork(node.id)) {
-        const forkEdges = workflow.edges.filter(e => e.source === node.id);
+        const forkEdges = workflow.edges
+            .filter(e => e.source === node.id)
+            .sort((a, b) => a.priority - b.priority);
         const forkEvals: EdgeEvaluation[] = forkEdges.map(e => ({
             edgeId: e.id, condition: e.condition, isDefault: false, result: 'matched',
         }));
