@@ -604,4 +604,58 @@ describe('validateWorkflow', () => {
       expect(hasProblem(problems, 'DEFAULT_VALUE_TYPE_MISMATCH')).toBe(false);
     });
   });
+
+  describe('parallel structure', () => {
+    // start -> f(fork) -> a, b ; a -> j, b -> j ; j -> end
+    function wellFormedForkJoin(): Workflow {
+      return workflow(
+        [node('start', 'start'), node('f', 'wait'), node('a', 'action', { actionType: 'x' }), node('b', 'action', { actionType: 'y' }),
+          node('j', 'wait'), node('end', 'end')],
+        [edge('s', 'start', 'f'), edge('fa', 'f', 'a'), edge('fb', 'f', 'b'),
+          edge('aj', 'a', 'j'), edge('bj', 'b', 'j'), edge('je', 'j', 'end')],
+      );
+    }
+
+    it('no longer emits the retired UNCONDITIONAL_MULTIPLE_EDGES warning', () => {
+      expect(hasProblem(validateWorkflow(wellFormedForkJoin()), 'UNCONDITIONAL_MULTIPLE_EDGES'))
+        .toBe(false);
+    });
+
+    it('a well-formed structured fork/join produces no parallel-structure errors', () => {
+      const problems = validateWorkflow(wellFormedForkJoin());
+      expect(hasProblem(problems, 'MIXED_FORK_EDGES')).toBe(false);
+      expect(hasProblem(problems, 'FORK_WITHOUT_JOIN')).toBe(false);
+      expect(hasProblem(problems, 'PARALLEL_BRANCH_REACHES_END')).toBe(false);
+    });
+
+    it('MIXED_FORK_EDGES when a node mixes unconditional and conditional edges', () => {
+      const w = workflow(
+        [node('start', 'start'), node('a', 'end'), node('b', 'end')],
+        [edge('ea', 'start', 'a'), edge('eb', 'start', 'b', { condition: 'context.x == 1' })],
+      );
+      expect(hasProblem(validateWorkflow(w), 'MIXED_FORK_EDGES')).toBe(true);
+    });
+
+    it('PARALLEL_BRANCH_REACHES_END when a branch can hit END before the join', () => {
+      const w = workflow(
+        [node('start', 'start'), node('a', 'action', { actionType: 'x' }), node('b', 'action', { actionType: 'y' }),
+          node('j', 'wait'), node('end1', 'end'), node('end2', 'end')],
+        [edge('fa', 'start', 'a'), edge('fb', 'start', 'b'),
+          edge('aj', 'a', 'j'), edge('be', 'b', 'end2'), edge('je', 'j', 'end1')],
+      );
+      expect(hasProblem(validateWorkflow(w), 'PARALLEL_BRANCH_REACHES_END')).toBe(true);
+    });
+
+    it('skips parallel analysis when there are edge-reference errors', () => {
+      const w = workflow(
+        [node('start', 'start'), node('a', 'action', { actionType: 'x' }), node('end', 'end')],
+        [edge('fa', 'start', 'a'), edge('fb', 'start', 'nonexistent'), edge('ae', 'a', 'end')],
+      );
+      const problems = validateWorkflow(w);
+      expect(hasProblem(problems, 'INVALID_EDGE_TARGET')).toBe(true);
+      // With a dangling target the graph is unsafe to traverse; no parallel-structure errors are added.
+      expect(hasProblem(problems, 'FORK_WITHOUT_JOIN')).toBe(false);
+      expect(hasProblem(problems, 'PARALLEL_BRANCH_REACHES_END')).toBe(false);
+    });
+  });
 });
