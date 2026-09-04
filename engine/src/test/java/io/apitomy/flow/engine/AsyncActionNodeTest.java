@@ -174,10 +174,10 @@ class AsyncActionNodeTest {
             }
         };
         Workflow workflow = new Workflow("w", "W", null, null,
-            List.of(startNode("start"), actionNode("action", "agent-call"),
+            List.of(startNode("start", List.of()), actionNode("action", "agent-call"),
                     endNode("end"), endNode("error-end")),
-            List.of(edge("e1", "start", "action"), edge("e2", "action", "end"),
-                    edge("e3", "action", "error-end")));
+            List.of(edge("e1", "start", "action"), edge("e2", "action", "end", "true", 1),
+                    defaultEdge("e3", "action", "error-end")));
 
         WorkflowEngine engine = new WorkflowEngine(
             NodeExecutorProvider.fromList(pendingExecutor("agent-call")), List.of(), transitionHandler);
