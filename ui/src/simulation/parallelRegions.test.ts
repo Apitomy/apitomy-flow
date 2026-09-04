@@ -89,4 +89,21 @@ describe('analyzeParallelRegions', () => {
         expect(r.problems.some(p => p.nodeId === 'start' && p.code === 'PARALLEL_BRANCH_REACHES_END'))
             .toBe(true);
     });
+
+    it('finds correct join when fork edges are declared in reverse priority order', () => {
+        // Diamond: start -> fork -> a, b -> join -> end
+        // Fork edges declared in reverse priority (b before a in array, but a has priority 0)
+        const w = workflow(
+            [node('start', 'start'), node('fork', 'wait'), node('a', 'action'),
+                node('b', 'action'), node('join', 'wait'), node('end', 'end')],
+            [edge('s', 'start', 'fork'),
+                edge('fb', 'fork', 'b', { priority: 1 }),
+                edge('fa', 'fork', 'a', { priority: 0 }),
+                edge('aj', 'a', 'join'), edge('bj', 'b', 'join'),
+                edge('je', 'join', 'end')],
+        );
+        const r = analyzeParallelRegions(w);
+        expect(r.joinFor('fork')).toBe('join');
+        expect(r.problems).toEqual([]);
+    });
 });

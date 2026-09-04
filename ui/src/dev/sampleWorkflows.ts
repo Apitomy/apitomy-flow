@@ -116,7 +116,7 @@ export const completedTriageInstance: WorkflowInstance = {
   id: 'inst-2',
   workflowId: 'cve-triage',
   currentNodeId: 'end-mitigated',
-  activeBranches: [{ branchId: 'root', nodeId: 'end-mitigated' }],
+  activeBranches: [],
   joinArrivals: {},
   status: 'completed',
   context: {

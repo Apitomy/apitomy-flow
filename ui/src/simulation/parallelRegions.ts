@@ -30,7 +30,9 @@ function isUnconditional(e: WorkflowEdge): boolean {
 }
 
 function outgoing(workflow: Workflow, nodeId: string): WorkflowEdge[] {
-    return workflow.edges.filter(e => e.source === nodeId);
+    return workflow.edges
+        .filter(e => e.source === nodeId)
+        .sort((a, b) => a.priority - b.priority);
 }
 
 function isEndNode(workflow: Workflow, nodeId: string): boolean {
