@@ -96,7 +96,9 @@ problems.
 | `DUPLICATE_EVENT_RECEIVER` | Multiple receive-event nodes match the same events |
 | `MISSING_EVENT_TYPE` | Receive-event node has no `eventType` configured |
 | `INVALID_EVENT_TYPE_VALUE` | Receive-event node `eventType` is not a non-blank string |
-| `UNCONDITIONAL_MULTIPLE_EDGES` | Node has multiple outgoing edges with no conditions |
+| `MIXED_FORK_EDGES` | Node mixes unconditional (fork) edges with conditional/default edges |
+| `FORK_WITHOUT_JOIN` | Parallel branches from a fork do not re-converge at a single join |
+| `PARALLEL_BRANCH_REACHES_END` | A parallel branch can reach an end node without first joining |
 | `AUTOMATED_CYCLE` | Cycle containing only action nodes (could cause infinite execution) |
 | `MISSING_START_INPUTS` | Start node has no inputs defined |
 | `INVALID_INPUT_DEFINITION` | Start node input entry is missing a name |
