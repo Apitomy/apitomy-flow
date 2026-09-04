@@ -498,7 +498,16 @@ public class WorkflowEngine {
             case ACTION -> {
                 instance = executeActionNode(workflow, instance, node);
                 if (instance.status() == InstanceStatus.RUNNING) {
-                    work.add(new ActiveBranch(branchId, node.id())); // continue from this node
+                    // The branch may have moved via an error-handler TRANSITION inside
+                    // executeActionNode (which enters and executes the recovery target). Continue
+                    // from wherever the branch now actually sits so multi-step recovery chains
+                    // follow the recovery target's own edges — not the original node's edges.
+                    String continueNodeId = instance.activeBranches().stream()
+                        .filter(b -> b.branchId().equals(branchId))
+                        .map(ActiveBranch::nodeId)
+                        .findFirst()
+                        .orElse(node.id());
+                    work.add(new ActiveBranch(branchId, continueNodeId)); // continue from here
                 }
                 return instance;
             }
@@ -737,7 +746,11 @@ public class WorkflowEngine {
                 // Error-handler transitions apply to the single-branch (non-parallel) error path.
                 String branchId = instance.activeBranches().size() == 1
                     ? instance.activeBranches().getFirst().branchId() : "root";
-                WorkflowInstance moved = instance.toBuilder()
+                // Complete the source node's open history entry before leaving it (parity with the
+                // old single-cursor engine, which closed the source entry on every transition).
+                WorkflowInstance sourceCompleted =
+                    completeHistoryEntry(instance, branchId, node.id(), Instant.now(), null);
+                WorkflowInstance moved = sourceCompleted.toBuilder()
                     .currentNodeId(target.id())
                     .removeActiveBranch(branchId)
                     .addActiveBranch(new ActiveBranch(branchId, target.id()))
