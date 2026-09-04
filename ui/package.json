@@ -45,7 +45,6 @@
     "@patternfly/patternfly": "6.6.1",
     "@patternfly/react-core": "6.6.1",
     "@patternfly/react-icons": "6.6.1",
-    "@types/prismjs": "^1.26.6",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.7",
     "@vitejs/plugin-react": "6.1.1",
@@ -73,7 +72,6 @@
   ],
   "dependencies": {
     "@dagrejs/dagre": "3.1.1",
-    "prismjs": "1.30.0",
     "react-simple-code-editor": "0.14.1"
   }
 }

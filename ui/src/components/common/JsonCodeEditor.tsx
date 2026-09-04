@@ -1,6 +1,5 @@
 import CodeEditor from 'react-simple-code-editor';
-import { highlight, languages } from 'prismjs';
-import 'prismjs/components/prism-json';
+import { highlightJson } from './highlightJson.ts';
 import './JsonCodeEditor.css';
 
 // `react-simple-code-editor` is published as CommonJS (`exports.default = Editor`). Depending on the
@@ -39,7 +38,7 @@ export function JsonCodeEditor({ value, onChange, minRows = 6, readOnly = false,
             <Editor
                 value={value}
                 onValueChange={(next) => onChange?.(next)}
-                highlight={(code) => highlight(code, languages.json, 'json')}
+                highlight={(code) => highlightJson(code)}
                 padding={8}
                 textareaClassName="flow-json-editor__textarea"
                 preClassName="flow-json-editor__pre"
