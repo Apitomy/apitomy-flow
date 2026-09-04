@@ -85,4 +85,37 @@ class WorkflowInstanceModelTest {
         WorkflowInstance roundTripped = mapper.readValue(json, WorkflowInstance.class);
         assertEquals("root", roundTripped.activeBranches().getFirst().branchId());
     }
+
+    @Test
+    void deserializesLegacyJsonWithoutActiveBranches() throws Exception {
+        // Simulate JSON written before the active-branch model (missing activeBranches/joinArrivals)
+        String oldFormatJson = """
+            {
+              "id": "inst-1",
+              "workflowId": "wf-1",
+              "currentNodeId": "task-1",
+              "status": "running",
+              "context": {"key": "value"},
+              "history": [],
+              "failureReason": null,
+              "createdOn": "2026-09-04T12:00:00Z",
+              "updatedOn": "2026-09-04T12:00:00Z"
+            }
+            """;
+
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
+        WorkflowInstance instance = mapper.readValue(oldFormatJson, WorkflowInstance.class);
+
+        // Accessors should return empty collections, not null
+        assertNotNull(instance.activeBranches());
+        assertTrue(instance.activeBranches().isEmpty());
+        assertNotNull(instance.joinArrivals());
+        assertTrue(instance.joinArrivals().isEmpty());
+
+        // toBuilder() should not NPE
+        WorkflowInstance copy = instance.toBuilder().build();
+        assertNotNull(copy.activeBranches());
+        assertNotNull(copy.joinArrivals());
+    }
 }

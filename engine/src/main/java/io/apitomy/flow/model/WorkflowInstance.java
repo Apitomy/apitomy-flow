@@ -22,6 +22,16 @@ public record WorkflowInstance(
     @JsonFormat(shape = JsonFormat.Shape.STRING) Instant createdOn,
     @JsonFormat(shape = JsonFormat.Shape.STRING) Instant updatedOn
 ) {
+    /**
+     * Compact canonical constructor that normalizes nulls from legacy JSON deserialization.
+     * When deserializing instances written before the active-branch model, Jackson sets the
+     * new fields to null; we coerce them to empty collections so accessors never return null.
+     */
+    public WorkflowInstance {
+        activeBranches = activeBranches != null ? activeBranches : List.of();
+        joinArrivals = joinArrivals != null ? joinArrivals : Map.of();
+    }
+
     public static Builder builder() {
         return new Builder();
     }
