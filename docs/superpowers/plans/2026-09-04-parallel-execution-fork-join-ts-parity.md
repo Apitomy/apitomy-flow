@@ -956,10 +956,12 @@ function enterNode(
     const base: SimState = { ...state, history, visitedNodeIds };
 
     if (node.type === 'end') {
-        // END completes the whole run and cancels siblings.
+        // END completes the whole run and cancels siblings. Keep the end node as the terminal
+        // `currentNodeId` (branches are cleared, so `derive` preserves it for terminal states).
         return {
             ...base,
             status: 'completed',
+            currentNodeId: node.id,
             history: completeBranchEntry(base.history, branchId, node.id),
             activeBranches: [],
             parkedBranchIds: [],
@@ -996,9 +998,17 @@ function quiesce(workflow: Workflow, state: SimState): SimState {
     return derive(workflow, { ...state, status: 'blocked' });
 }
 
-/** Recomputes the derived back-compat fields (`currentNodeId`, `blockedOn`) from the branch set. */
+/**
+ * Recomputes the derived back-compat fields (`currentNodeId`, `blockedOn`) from the branch set. During
+ * a live run (`running`/`blocked`) `currentNodeId` is the sole active node or `''` (when 0 or ≥2
+ * branches are active). At a terminal state (`completed`/`failed`) the branch set is empty, so the
+ * terminal/failing node id already on the state is preserved (existing tests assert it).
+ */
 function derive(workflow: Workflow, state: SimState): SimState {
-    const currentNodeId = state.activeBranches.length === 1 ? state.activeBranches[0].nodeId : '';
+    let currentNodeId = state.currentNodeId;
+    if (state.status === 'running' || state.status === 'blocked') {
+        currentNodeId = state.activeBranches.length === 1 ? state.activeBranches[0].nodeId : '';
+    }
     let blockedOn: SimState['blockedOn'];
     if (state.status === 'blocked') {
         const firstParked = state.activeBranches.find(b => state.parkedBranchIds.includes(b.branchId));
