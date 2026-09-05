@@ -100,7 +100,7 @@ class WorkflowEngineErrorTest {
 
         Workflow workflow = new Workflow("w", "W", null, null,
             List.of(startNode("start", List.of()), actionNode("a", "fail"), endNode("end"), endNode("error-end")),
-            List.of(edge("e1", "start", "a"), edge("e2", "a", "end"), edge("e3", "a", "error-end")));
+            List.of(edge("e1", "start", "a"), edge("e2", "a", "end", "true", 1), defaultEdge("e3", "a", "error-end")));
 
         WorkflowEngine engine = new WorkflowEngine(
             NodeExecutorProvider.fromList(failingExecutor("fail")), List.of(), transitionHandler);
@@ -302,7 +302,7 @@ class WorkflowEngineErrorTest {
 
         Workflow workflow = new Workflow("w", "W", null, null,
             List.of(startNode("start", List.of()), actionNode("a", "fail"), endNode("end"), endNode("error-end")),
-            List.of(edge("e1", "start", "a"), edge("e2", "a", "end"), edge("e3", "a", "error-end")));
+            List.of(edge("e1", "start", "a"), edge("e2", "a", "end", "true", 1), defaultEdge("e3", "a", "error-end")));
 
         WorkflowEngine engine = new WorkflowEngine(
             NodeExecutorProvider.fromList(failingExecutor("fail")), List.of(listener), transitionHandler);
@@ -315,6 +315,57 @@ class WorkflowEngineErrorTest {
         boolean errorEndInHistory = result.history().stream()
             .anyMatch(h -> h.nodeId().equals("error-end"));
         assertTrue(errorEndInHistory, "Error end node should appear in history");
+    }
+
+    @Test
+    void transitionToMultiStepRecoveryChainRunsEntireChain() {
+        // X (fails) --TRANSITION--> recovery (ACTION) -> cleanup (ACTION) -> end.
+        // The recovery target must follow its OWN successor edges, not X's, so cleanup must run.
+        int[] recoveryCount = {0};
+        int[] cleanupCount = {0};
+        NodeExecutor recoveryExecutor = new NodeExecutor() {
+            public String actionType() { return "recover"; }
+            public NodeResult execute(NodeExecutionContext ctx) {
+                recoveryCount[0]++;
+                return new NodeResult(NodeResultStatus.COMPLETED, Map.of("recovered", true));
+            }
+        };
+        NodeExecutor cleanupExecutor = new NodeExecutor() {
+            public String actionType() { return "cleanup"; }
+            public NodeResult execute(NodeExecutionContext ctx) {
+                cleanupCount[0]++;
+                return new NodeResult(NodeResultStatus.COMPLETED, Map.of("cleaned", true));
+            }
+        };
+
+        WorkflowErrorHandler transitionHandler = new WorkflowErrorHandler() {
+            public ErrorResolution handleNodeError(WorkflowInstance i, WorkflowNode n,
+                                                    NodeResult r, Exception e) {
+                return ErrorResolution.transitionTo("recovery");
+            }
+            public ErrorResolution handleNoMatchingEdge(WorkflowInstance i, WorkflowNode n) {
+                return ErrorResolution.fail();
+            }
+        };
+
+        Workflow workflow = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), actionNode("failing", "fail"),
+                    actionNode("recovery", "recover"), actionNode("cleanup", "cleanup"),
+                    endNode("end")),
+            List.of(edge("e1", "start", "failing"), edge("e2", "failing", "end"),
+                    edge("e3", "recovery", "cleanup"), edge("e4", "cleanup", "end")));
+
+        WorkflowEngine engine = new WorkflowEngine(
+            NodeExecutorProvider.fromList(failingExecutor("fail"), recoveryExecutor, cleanupExecutor),
+            List.of(), transitionHandler);
+        WorkflowInstance result = engine.startWorkflow(workflow, Map.of());
+
+        assertEquals(InstanceStatus.COMPLETED, result.status());
+        assertEquals(1, recoveryCount[0], "Recovery action should have run once");
+        assertEquals(1, cleanupCount[0], "Cleanup (recovery's successor) must have run once");
+        assertEquals(true, result.context().get("recovered"));
+        assertEquals(true, result.context().get("cleaned"));
+        assertEquals("end", result.currentNodeId());
     }
 
     @Test

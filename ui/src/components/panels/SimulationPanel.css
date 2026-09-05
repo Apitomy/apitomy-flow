@@ -191,3 +191,18 @@
   outline-offset: 2px;
   border-radius: 6px;
 }
+
+.simulation-panel__block-select {
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.simulation-panel__branch-path {
+  margin-bottom: 8px;
+}
+
+.simulation-panel__branch-label {
+  font-size: 0.8em;
+  opacity: 0.7;
+  margin-bottom: 2px;
+}
