@@ -7,7 +7,9 @@ import {
   parkedNodes,
   branchPaths,
   simNodeClass,
+  parallelRole,
 } from './parallelView.ts';
+import { type ParallelAnalysis } from '../simulation/parallelRegions.ts';
 
 function branch(branchId: string, nodeId: string): ActiveBranch {
   return { branchId, nodeId };
@@ -162,5 +164,30 @@ describe('simNodeClass', () => {
   it('failed outranks current when a node is both', () => {
     expect(simNodeClass('x', { ...base, activeIds: new Set(['x']), failedNodeId: 'x' }))
       .toBe('flow-sim-node-failed');
+  });
+});
+
+function analysisStub(forks: string[], joins: string[]): ParallelAnalysis {
+  return {
+    isFork: (id) => forks.includes(id),
+    isJoin: (id) => joins.includes(id),
+    joinFor: () => undefined,
+    incomingEdgeIds: () => new Set<string>(),
+    problems: [],
+  };
+}
+
+describe('parallelRole', () => {
+  it('returns "fork" for a fork node', () => {
+    expect(parallelRole('f', analysisStub(['f'], []))).toBe('fork');
+  });
+  it('returns "join" for a join node', () => {
+    expect(parallelRole('j', analysisStub([], ['j']))).toBe('join');
+  });
+  it('returns undefined for an ordinary node', () => {
+    expect(parallelRole('n', analysisStub(['f'], ['j']))).toBeUndefined();
+  });
+  it('prefers "fork" if a node is somehow both fork and join', () => {
+    expect(parallelRole('x', analysisStub(['x'], ['x']))).toBe('fork');
   });
 });

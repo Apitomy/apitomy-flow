@@ -1,5 +1,6 @@
 import { type ActiveBranch, type HistoryEntry } from '../types/instance.ts';
 import { type NodeType } from '../types/workflow.ts';
+import { type ParallelAnalysis } from '../simulation/parallelRegions.ts';
 
 /** A branch parked on a blocking node, with the node kind resolved for display. */
 export interface ParkedNode {
@@ -132,4 +133,29 @@ export function simNodeClass(nodeId: string, opts: SimNodeClassOpts): string {
   if (opts.parkedIds.has(nodeId)) return 'flow-sim-node-blocked';
   if (opts.activeIds.has(nodeId)) return 'flow-sim-node-current';
   return opts.visited.has(nodeId) ? 'flow-sim-node-visited' : 'flow-sim-node-idle';
+}
+
+/** A node's static role in a parallel region, if any. */
+export type ParallelRole = 'fork' | 'join';
+
+/**
+ * Classifies a node's static fork/join role for editor authoring hints.
+ *
+ * @param nodeId the node to classify
+ * @param analysis the static parallel-region analysis of the workflow
+ * @returns 'fork' if the node fans out into parallel branches, 'join' if it is the synchronizing
+ *          AND-join, or undefined otherwise. Fork takes precedence in the degenerate case where a node
+ *          is classified as both.
+ */
+export function parallelRole(
+  nodeId: string,
+  analysis: ParallelAnalysis,
+): ParallelRole | undefined {
+  if (analysis.isFork(nodeId)) {
+    return 'fork';
+  }
+  if (analysis.isJoin(nodeId)) {
+    return 'join';
+  }
+  return undefined;
 }
