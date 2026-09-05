@@ -104,6 +104,12 @@ export function SimulationPanel({
     ? [...activeNodeIds(simState.activeBranches, simState.parkedBranchIds)]
     : [];
 
+  // At terminal states activeBranches is empty; fall back to the terminal/failing node so the
+  // status row still shows a node link (mirrors WorkflowViewer's terminal fallback).
+  const statusNodeIds = activeNodeList.length > 0
+    ? activeNodeList
+    : (simState?.currentNodeId ? [simState.currentNodeId] : []);
+
   // The parked node the mock editor currently targets. Default to the first parked node; reset when
   // the current selection is no longer parked (adjusting state during render is React's recommended
   // pattern for resetting state on a derived "key" change).
@@ -210,7 +216,7 @@ export function SimulationPanel({
             <span className={`simulation-panel__badge is-${simState.status}`}>
               {STATUS_LABEL[simState.status]}
             </span>
-            {activeNodeList.map(nodeId => (
+            {statusNodeIds.map(nodeId => (
               <button
                 key={nodeId}
                 className="simulation-panel__link"

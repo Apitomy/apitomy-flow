@@ -62,6 +62,15 @@ describe('activeEdgeIds', () => {
     const history: HistoryEntry[] = [entry('start', { branchId: 'root' })];
     expect(activeEdgeIds([branch('root', 'start')], history)).toEqual(new Set());
   });
+
+  it('resolves each active branch arrival edge independently (cross-branch isolation)', () => {
+    const history: HistoryEntry[] = [
+      entry('a', { branchId: 'root.0', edgeId: 'e-to-a' }),
+      entry('b', { branchId: 'root.1', edgeId: 'e-to-b' }),
+    ];
+    const set = activeEdgeIds([branch('root.0', 'a'), branch('root.1', 'b')], history);
+    expect(set).toEqual(new Set(['e-to-a', 'e-to-b']));
+  });
 });
 
 describe('parkedNodes', () => {
@@ -143,5 +152,15 @@ describe('simNodeClass', () => {
 
   it('marks an untouched node as idle', () => {
     expect(simNodeClass('x', base)).toBe('flow-sim-node-idle');
+  });
+
+  it('failed outranks blocked when a node is both', () => {
+    expect(simNodeClass('x', { ...base, parkedIds: new Set(['x']), failedNodeId: 'x' }))
+      .toBe('flow-sim-node-failed');
+  });
+
+  it('failed outranks current when a node is both', () => {
+    expect(simNodeClass('x', { ...base, activeIds: new Set(['x']), failedNodeId: 'x' }))
+      .toBe('flow-sim-node-failed');
   });
 });
