@@ -192,6 +192,40 @@ When an action node completes, the engine immediately evaluates edges and transi
 
 A safety limit of 100 transitions per call prevents infinite loops from automated cycles. If the limit is reached, the workflow fails with a descriptive `failureReason`.
 
+## Parallel Execution
+
+When execution reaches a fork (a node whose outgoing edges are all unconditional), the engine activates
+every branch. `advance` progresses all runnable branches; the instance stays `RUNNING` while any branch
+can still make progress and `WAITING` when every remaining branch is parked on a human task, received
+event, or wait node.
+
+```java
+WorkflowInstance instance = engine.startWorkflow(workflow, context);
+// After a fork, more than one branch may be active at once.
+List<ActiveBranch> active = instance.activeBranches();
+```
+
+Key semantics:
+
+- **AND-join (wait-for-all).** A join node fires once, only after every parallel branch has arrived.
+  Arrivals accumulate in `joinArrivals` until the last one lands.
+- **Fail-fast.** If any branch fails and is not recovered by an error handler, the whole instance
+  transitions to `FAILED`; sibling branches stop.
+- **END cancels siblings.** An `end` node reached on any branch terminates the entire instance.
+- **`currentNodeId` is `null`** whenever zero or more than one branch is active. Use `activeBranches`
+  to inspect concurrent progress.
+
+Resume a specific parked branch by node id — sibling branches keep waiting:
+
+```java
+// Complete one waiting human-task/event/wait branch, addressed by node id:
+WorkflowInstance next = engine.completeNode(workflow, instance, "notify-team", result);
+```
+
+`completeCurrentNode` remains available and delegates to `completeNode` for the single-branch case.
+The branch-addressable info accessors (`getHumanTaskInfo`, `getReceiveEventInfo`, `getWaitInfo`,
+`matchesEvent`) take a `nodeId` so concurrent waiting branches can be inspected independently.
+
 ## Immutability
 
 All engine methods return a new `WorkflowInstance`. The input instance is never mutated:

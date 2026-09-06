@@ -116,6 +116,34 @@ context.score > 80
 context.approved && context.reviewCount >= 2
 ```
 
+### Parallel Fork/Join
+
+A node with **two or more outgoing edges that are all unconditional** (no `condition` and
+`isDefault: false`) is a **fork**: entering it activates every outgoing branch concurrently, rather
+than choosing one. This is the parallel counterpart to conditional routing, where exactly one edge is
+taken.
+
+```json
+{ "id": "e-analyze", "source": "fetch-cve", "target": "analyze-impact", "priority": 0, "isDefault": false }
+{ "id": "e-notify",  "source": "fetch-cve", "target": "notify-team",    "priority": 1, "isDefault": false }
+```
+
+The branches re-converge at a **join** — the first node reachable from every branch. A join behaves as
+an **AND-join**: it waits for *all* incoming parallel branches to arrive before it fires, and it fires
+exactly once. No special node type or config marks a join; it is identified statically from the graph
+shape.
+
+Fork/join regions must be well-formed:
+
+- Every fork must have exactly one matching join (otherwise `FORK_WITHOUT_JOIN`).
+- A parallel branch must not reach an `end` node before joining (otherwise
+  `PARALLEL_BRANCH_REACHES_END`).
+- A node's outgoing edges must be *all* unconditional (fork) or use conditions/a default (exclusive
+  choice) — never a mix (otherwise `MIXED_FORK_EDGES`).
+
+See [Validation](validation.md#parallel-structure-error) for the rules and
+[the worked example](parallel-fork-join.md) for a complete fork/join workflow.
+
 ### Cycles
 
 Edges can loop back to earlier nodes — this is intentional for retry/re-review patterns:
@@ -135,12 +163,18 @@ A workflow instance is the runtime state of a workflow execution. It is a single
 | `id` | String | Instance identifier (UUID by default) |
 | `workflowId` | String | Reference to the workflow definition |
 | `currentNodeId` | String | The node the instance is currently at |
+| `activeBranches` | Array | The branches currently executing, each `{ branchId, nodeId }`. A non-parallel run has a single `root` branch. |
+| `joinArrivals` | Object | For each pending join node, the incoming edge ids that have already arrived and are waiting for the rest. |
 | `status` | Enum | `running`, `waiting`, `completed`, `failed`, `cancelled` |
 | `context` | Map | Accumulated data from completed nodes |
 | `history` | List | Record of visited nodes with timestamps and edge info |
 | `failureReason` | String | Why the instance failed (null if not failed) |
 | `createdOn` | Instant | When the instance was created |
 | `updatedOn` | Instant | When the instance was last modified |
+
+When multiple branches are active, `currentNodeId` is `null` (it is a convenience for the
+single-branch case). Each `HistoryEntry` carries an optional `branchId` tagging which branch made the
+visit; a missing `branchId` denotes the `root` branch.
 
 ### Status Lifecycle
 
