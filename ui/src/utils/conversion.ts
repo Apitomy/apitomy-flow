@@ -1,7 +1,7 @@
-import { type Node, type Edge } from '@xyflow/react';
-import { type WorkflowNode, type WorkflowEdge, type Workflow } from '../types/workflow.ts';
-import { type ValidationProblem } from '../types/validation.ts';
-import { type ParallelRole } from './parallelView.ts';
+import {type Edge, MarkerType, type Node} from '@xyflow/react';
+import {type Workflow, type WorkflowEdge, type WorkflowNode} from '../types/workflow.ts';
+import {type ValidationProblem} from '../types/validation.ts';
+import {type ParallelRole} from './parallelView.ts';
 
 export interface FlowNodeData extends Record<string, unknown> {
   name: string;
@@ -31,6 +31,9 @@ export function toReactFlowEdges(edges: WorkflowEdge[]): Edge[] {
     source: edge.source,
     target: edge.target,
     type: 'conditional',
+    markerEnd: {
+      type: MarkerType.ArrowClosed
+    },
     data: {
       condition: edge.condition,
       priority: edge.priority,
