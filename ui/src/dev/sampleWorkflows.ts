@@ -1,6 +1,13 @@
 import { type Workflow } from '../types/workflow.ts';
 import { type WorkflowInstance } from '../types/instance.ts';
 
+export interface DemoScenario {
+  key: string;
+  label: string;
+  workflow: Workflow;
+  instance: WorkflowInstance;
+}
+
 export const cveTriage: Workflow = {
   id: 'cve-triage',
   name: 'CVE Triage',
@@ -168,3 +175,234 @@ export const emptyWorkflow: Workflow = {
   nodes: [],
   edges: [],
 };
+
+export const parallelForkJoinWorkflow: Workflow = {
+  id: 'parallel-fork-join',
+  name: 'Parallel CVE Fork/Join',
+  description: 'Fetches CVE data, fans out to analysis and notification, then joins for publishing.',
+  version: 1,
+  nodes: [
+    {
+      id: 'start', type: 'start', name: 'Start',
+      config: { inputs: [{ name: 'cveId', type: 'string', required: true }] },
+      position: { x: 60, y: 220 },
+    },
+    {
+      id: 'fetch', type: 'action', name: 'Fetch CVE',
+      config: {
+        actionType: 'lookup-cve',
+        inputs: { 'CVE ID': 'context.cveId' },
+        outputs: [
+          { name: 'severity', type: 'string', required: true },
+          { name: 'description', type: 'string', required: true },
+        ],
+      },
+      position: { x: 260, y: 220 },
+    },
+    {
+      id: 'analyze', type: 'human-task', name: 'Assess Impact',
+      config: {
+        description: 'Security analyst reviews severity and confirms impact.',
+        inputs: {
+          'CVE ID': 'context.cveId',
+          'Severity': 'context.severity',
+        },
+        outputs: [
+          { name: 'impact', type: 'string', required: true },
+        ],
+      },
+      position: { x: 520, y: 120 },
+    },
+    {
+      id: 'notify', type: 'action', name: 'Notify Team',
+      config: {
+        actionType: 'send-email',
+        inputs: {
+          to: "'soc@apitomy.io'",
+          subject: "'CVE Alert: ' + context.cveId",
+          body: 'context.description',
+        },
+        outputs: [
+          { name: 'messageId', type: 'string', required: true },
+        ],
+      },
+      position: { x: 520, y: 320 },
+    },
+    {
+      id: 'join', type: 'wait', name: 'Join Branches',
+      config: { duration: 'PT0S' },
+      position: { x: 760, y: 220 },
+    },
+    {
+      id: 'end', type: 'end', name: 'Published',
+      config: { outcome: 'published' },
+      position: { x: 980, y: 220 },
+    },
+  ],
+  edges: [
+    { id: 'pf1', source: 'start', target: 'fetch', priority: 0, isDefault: false },
+    { id: 'pf2', source: 'fetch', target: 'analyze', priority: 0, isDefault: false },
+    { id: 'pf3', source: 'fetch', target: 'notify', priority: 1, isDefault: false },
+    { id: 'pf4', source: 'analyze', target: 'join', priority: 0, isDefault: false },
+    { id: 'pf5', source: 'notify', target: 'join', priority: 0, isDefault: false },
+    { id: 'pf6', source: 'join', target: 'end', priority: 0, isDefault: false },
+  ],
+};
+
+export const parallelForkJoinInstance: WorkflowInstance = {
+  id: 'inst-parallel-1',
+  workflowId: 'parallel-fork-join',
+  currentNodeId: null,
+  activeBranches: [
+    { branchId: 'root.0', nodeId: 'analyze' },
+    { branchId: 'root.1', nodeId: 'notify' },
+  ],
+  joinArrivals: {},
+  status: 'waiting',
+  context: {
+    cveId: 'CVE-2026-1337',
+    severity: 'critical',
+    description: 'Remote code execution in dependency parser',
+  },
+  history: [
+    { nodeId: 'start', nodeName: 'Start', enteredOn: '2026-09-09T13:00:00Z', completedOn: '2026-09-09T13:00:00Z', branchId: 'root' },
+    { nodeId: 'fetch', nodeName: 'Fetch CVE', edgeId: 'pf1', enteredOn: '2026-09-09T13:00:01Z', completedOn: '2026-09-09T13:00:03Z', output: { severity: 'critical', description: 'Remote code execution in dependency parser' }, branchId: 'root' },
+    { nodeId: 'analyze', nodeName: 'Assess Impact', edgeId: 'pf2', enteredOn: '2026-09-09T13:00:03Z', branchId: 'root.0' },
+    { nodeId: 'notify', nodeName: 'Notify Team', edgeId: 'pf3', enteredOn: '2026-09-09T13:00:03Z', branchId: 'root.1' },
+  ],
+  createdOn: '2026-09-09T13:00:00Z',
+  updatedOn: '2026-09-09T13:00:03Z',
+};
+
+export const loopWorkflow: Workflow = {
+  id: 'loop-review',
+  name: 'Looping Review Cycle',
+  description: 'Demonstrates a human review loop before final approval.',
+  version: 1,
+  nodes: [
+    {
+      id: 'start', type: 'start', name: 'Start',
+      config: { inputs: [{ name: 'ticketId', type: 'string', required: true }] },
+      position: { x: 60, y: 220 },
+    },
+    {
+      id: 'draft', type: 'action', name: 'Draft Plan',
+      config: {
+        actionType: 'create-jira-ticket',
+        inputs: {
+          project: "'SEC'",
+          issueType: "'Task'",
+          summary: "'Mitigate ' + context.ticketId",
+        },
+        outputs: [
+          { name: 'issueKey', type: 'string', required: true },
+        ],
+      },
+      position: { x: 260, y: 220 },
+    },
+    {
+      id: 'review', type: 'human-task', name: 'Review Plan',
+      config: {
+        description: 'Approve the mitigation plan or request changes.',
+        inputs: {
+          'Issue Key': 'context.issueKey',
+          'Current Plan': 'context.plan',
+        },
+        outputs: [
+          { name: 'approved', type: 'boolean', required: true },
+          { name: 'reviewNotes', type: 'string', required: false },
+        ],
+      },
+      position: { x: 500, y: 220 },
+    },
+    {
+      id: 'revise', type: 'action', name: 'Revise Plan',
+      config: {
+        actionType: 'http-request',
+        inputs: {
+          url: "'https://planner.apitomy.io/revise'",
+          method: "'POST'",
+          body: '{"notes": context.reviewNotes}',
+        },
+        outputs: [
+          { name: 'plan', type: 'string', required: true },
+        ],
+      },
+      position: { x: 740, y: 110 },
+    },
+    {
+      id: 'publish', type: 'action', name: 'Publish Plan',
+      config: {
+        actionType: 'send-email',
+        inputs: {
+          to: "'secops@apitomy.io'",
+          subject: "'Plan approved: ' + context.issueKey",
+          body: 'context.plan',
+        },
+        outputs: [
+          { name: 'messageId', type: 'string', required: true },
+        ],
+      },
+      position: { x: 740, y: 320 },
+    },
+    {
+      id: 'end', type: 'end', name: 'Closed',
+      config: { outcome: 'approved' },
+      position: { x: 980, y: 320 },
+    },
+  ],
+  edges: [
+    { id: 'lp1', source: 'start', target: 'draft', priority: 0, isDefault: false },
+    { id: 'lp2', source: 'draft', target: 'review', priority: 0, isDefault: false },
+    { id: 'lp3', source: 'review', target: 'publish', condition: 'context.approved == true', priority: 0, isDefault: false, label: 'Approved' },
+    { id: 'lp4', source: 'review', target: 'revise', priority: 1, isDefault: true, label: 'Needs revisions' },
+    { id: 'lp5', source: 'revise', target: 'review', priority: 0, isDefault: false },
+    { id: 'lp6', source: 'publish', target: 'end', priority: 0, isDefault: false },
+  ],
+};
+
+export const loopWorkflowInstance: WorkflowInstance = {
+  id: 'inst-loop-1',
+  workflowId: 'loop-review',
+  currentNodeId: 'review',
+  activeBranches: [{ branchId: 'root', nodeId: 'review' }],
+  joinArrivals: {},
+  status: 'waiting',
+  context: {
+    ticketId: 'SEC-42',
+    issueKey: 'SEC-42',
+    approved: false,
+    reviewNotes: 'Please tighten rollback steps.',
+    plan: 'Updated rollout with rollback verification checklist.',
+  },
+  history: [
+    { nodeId: 'start', nodeName: 'Start', enteredOn: '2026-09-09T14:10:00Z', completedOn: '2026-09-09T14:10:00Z', branchId: 'root' },
+    { nodeId: 'draft', nodeName: 'Draft Plan', edgeId: 'lp1', enteredOn: '2026-09-09T14:10:01Z', completedOn: '2026-09-09T14:10:05Z', output: { issueKey: 'SEC-42' }, branchId: 'root' },
+    { nodeId: 'review', nodeName: 'Review Plan', edgeId: 'lp2', enteredOn: '2026-09-09T14:10:05Z', completedOn: '2026-09-09T14:11:00Z', output: { approved: false, reviewNotes: 'Please tighten rollback steps.' }, branchId: 'root' },
+    { nodeId: 'revise', nodeName: 'Revise Plan', edgeId: 'lp4', enteredOn: '2026-09-09T14:11:00Z', completedOn: '2026-09-09T14:12:30Z', output: { plan: 'Updated rollout with rollback verification checklist.' }, branchId: 'root' },
+    { nodeId: 'review', nodeName: 'Review Plan', edgeId: 'lp5', enteredOn: '2026-09-09T14:12:30Z', branchId: 'root' },
+  ],
+  createdOn: '2026-09-09T14:10:00Z',
+  updatedOn: '2026-09-09T14:12:30Z',
+};
+
+export const demoScenarios: DemoScenario[] = [
+  {
+    key: 'cve-triage',
+    label: 'CVE Triage',
+    workflow: cveTriage,
+    instance: triageInstance,
+  },
+  {
+    key: 'parallel-fork-join',
+    label: 'Parallel Fork/Join',
+    workflow: parallelForkJoinWorkflow,
+    instance: parallelForkJoinInstance,
+  },
+  {
+    key: 'loop-review',
+    label: 'Looping Review',
+    workflow: loopWorkflow,
+    instance: loopWorkflowInstance,
+  },
+];
