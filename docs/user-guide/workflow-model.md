@@ -162,7 +162,7 @@ A workflow instance is the runtime state of a workflow execution. It is a single
 |-------|------|-------------|
 | `id` | String | Instance identifier (UUID by default) |
 | `workflowId` | String | Reference to the workflow definition |
-| `currentNodeId` | String | The node the instance is currently at |
+| `currentNodeId` | String \| null | The node the instance is currently at when exactly one branch is active; `null` when zero or multiple branches are active |
 | `activeBranches` | Array | The branches currently executing, each `{ branchId, nodeId }`. A non-parallel run has a single `root` branch. |
 | `joinArrivals` | Object | For each pending join node, the incoming edge ids that have already arrived and are waiting for the rest. |
 | `status` | Enum | `running`, `waiting`, `completed`, `failed`, `cancelled` |

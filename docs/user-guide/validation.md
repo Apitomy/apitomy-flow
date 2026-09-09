@@ -137,8 +137,8 @@ public record ValidationProblem(
 
 ## Rule Coverage
 
-The engine's Java `WorkflowValidator` implements all **57** rules. The TypeScript validator used by
-the visual editor implements **55** of them — every rule except `MISSING_EDGE_SOURCE` and
+The engine's Java `WorkflowValidator` emits **57** distinct validation codes. The TypeScript validator
+used by the visual editor emits **55** of them — every code except `MISSING_EDGE_SOURCE` and
 `MISSING_EDGE_TARGET`, which cannot occur through the editor UI (it never produces an edge without a
 source and target).
 
