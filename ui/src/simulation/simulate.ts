@@ -1,6 +1,7 @@
 import { type Workflow, type WorkflowEdge, type WorkflowNode, type NodeType } from '../types/workflow.ts';
-import { type HistoryEntry } from '../types/instance.ts';
+import { type HistoryEntry, type ActiveBranch } from '../types/instance.ts';
 import { evaluateCondition, ElEvaluationError, type ElScope } from './elEvaluator.ts';
+import { analyzeParallelRegions, type ParallelAnalysis } from './parallelRegions.ts';
 
 /**
  * Pure, side-effect-free simulation of a workflow's routing logic, mirroring the Java
@@ -45,21 +46,30 @@ export interface SimError {
 /** The complete, serializable state of a simulation run. */
 export interface SimState {
     status: SimStatus;
-    /** The node the simulation is currently at. */
+    /** Live branch positions (tokens). Replaces the single cursor; mirrors the engine. */
+    activeBranches: ActiveBranch[];
+    /**
+     * Derived, back-compat: the sole active node's id when exactly one branch is active, else `''`
+     * (empty) when zero or multiple branches are active. Keeps existing single-path consumers working.
+     */
     currentNodeId: string;
+    /** Branch ids currently parked on a blocking node, awaiting a mock (not runnable). */
+    parkedBranchIds: string[];
+    /** Arrived incoming-edge ids per join node, awaiting the remaining branches. */
+    joinArrivals: Record<string, string[]>;
     /** The evolving instance context (start context plus merged mock outputs). */
     context: Record<string, unknown>;
-    /** Nodes entered so far, in order (may contain repeats for loops). */
+    /** Nodes entered so far, in order (may contain repeats for loops / multiple branches). */
     visitedNodeIds: string[];
-    /** History entries, shaped like a real {@code WorkflowInstance} history. */
+    /** History entries, shaped like a real {@code WorkflowInstance} history (branch-attributed). */
     history: HistoryEntry[];
     /** Last routing evaluation per edge id, for the canvas overlay. */
     edgeEvaluations: Record<string, EdgeEvaluation>;
-    /** Set when `status === 'blocked'` — the node awaiting a mock output/event. */
+    /** Derived, back-compat: the first parked branch's node/kind when `status === 'blocked'`. */
     blockedOn?: { nodeId: string; kind: NodeType };
     /** Set when `status === 'failed'`. */
     error?: SimError;
-    /** Number of transitions taken, for the loop guard. */
+    /** Number of transitions taken across all branches, for the loop guard. */
     transitions: number;
 }
 
@@ -75,17 +85,15 @@ export interface SimMock {
 // Lifecycle
 // ---------------------------------------------------------------------------
 
-/**
- * Begins a simulation with the supplied start context. The instance is positioned at (and has
- * "entered") the start node, ready to route outward via {@link stepSimulation} / {@link runSimulation}.
- * If the workflow has no start node the simulation is immediately `failed`.
- */
 export function startSimulation(workflow: Workflow, context: Record<string, unknown>): SimState {
     const startNode = workflow.nodes.find(n => n.type === 'start');
     if (!startNode) {
         return {
             status: 'failed',
+            activeBranches: [],
             currentNodeId: '',
+            parkedBranchIds: [],
+            joinArrivals: {},
             context: { ...context },
             visitedNodeIds: [],
             history: [],
@@ -94,134 +102,150 @@ export function startSimulation(workflow: Workflow, context: Record<string, unkn
             transitions: 0,
         };
     }
-
     return {
         status: 'running',
+        activeBranches: [{ branchId: 'root', nodeId: startNode.id }],
         currentNodeId: startNode.id,
+        parkedBranchIds: [],
+        joinArrivals: {},
         context: { ...context },
         visitedNodeIds: [startNode.id],
-        history: [enterEntry(startNode)],
+        history: [{ ...enterEntry(startNode), branchId: 'root' }],
         edgeEvaluations: {},
         transitions: 0,
     };
 }
 
 /**
- * Advances the simulation by a single node transition: selects an outgoing edge from the current
- * (routable) node, records how each edge evaluated, moves to the target node, and enters it —
- * stopping there. Landing on a blocking node yields `blocked`; landing on an end node yields
- * `completed`; no matching edge or an evaluation error yields `failed`. When the simulation is not
- * `running` (blocked/terminal), the state is returned unchanged.
+ * Advances the simulation by a single step: picks the first runnable branch and resolves its outgoing
+ * edge, moving it to (and entering) the target. When no branch is runnable the state quiesces to a
+ * blocked/terminal status. A no-op when the simulation is not `running`.
  */
 export function stepSimulation(workflow: Workflow, state: SimState): SimState {
     if (state.status !== 'running') {
         return state;
     }
-
     if (state.transitions >= MAX_TRANSITIONS) {
-        return fail(state, {
+        return derive(workflow, fail(state, {
             message: `Exceeded transition limit (${MAX_TRANSITIONS}) — possible infinite loop`,
-            nodeId: state.currentNodeId,
-        });
+            nodeId: state.currentNodeId || undefined,
+        }));
+    }
+    const branch = runnableBranch(workflow, state);
+    if (!branch) {
+        return quiesce(workflow, state);
+    }
+    const node = findNode(workflow, branch.nodeId);
+    if (!node) {
+        return derive(workflow, fail(state, {
+            message: `Current node not found: ${branch.nodeId}`, nodeId: branch.nodeId,
+        }));
     }
 
-    const currentNode = findNode(workflow, state.currentNodeId);
-    if (!currentNode) {
-        return fail(state, { message: `Current node not found: ${state.currentNodeId}`, nodeId: state.currentNodeId });
+    const regions = analyzeParallelRegions(workflow);
+
+    // Fork: retire this branch and fan out one child branch per outgoing edge.
+    if (regions.isFork(node.id)) {
+        const forkEdges = workflow.edges
+            .filter(e => e.source === node.id)
+            .sort((a, b) => a.priority - b.priority);
+        const forkEvals: EdgeEvaluation[] = forkEdges.map(e => ({
+            edgeId: e.id, condition: e.condition, isDefault: false, result: 'matched',
+        }));
+        let next: SimState = {
+            ...state,
+            history: completeBranchEntry(state.history, branch.branchId, node.id),
+            edgeEvaluations: mergeEvaluations(state.edgeEvaluations, forkEvals),
+            transitions: state.transitions + 1,
+            activeBranches: state.activeBranches.filter(b => b.branchId !== branch.branchId),
+        };
+        let childIndex = 0;
+        for (const edge of forkEdges) {
+            const childBranchId = `${branch.branchId}.${childIndex++}`;
+            next = { ...next, activeBranches: [...next.activeBranches, { branchId: childBranchId, nodeId: node.id }] };
+            next = moveBranch(workflow, next, childBranchId, edge, regions);
+            if (next.status !== 'running') {
+                return derive(workflow, next); // END/failure inside a branch cancels the rest
+            }
+        }
+        return quiesce(workflow, next);
     }
 
-    // Select the outgoing edge, recording how each candidate evaluated.
+    // Resolve the single outgoing edge (fork handling is added in Task 5).
     let selection: EdgeSelection;
     try {
-        selection = selectEdge(workflow, currentNode, { context: state.context });
+        selection = selectEdge(workflow, node, { context: state.context });
     } catch (e) {
         if (e instanceof EdgeConditionError) {
-            const evaluations = mergeEvaluations(state.edgeEvaluations, e.evaluations);
-            return {
-                ...fail(state, { message: e.message, nodeId: currentNode.id, edgeId: e.edgeId }),
-                edgeEvaluations: evaluations,
-            };
+            return derive(workflow, {
+                ...fail(state, { message: e.message, nodeId: node.id, edgeId: e.edgeId }),
+                edgeEvaluations: mergeEvaluations(state.edgeEvaluations, e.evaluations),
+            });
         }
         throw e;
     }
-
     const edgeEvaluations = mergeEvaluations(state.edgeEvaluations, selection.evaluations);
-
     if (!selection.edge) {
-        return {
+        return derive(workflow, {
             ...fail(state, {
-                message: `No matching outgoing edge from node: ${currentNode.name || currentNode.id}`,
-                nodeId: currentNode.id,
+                message: `No matching outgoing edge from node: ${node.name || node.id}`,
+                nodeId: node.id,
             }),
             edgeEvaluations,
-        };
+        });
     }
 
-    const edge = selection.edge;
-    const targetNode = findNode(workflow, edge.target);
-    if (!targetNode) {
-        return {
-            ...fail(state, { message: `Edge target not found: ${edge.target}`, edgeId: edge.id }),
-            edgeEvaluations,
-        };
-    }
-
-    // Complete the current history entry, then enter the target (recording the edge taken).
-    const history = completeLast(state.history);
-    history.push(enterEntry(targetNode, edge));
-
-    const base: SimState = {
-        ...state,
-        currentNodeId: targetNode.id,
-        visitedNodeIds: [...state.visitedNodeIds, targetNode.id],
-        history,
-        edgeEvaluations,
-        transitions: state.transitions + 1,
-    };
-
-    return enterNode(base, targetNode);
+    const history = completeBranchEntry(state.history, branch.branchId, node.id);
+    const moved = moveBranch(
+        workflow,
+        { ...state, history, edgeEvaluations, transitions: state.transitions + 1 },
+        branch.branchId,
+        selection.edge,
+        regions,
+    );
+    return quiesce(workflow, moved);
 }
 
 /**
- * Runs the simulation forward until it blocks, completes, or fails — i.e. "run to the next block
- * or a terminal state". A no-op when the simulation is not `running`.
+ * Runs the simulation forward until it blocks, completes, or fails. A no-op when not `running`.
  */
 export function runSimulation(workflow: Workflow, state: SimState): SimState {
     let current = state;
     while (current.status === 'running') {
         const next = stepSimulation(workflow, current);
-        // Defensive: stepSimulation always changes status or advances; guard against a stuck loop.
-        if (next === current) break;
+        if (next === current) {
+            break;
+        }
         current = next;
     }
     return current;
 }
 
 /**
- * Delivers a mock output/event to a blocked node, merges any output into the context (as a real
- * node would), and returns the simulation to a `running`, routable state so it can continue. A
+ * Delivers a mock output/event to a parked (blocking) branch, merges any output into context (as a
+ * real node would), and marks that branch runnable so the next step routes it onward. When `nodeId`
+ * is given the matching parked branch is targeted; otherwise the first parked branch is resumed. A
  * no-op unless the simulation is `blocked`.
  */
-export function resumeSimulation(workflow: Workflow, state: SimState, mock: SimMock): SimState {
-    if (state.status !== 'blocked' || !state.blockedOn) {
+export function resumeSimulation(
+    workflow: Workflow,
+    state: SimState,
+    mock: SimMock,
+    nodeId?: string,
+): SimState {
+    if (state.status !== 'blocked') {
         return state;
     }
-
+    const parked = state.activeBranches.filter(b => state.parkedBranchIds.includes(b.branchId));
+    const target = nodeId ? parked.find(b => b.nodeId === nodeId) : parked[0];
+    if (!target) {
+        return state;
+    }
     const output = mock.output ?? {};
     const context = { ...state.context, ...output };
-    const history = recordOutputOnLast(state.history, output);
-
-    const resumed: SimState = {
-        ...state,
-        status: 'running',
-        context,
-        history,
-        blockedOn: undefined,
-    };
-    // The node is now routable; nothing else to do here — the next step routes outward. `workflow`
-    // is accepted for symmetry and future use (e.g. validating the mock against declared outputs).
-    void workflow;
-    return resumed;
+    const history = recordOutputOnBranch(state.history, target.branchId, target.nodeId, output);
+    const parkedBranchIds = state.parkedBranchIds.filter(id => id !== target.branchId);
+    return derive(workflow, { ...state, status: 'running', context, history, parkedBranchIds });
 }
 
 // ---------------------------------------------------------------------------
@@ -302,28 +326,170 @@ function selectEdge(workflow: Workflow, node: WorkflowNode, scope: ElScope): Edg
     return { edge: selected, evaluations };
 }
 
-/** Applies the type-specific behavior when a node is entered (already recorded in history). */
-function enterNode(state: SimState, node: WorkflowNode): SimState {
-    if (node.type === 'end') {
-        return {
+/** @returns the first branch that is runnable (not parked, not sitting on an end node), or undefined. */
+function runnableBranch(workflow: Workflow, state: SimState): ActiveBranch | undefined {
+    return state.activeBranches.find(b =>
+        !state.parkedBranchIds.includes(b.branchId) && findNode(workflow, b.nodeId)?.type !== 'end');
+}
+
+/**
+ * Moves a branch across a single edge to its target and enters it. (Join synchronization is added in
+ * Task 5.)
+ */
+function moveBranch(
+    workflow: Workflow,
+    state: SimState,
+    branchId: string,
+    edge: WorkflowEdge,
+    regions: ParallelAnalysis,
+): SimState {
+    const target = findNode(workflow, edge.target);
+    if (!target) {
+        return fail(state, { message: `Edge target not found: ${edge.target}`, edgeId: edge.id });
+    }
+
+    if (regions.isJoin(target.id)) {
+        // Record arrival; retire the arriving branch.
+        const arrived = [...(state.joinArrivals[target.id] ?? []), edge.id];
+        const withArrival: SimState = {
             ...state,
+            joinArrivals: { ...state.joinArrivals, [target.id]: arrived },
+            activeBranches: state.activeBranches.filter(b => b.branchId !== branchId),
+            parkedBranchIds: state.parkedBranchIds.filter(id => id !== branchId),
+        };
+        const required = regions.incomingEdgeIds(target.id);
+        const arrivedSet = new Set(arrived);
+        const allArrived = [...required].every(id => arrivedSet.has(id));
+        if (!allArrived) {
+            return withArrival; // absorbed; wait for the remaining branches
+        }
+        // All branches converged: one continuing branch enters the join. Clear this join's arrivals
+        // so a legitimate loop-back to the same region starts clean.
+        const clearedArrivals = { ...withArrival.joinArrivals };
+        delete clearedArrivals[target.id];
+        const continuingId = `${target.id}#join`;
+        const fired: SimState = {
+            ...withArrival,
+            joinArrivals: clearedArrivals,
+            activeBranches: [...withArrival.activeBranches, { branchId: continuingId, nodeId: target.id }],
+        };
+        return enterNode(fired, workflow, continuingId, target, edge);
+    }
+
+    // Sequential / fork-child arrival at a normal node.
+    const activeBranches = state.activeBranches
+        .filter(b => b.branchId !== branchId)
+        .concat({ branchId, nodeId: target.id });
+    return enterNode({ ...state, activeBranches }, workflow, branchId, target, edge);
+}
+
+/** Applies the type-specific behavior when a branch enters a node, recording branch-attributed history. */
+function enterNode(
+    state: SimState,
+    workflow: Workflow,
+    branchId: string,
+    node: WorkflowNode,
+    viaEdge?: WorkflowEdge,
+): SimState {
+    void workflow;
+    const history = state.history.concat({ ...enterEntry(node, viaEdge), branchId });
+    const visitedNodeIds = [...state.visitedNodeIds, node.id];
+    const base: SimState = { ...state, history, visitedNodeIds };
+
+    if (node.type === 'end') {
+        // END completes the whole run and cancels siblings. Keep the end node as the terminal
+        // `currentNodeId` (branches are cleared, so `derive` preserves it for terminal states).
+        return {
+            ...base,
             status: 'completed',
-            history: completeLast(state.history),
+            currentNodeId: node.id,
+            history: completeBranchEntry(base.history, branchId, node.id),
+            activeBranches: [],
+            parkedBranchIds: [],
+            joinArrivals: {},
         };
     }
     if (node.type === 'start') {
-        // Start nodes have no incoming edges; reaching one mid-run is a malformed graph.
-        return fail(state, { message: 'Cannot transition to a start node', nodeId: node.id });
+        return fail(base, { message: 'Cannot transition to a start node', nodeId: node.id });
     }
     if (BLOCKING_KINDS.has(node.type)) {
-        return {
-            ...state,
-            status: 'blocked',
-            blockedOn: { nodeId: node.id, kind: node.type },
-        };
+        return { ...base, parkedBranchIds: [...base.parkedBranchIds, branchId] };
     }
-    // 'wait' — parks at runtime but needs no author input; it is immediately routable here.
-    return state;
+    // 'wait' — routable in the simulation; the branch stays runnable and the next step routes it.
+    return base;
+}
+
+/**
+ * Derives the instance status once no branch is runnable: `blocked` when a branch is parked, a
+ * defensive `failed` on an empty non-terminal state, otherwise `running`. Always recomputes the
+ * derived `currentNodeId`/`blockedOn`.
+ */
+function quiesce(workflow: Workflow, state: SimState): SimState {
+    if (state.status !== 'running') {
+        return derive(workflow, state);
+    }
+    if (runnableBranch(workflow, state)) {
+        return derive(workflow, state);
+    }
+    if (state.activeBranches.length === 0) {
+        return derive(workflow, fail(state, {
+            message: 'No active branches and the simulation did not complete (parallel deadlock)',
+        }));
+    }
+    return derive(workflow, { ...state, status: 'blocked' });
+}
+
+/**
+ * Recomputes the derived back-compat fields (`currentNodeId`, `blockedOn`) from the branch set. During
+ * a live run (`running`/`blocked`) `currentNodeId` is the sole active node or `''` (when 0 or ≥2
+ * branches are active). At a terminal state (`completed`/`failed`) the branch set is empty, so the
+ * terminal/failing node id already on the state is preserved (existing tests assert it).
+ */
+function derive(workflow: Workflow, state: SimState): SimState {
+    let currentNodeId = state.currentNodeId;
+    if (state.status === 'running' || state.status === 'blocked') {
+        currentNodeId = state.activeBranches.length === 1 ? state.activeBranches[0].nodeId : '';
+    }
+    let blockedOn: SimState['blockedOn'];
+    if (state.status === 'blocked') {
+        const firstParked = state.activeBranches.find(b => state.parkedBranchIds.includes(b.branchId));
+        const node = firstParked ? findNode(workflow, firstParked.nodeId) : undefined;
+        if (node) {
+            blockedOn = { nodeId: node.id, kind: node.type };
+        }
+    }
+    return { ...state, currentNodeId, blockedOn };
+}
+
+/** Marks the open (not-yet-completed) history entry for `(branchId, nodeId)` completed. */
+function completeBranchEntry(history: HistoryEntry[], branchId: string, nodeId: string): HistoryEntry[] {
+    const copy = history.slice();
+    for (let i = copy.length - 1; i >= 0; i--) {
+        const e = copy[i];
+        if (e.branchId === branchId && e.nodeId === nodeId && !e.completedOn) {
+            copy[i] = { ...e, completedOn: new Date().toISOString() };
+            return copy;
+        }
+    }
+    return copy;
+}
+
+/** Records the produced output on the open history entry for `(branchId, nodeId)`. */
+function recordOutputOnBranch(
+    history: HistoryEntry[],
+    branchId: string,
+    nodeId: string,
+    output: Record<string, unknown>,
+): HistoryEntry[] {
+    const copy = history.slice();
+    for (let i = copy.length - 1; i >= 0; i--) {
+        const e = copy[i];
+        if (e.branchId === branchId && e.nodeId === nodeId && !e.completedOn) {
+            copy[i] = { ...e, output: { ...(e.output ?? {}), ...output } };
+            return copy;
+        }
+    }
+    return copy;
 }
 
 function findNode(workflow: Workflow, nodeId: string): WorkflowNode | undefined {
@@ -353,24 +519,4 @@ function enterEntry(node: WorkflowNode, edge?: WorkflowEdge): HistoryEntry {
         edgeCondition: edge?.condition,
         enteredOn: new Date().toISOString(),
     };
-}
-
-/** Returns a copy of history with the final entry marked completed (if not already). */
-function completeLast(history: HistoryEntry[]): HistoryEntry[] {
-    if (history.length === 0) return [];
-    const copy = history.slice();
-    const last = copy[copy.length - 1];
-    if (!last.completedOn) {
-        copy[copy.length - 1] = { ...last, completedOn: new Date().toISOString() };
-    }
-    return copy;
-}
-
-/** Records the produced output on the final (blocked) history entry. */
-function recordOutputOnLast(history: HistoryEntry[], output: Record<string, unknown>): HistoryEntry[] {
-    if (history.length === 0) return [];
-    const copy = history.slice();
-    const last = copy[copy.length - 1];
-    copy[copy.length - 1] = { ...last, output: { ...(last.output ?? {}), ...output } };
-    return copy;
 }

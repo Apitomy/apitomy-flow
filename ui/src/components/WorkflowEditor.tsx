@@ -23,7 +23,9 @@ import { type ValidationProblem } from '../types/validation.ts';
 import { type EditorSpi } from '../types/spi.ts';
 import { type FlowNodeData, toReactFlowNodes, toReactFlowEdges, toWorkflow, toWorkflowNodes, toWorkflowEdges } from '../utils/conversion.ts';
 import { generateNodeId, generateEdgeId } from '../utils/id.ts';
+import { simNodeClass, activeNodeIds, parallelRole } from '../utils/parallelView.ts';
 import { validateWorkflow } from '../validation/validateWorkflow.ts';
+import { analyzeParallelRegions } from '../simulation/parallelRegions.ts';
 import { layoutWorkflow, needsLayout } from '../layout/layoutWorkflow.ts';
 import { useHostValidation } from '../hooks/useHostValidation.ts';
 import { nodeTypes } from './nodes/nodeTypes.ts';
@@ -80,16 +82,6 @@ function generateSampleContext(workflow: Workflow): string {
     }
   }
   return JSON.stringify(context, null, 2);
-}
-
-/** The path-highlight class for a node given the current simulation state. */
-function simNodeClass(nodeId: string, state: SimState, visited: ReadonlySet<string>): string {
-  if (nodeId === state.currentNodeId) {
-    if (state.status === 'failed') return 'flow-sim-node-failed';
-    if (state.status === 'blocked') return 'flow-sim-node-blocked';
-    return 'flow-sim-node-current';
-  }
-  return visited.has(nodeId) ? 'flow-sim-node-visited' : 'flow-sim-node-idle';
 }
 
 export interface WorkflowEditorProps {
@@ -188,6 +180,11 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
     [currentWorkflow],
   );
 
+  const parallelAnalysis = useMemo(
+    () => analyzeParallelRegions(currentWorkflow),
+    [currentWorkflow],
+  );
+
   const hostProblems = useHostValidation(currentWorkflow, spi?.validate);
 
   const validationProblems = useMemo(
@@ -200,12 +197,20 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
   }, [validationProblems, onValidationChange]);
 
   const nodesWithValidation = useMemo(() => {
-    if (!validationProblems?.length) return nodes;
+    if (!validationProblems?.length && !parallelAnalysis) return nodes;
     return nodes.map(node => {
       const problems = validationProblems.filter(p => p.nodeId === node.id);
-      return problems.length ? { ...node, data: { ...node.data, validationProblems: problems } } : node;
+      const role = parallelRole(node.id, parallelAnalysis);
+      return (problems.length || role) ? {
+        ...node,
+        data: {
+          ...node.data,
+          validationProblems: problems.length ? problems : undefined,
+          parallelRole: role,
+        },
+      } : node;
     });
-  }, [nodes, validationProblems]);
+  }, [nodes, validationProblems, parallelAnalysis]);
 
   const selectedNodeProblems = useMemo(
     () => (selectedNodeId ? validationProblems.filter(p => p.nodeId === selectedNodeId) : []),
@@ -449,8 +454,8 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
     setSimState(prev => (prev ? runSimulation(currentWorkflow, prev) : prev));
   }, [currentWorkflow]);
 
-  const resumeSim = useCallback((mock: SimMock) => {
-    setSimState(prev => (prev ? resumeSimulation(currentWorkflow, prev, mock) : prev));
+  const resumeSim = useCallback((mock: SimMock, nodeId?: string) => {
+    setSimState(prev => (prev ? resumeSimulation(currentWorkflow, prev, mock, nodeId) : prev));
   }, [currentWorkflow]);
 
   const resetSim = useCallback(() => setSimState(null), []);
@@ -494,7 +499,15 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
   const displayNodes = useMemo(() => {
     if (!simActive || !simState) return nodesWithValidation;
     const visited = new Set(simState.visitedNodeIds);
-    return nodesWithValidation.map(n => ({ ...n, className: simNodeClass(n.id, simState, visited) }));
+    const parkedIds = activeNodeIds(
+      simState.activeBranches.filter(b => simState.parkedBranchIds.includes(b.branchId)),
+    );
+    const activeIds = activeNodeIds(simState.activeBranches, simState.parkedBranchIds);
+    const failedNodeId = simState.status === 'failed' ? simState.error?.nodeId : undefined;
+    return nodesWithValidation.map(n => ({
+      ...n,
+      className: simNodeClass(n.id, { activeIds, parkedIds, visited, failedNodeId }),
+    }));
   }, [nodesWithValidation, simActive, simState]);
 
   const displayEdges = useMemo(() => {

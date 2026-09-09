@@ -1,6 +1,7 @@
 package io.apitomy.flow.validation;
 
 import io.apitomy.flow.engine.ConditionEvaluator;
+import io.apitomy.flow.engine.ParallelRegions;
 import io.apitomy.flow.model.*;
 
 import java.time.Duration;
@@ -17,6 +18,7 @@ public class WorkflowValidator {
         validateConnectivity(workflow, problems);
         validateEdgeConditions(workflow, problems);
         validateSemantics(workflow, problems);
+        validateParallelStructure(workflow, problems);
         return problems;
     }
 
@@ -299,14 +301,6 @@ public class WorkflowValidator {
             if (hasConditional && defaults.isEmpty()) {
                 problems.add(ValidationProblem.warning("NO_DEFAULT_EDGE",
                     "Node has conditional edges but no default fallback", entry.getKey()));
-            }
-
-            // No conditions at all on multiple edges
-            boolean allUnconditional = outgoing.stream()
-                .allMatch(e -> e.condition() == null || e.condition().isBlank());
-            if (allUnconditional && defaults.isEmpty()) {
-                problems.add(ValidationProblem.warning("UNCONDITIONAL_MULTIPLE_EDGES",
-                    "Node has multiple outgoing edges with no conditions", entry.getKey()));
             }
 
             // Duplicate priorities
@@ -623,5 +617,47 @@ public class WorkflowValidator {
             }
         }
         return nodeIds.get(0);
+    }
+
+    /**
+     * Validates structured-parallelism constraints using {@link ParallelRegions}. Every problem is an
+     * ERROR: a malformed fork/join region cannot be executed by the engine.
+     *
+     * @param workflow the workflow to validate
+     * @param problems the accumulating problem list
+     */
+    private void validateParallelStructure(Workflow workflow, List<ValidationProblem> problems) {
+        // Skip parallel structure analysis if there are already structural errors that would
+        // make graph traversal unsafe (e.g., null edge targets, invalid edge references).
+        boolean hasStructuralErrors = problems.stream().anyMatch(p ->
+            p.code().equals("INVALID_EDGE_SOURCE") || p.code().equals("INVALID_EDGE_TARGET")
+                || p.code().equals("MISSING_EDGE_SOURCE") || p.code().equals("MISSING_EDGE_TARGET"));
+        if (hasStructuralErrors) {
+            return;
+        }
+
+        ParallelRegions regions = ParallelRegions.analyze(workflow);
+        for (ParallelRegions.Problem p : regions.problems()) {
+            problems.add(ValidationProblem.error(p.code(), messageForParallelProblem(p.code()), p.nodeId()));
+        }
+    }
+
+    private String messageForParallelProblem(String code) {
+        return switch (code) {
+            case "MIXED_FORK_EDGES" ->
+                "Node mixes unconditional (fork) edges with conditional/default edges; make all outgoing "
+                    + "edges unconditional to fork, or add conditions/a default for exclusive choice";
+            case "FORK_WITHOUT_JOIN" ->
+                "Parallel branches from this fork do not re-converge at a single join";
+            case "UNBALANCED_PARALLEL" ->
+                "Parallel branches from this fork converge at different points (unbalanced)";
+            case "CROSSING_PARALLEL_REGIONS" ->
+                "An edge crosses a parallel region boundary (regions must be well-nested)";
+            case "PARALLEL_BRANCH_REACHES_END" ->
+                "A parallel branch can reach an end node without first joining";
+            case "PARALLEL_REGION_CYCLE" ->
+                "A cycle exists inside a parallel region";
+            default -> "Invalid parallel structure";
+        };
     }
 }

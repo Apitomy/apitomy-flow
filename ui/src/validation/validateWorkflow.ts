@@ -1,5 +1,6 @@
 import { type Workflow, type WorkflowEdge } from '../types/workflow.ts';
 import { type ValidationProblem, type ValidationSeverity } from '../types/validation.ts';
+import { analyzeParallelRegions } from '../simulation/parallelRegions.ts';
 
 function problem(severity: ValidationSeverity, code: string, message: string, nodeId?: string, edgeId?: string): ValidationProblem {
   return { severity, code, message, nodeId, edgeId };
@@ -11,6 +12,7 @@ export function validateWorkflow(workflow: Workflow): ValidationProblem[] {
   validateConnectivity(workflow, problems);
   validateEdgeConditions(workflow, problems);
   validateSemantics(workflow, problems);
+  validateParallelStructure(workflow, problems);
   return problems;
 }
 
@@ -243,11 +245,6 @@ function validateEdgeConditions(workflow: Workflow, problems: ValidationProblem[
     const hasConditional = outgoing.some(e => e.condition && e.condition.trim() !== '');
     if (hasConditional && defaults.length === 0) {
       problems.push(problem('warning', 'NO_DEFAULT_EDGE', 'Node has conditional edges but no default fallback', sourceId));
-    }
-
-    const allUnconditional = outgoing.every(e => !e.condition || e.condition.trim() === '');
-    if (allUnconditional && defaults.length === 0) {
-      problems.push(problem('warning', 'UNCONDITIONAL_MULTIPLE_EDGES', 'Node has multiple outgoing edges with no conditions', sourceId));
     }
 
     const priorityCounts = new Map<number, number>();
@@ -518,5 +515,36 @@ function detectAutomatedCycles(workflow: Workflow, problems: ValidationProblem[]
       problems.push(problem('warning', 'AUTOMATED_CYCLE', 'Cycle detected containing only action nodes', nodeId));
       return;
     }
+  }
+}
+
+/**
+ * Surfaces structured-parallelism problems from the shared fork/join analyzer. Skipped when the graph
+ * already has edge-reference errors that would make traversal unsafe. Mirrors the Java
+ * {@code WorkflowValidator.validateParallelStructure}.
+ */
+function validateParallelStructure(workflow: Workflow, problems: ValidationProblem[]) {
+  const hasEdgeRefErrors = problems.some(p =>
+    p.code === 'INVALID_EDGE_SOURCE' || p.code === 'INVALID_EDGE_TARGET');
+  if (hasEdgeRefErrors) {
+    return;
+  }
+  const regions = analyzeParallelRegions(workflow);
+  for (const p of regions.problems) {
+    problems.push(problem('error', p.code, messageForParallelProblem(p.code), p.nodeId));
+  }
+}
+
+function messageForParallelProblem(code: string): string {
+  switch (code) {
+    case 'MIXED_FORK_EDGES':
+      return 'Node mixes unconditional (fork) edges with conditional/default edges; make all outgoing '
+        + 'edges unconditional to fork, or add conditions/a default for exclusive choice';
+    case 'FORK_WITHOUT_JOIN':
+      return 'Parallel branches from this fork do not re-converge at a single join';
+    case 'PARALLEL_BRANCH_REACHES_END':
+      return 'A parallel branch can reach an end node without first joining';
+    default:
+      return 'Invalid parallel structure';
   }
 }

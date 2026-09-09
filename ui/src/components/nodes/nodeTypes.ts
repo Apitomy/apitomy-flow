@@ -7,12 +7,13 @@ import { ReceiveEventNode } from './ReceiveEventNode.tsx';
 import { WaitNode } from './WaitNode.tsx';
 import { withCurrentRing } from './currentNodeRing.tsx';
 import { withValidationBadge } from './validationBadge.tsx';
+import { withParallelHint } from './parallelHint.tsx';
 
 export const nodeTypes: NodeTypes = {
-  'start': withCurrentRing(withValidationBadge(StartNode)),
-  'end': withCurrentRing(withValidationBadge(EndNode)),
-  'action': withCurrentRing(withValidationBadge(ActionNode)),
-  'human-task': withCurrentRing(withValidationBadge(HumanTaskNode)),
-  'receive-event': withCurrentRing(withValidationBadge(ReceiveEventNode)),
-  'wait': withCurrentRing(withValidationBadge(WaitNode)),
+  'start': withCurrentRing(withValidationBadge(withParallelHint(StartNode))),
+  'end': withCurrentRing(withValidationBadge(withParallelHint(EndNode))),
+  'action': withCurrentRing(withValidationBadge(withParallelHint(ActionNode))),
+  'human-task': withCurrentRing(withValidationBadge(withParallelHint(HumanTaskNode))),
+  'receive-event': withCurrentRing(withValidationBadge(withParallelHint(ReceiveEventNode))),
+  'wait': withCurrentRing(withValidationBadge(withParallelHint(WaitNode))),
 };

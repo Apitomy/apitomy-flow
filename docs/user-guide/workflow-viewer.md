@@ -65,6 +65,15 @@ The viewer styles nodes and edges based on the instance's execution history:
 
 The most recently followed edge is animated with a flowing dash pattern.
 
+### Parallel Branches
+
+For instances that fork, the viewer highlights **every** currently-active node at once rather than a
+single cursor. The arrival edge of each active branch is animated, while all previously-traversed edges
+keep their static "taken" styling. When you open a node's detail, its visit history is grouped by
+branch, and a **Branch** row identifies which branch a given visit belongs to (the `root` branch is not
+labeled). At a terminal state — completed, failed, or cancelled — no branches are active, so the viewer
+falls back to highlighting the final node.
+
 ### History-Based Rendering
 
 The viewer reads the instance's `history` array to determine:

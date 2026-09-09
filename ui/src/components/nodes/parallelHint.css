@@ -1,0 +1,25 @@
+.flow-parallel-hint-wrap {
+  position: relative;
+}
+
+.flow-parallel-hint {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: #fff;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.flow-parallel-hint-fork {
+  background: #6c5ce7;
+}
+
+.flow-parallel-hint-join {
+  background: #00897b;
+}

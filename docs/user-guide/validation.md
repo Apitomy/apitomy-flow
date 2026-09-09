@@ -96,7 +96,6 @@ problems.
 | `DUPLICATE_EVENT_RECEIVER` | Multiple receive-event nodes match the same events |
 | `MISSING_EVENT_TYPE` | Receive-event node has no `eventType` configured |
 | `INVALID_EVENT_TYPE_VALUE` | Receive-event node `eventType` is not a non-blank string |
-| `UNCONDITIONAL_MULTIPLE_EDGES` | Node has multiple outgoing edges with no conditions |
 | `AUTOMATED_CYCLE` | Cycle containing only action nodes (could cause infinite execution) |
 | `MISSING_START_INPUTS` | Start node has no inputs defined |
 | `INVALID_INPUT_DEFINITION` | Start node input entry is missing a name |
@@ -116,6 +115,14 @@ problems.
 | `MALFORMED_OUTPUT_OPTION` | Human-task output has a `select` option with no value |
 | `DEFAULT_VALUE_TYPE_MISMATCH` | Human-task output `defaultValue` does not match the declared `type` |
 
+### Parallel Structure (ERROR)
+
+| Code | Description |
+| --- | --- |
+| `MIXED_FORK_EDGES` | Node mixes unconditional (fork) edges with conditional/default edges; make all outgoing edges unconditional to fork, or add conditions/a default for exclusive choice |
+| `FORK_WITHOUT_JOIN` | Parallel branches from a fork do not re-converge at a single join |
+| `PARALLEL_BRANCH_REACHES_END` | A parallel branch can reach an end node without first joining |
+
 ## ValidationProblem
 
 ```java
@@ -130,8 +137,8 @@ public record ValidationProblem(
 
 ## Rule Coverage
 
-The engine's Java `WorkflowValidator` implements all **55** rules. The TypeScript validator used by
-the visual editor implements **53** of them — every rule except `MISSING_EDGE_SOURCE` and
+The engine's Java `WorkflowValidator` emits **57** distinct validation codes. The TypeScript validator
+used by the visual editor emits **55** of them — every code except `MISSING_EDGE_SOURCE` and
 `MISSING_EDGE_TARGET`, which cannot occur through the editor UI (it never produces an edge without a
 source and target).
 
