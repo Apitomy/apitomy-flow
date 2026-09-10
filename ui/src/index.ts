@@ -4,6 +4,15 @@ export type { ValidationProblem, ValidationSeverity } from './types/validation.t
 export type { EditorSpi, ActionTypeDescriptor, ActionTypeField, ActionTypeProvider, WorkflowValidator } from './types/spi.ts';
 export { WorkflowEditor, type WorkflowEditorProps, type FlowTheme } from './components/WorkflowEditor.tsx';
 export { WorkflowViewer, type WorkflowViewerProps, type WorkflowViewerNodeMenuItem } from './components/WorkflowViewer.tsx';
+export { WorkflowDiffViewer, type WorkflowDiffViewerProps } from './components/WorkflowDiffViewer.tsx';
+export type {
+  DiffStatus,
+  DiffWarning,
+  NodeDiffRecord,
+  EdgeDiffRecord,
+  DiffSummaryBucket,
+  WorkflowDiffResult,
+} from './diff/workflowDiffTypes.ts';
 export {
   evaluateCondition,
   resolveExpression,
