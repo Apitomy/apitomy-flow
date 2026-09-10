@@ -3,7 +3,7 @@ import { clearDiffSelection } from './diffSelectionState.ts';
 
 describe('clearDiffSelection', () => {
   it('clears selected node and edge', () => {
-    expect(clearDiffSelection({ selectedNodeId: 'n1', selectedEdgeId: 'e1' })).toEqual({
+    expect(clearDiffSelection()).toEqual({
       selectedNodeId: null,
       selectedEdgeId: null,
     });

@@ -95,10 +95,10 @@ function WorkflowDiffViewerInner({
   }, []);
 
   const onPaneClick = useCallback(() => {
-    const cleared = clearDiffSelection({ selectedNodeId, selectedEdgeId });
+    const cleared = clearDiffSelection();
     setSelectedNodeId(cleared.selectedNodeId);
     setSelectedEdgeId(cleared.selectedEdgeId);
-  }, [selectedNodeId, selectedEdgeId]);
+  }, []);
 
   const onResizeStart = useCallback((event: React.MouseEvent) => {
     event.preventDefault();

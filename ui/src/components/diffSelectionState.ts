@@ -6,7 +6,7 @@ export interface DiffSelectionState {
 /**
  * Clear all selection state in the diff viewer.
  */
-export function clearDiffSelection(_state: DiffSelectionState): DiffSelectionState {
+export function clearDiffSelection(): DiffSelectionState {
   return {
     selectedNodeId: null,
     selectedEdgeId: null,
