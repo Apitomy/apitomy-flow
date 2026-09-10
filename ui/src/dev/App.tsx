@@ -24,8 +24,10 @@ import '@patternfly/patternfly/patternfly.css';
 import '@xyflow/react/dist/style.css';
 import { FileAltIcon, SearchIcon, ExternalLinkAltIcon } from '@patternfly/react-icons';
 import { WorkflowEditor } from '../components/WorkflowEditor.tsx';
+import { WorkflowDiffViewer } from '../components/WorkflowDiffViewer.tsx';
 import { WorkflowViewer, type WorkflowViewerNodeMenuItem } from '../components/WorkflowViewer.tsx';
 import { demoScenarios } from './sampleWorkflows.ts';
+import { workflowDiffScenarios } from './workflowDiffScenarios.ts';
 import { demoNavItems, type DemoNavKey } from './navigationModel.ts';
 import {
   createScenarioSelectionState,
@@ -140,9 +142,10 @@ const spi: EditorSpi = {
 
 function App() {
   const defaultScenario = demoScenarios[0];
+  const defaultDiffScenario = workflowDiffScenarios[0];
   const [activeView, setActiveView] = useState<DemoNavKey>('editor');
   const [scenarioSelectionState, setScenarioSelectionState] = useState(
-    createScenarioSelectionState(defaultScenario.key),
+    createScenarioSelectionState(defaultScenario.key, defaultDiffScenario.key),
   );
   const [editorWorkflow, setEditorWorkflow] = useState<Workflow>(defaultScenario.workflow);
   const [theme, setTheme] = useState<FlowTheme>('light');
@@ -156,10 +159,13 @@ function App() {
 
   const editorScenarioKey = getScenarioKeyForView(scenarioSelectionState, 'editor');
   const viewerScenarioKey = getScenarioKeyForView(scenarioSelectionState, 'viewer');
+  const diffScenarioKey = getScenarioKeyForView(scenarioSelectionState, 'diff');
   const activeScenarioKey = getScenarioKeyForView(scenarioSelectionState, activeView);
 
   const selectedViewerScenario =
     demoScenarios.find((scenario) => scenario.key === viewerScenarioKey) ?? defaultScenario;
+  const selectedDiffScenario =
+    workflowDiffScenarios.find((scenario) => scenario.key === diffScenarioKey) ?? defaultDiffScenario;
 
   /**
    * Demonstrates a host contributing its own actions to a viewer node's
@@ -197,7 +203,10 @@ function App() {
   }
 
   function handleScenarioChange(nextScenarioKey: string): void {
-    const scenarioExists = demoScenarios.some((scenario) => scenario.key === nextScenarioKey);
+    const scenarioExists =
+      activeView === 'diff'
+        ? workflowDiffScenarios.some((scenario) => scenario.key === nextScenarioKey)
+        : demoScenarios.some((scenario) => scenario.key === nextScenarioKey);
     if (!scenarioExists) {
       return;
     }
@@ -213,7 +222,7 @@ function App() {
   }
 
   function onNavSelect(_event: React.FormEvent<HTMLInputElement>, result: { itemId: number | string }): void {
-    if (result.itemId === 'editor' || result.itemId === 'viewer') {
+    if (result.itemId === 'editor' || result.itemId === 'viewer' || result.itemId === 'diff') {
       setActiveView(result.itemId);
     }
   }
@@ -288,7 +297,7 @@ function App() {
                   aria-label="Select demo scenario"
                   id="scenario-select"
                 >
-                  {demoScenarios.map((scenario) => (
+                  {(activeView === 'diff' ? workflowDiffScenarios : demoScenarios).map((scenario) => (
                     <FormSelectOption key={scenario.key} value={scenario.key} label={scenario.label} />
                   ))}
                 </FormSelect>
@@ -304,21 +313,28 @@ function App() {
         className="dev-app__content"
       >
         {activeView === 'editor' && (
-            <WorkflowEditor
-              key={editorScenarioKey}
-              workflow={editorWorkflow}
-              onChange={setEditorWorkflow}
-              theme={theme}
-              spi={spi}
-            />
+          <WorkflowEditor
+            key={editorScenarioKey}
+            workflow={editorWorkflow}
+            onChange={setEditorWorkflow}
+            theme={theme}
+            spi={spi}
+          />
         )}
         {activeView === 'viewer' && (
-            <WorkflowViewer
-                workflow={selectedViewerScenario.workflow}
-                instance={selectedViewerScenario.instance}
-                theme={theme}
-                nodeContextMenuItems={nodeContextMenuItems}
-            />
+          <WorkflowViewer
+            workflow={selectedViewerScenario.workflow}
+            instance={selectedViewerScenario.instance}
+            theme={theme}
+            nodeContextMenuItems={nodeContextMenuItems}
+          />
+        )}
+        {activeView === 'diff' && (
+          <WorkflowDiffViewer
+            baseWorkflow={selectedDiffScenario.baseWorkflow}
+            compareWorkflow={selectedDiffScenario.compareWorkflow}
+            theme={theme}
+          />
         )}
       </PageSection>
     </Page>

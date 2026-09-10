@@ -12,6 +12,7 @@ import { nodeTypes } from './nodes/nodeTypes.ts';
 import { edgeTypes } from './edges/edgeTypes.ts';
 import { NodeActionMenu } from './NodeActionMenu.tsx';
 import { needsLayout, layoutWorkflow } from '../layout/layoutWorkflow.ts';
+import { isNodeSelected } from './selectedNodeState.ts';
 import './theme.css';
 import './WorkflowViewer.css';
 
@@ -83,6 +84,16 @@ function WorkflowViewerInner({ workflow, instance, theme = 'light', nodeContextM
     [isTerminal, instance.activeBranches, instance.history],
   );
 
+  const [collapsed, setCollapsed] = useState(false);
+  const [panelWidth, setPanelWidth] = useState(340);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  // Index of the visit shown in the node-detail panel. `null` means "follow the
+  // most recent visit", which keeps live-updating viewers pinned to the latest
+  // pass as new history entries arrive.
+  const [selectedVisitIndex, setSelectedVisitIndex] = useState<number | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ nodeId: string; x: number; y: number } | null>(null);
+  const isResizing = useRef(false);
+
   const nodes = useMemo(() => {
     return toReactFlowNodes(laidOutNodes).map(node => {
       const isCurrent = activeIds.has(node.id);
@@ -103,10 +114,11 @@ function WorkflowViewerInner({ workflow, instance, theme = 'light', nodeContextM
         ...node,
         data: { ...node.data, isCurrent: isCurrent && !isTerminal },
         className,
+        selected: isNodeSelected(node.id, selectedNodeId),
         draggable: false,
       };
     });
-  }, [laidOutNodes, activeIds, instance.status, isTerminal, visitedNodeIds]);
+  }, [laidOutNodes, activeIds, instance.status, isTerminal, visitedNodeIds, selectedNodeId]);
 
   const edges = useMemo(() => {
     return toReactFlowEdges(workflow.edges).map(edge => {
@@ -123,16 +135,6 @@ function WorkflowViewerInner({ workflow, instance, theme = 'light', nodeContextM
       };
     });
   }, [workflow.edges, visitedEdgeIds, activeEdges, isTerminal]);
-
-  const [collapsed, setCollapsed] = useState(false);
-  const [panelWidth, setPanelWidth] = useState(340);
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  // Index of the visit shown in the node-detail panel. `null` means "follow the
-  // most recent visit", which keeps live-updating viewers pinned to the latest
-  // pass as new history entries arrive.
-  const [selectedVisitIndex, setSelectedVisitIndex] = useState<number | null>(null);
-  const [contextMenu, setContextMenu] = useState<{ nodeId: string; x: number; y: number } | null>(null);
-  const isResizing = useRef(false);
 
   const resolveMenuItems = useCallback((nodeId: string): WorkflowViewerNodeMenuItem[] => {
     if (!nodeContextMenuItems) return [];

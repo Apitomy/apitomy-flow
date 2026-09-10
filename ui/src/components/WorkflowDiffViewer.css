@@ -1,0 +1,189 @@
+.workflow-diff-viewer {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  color: var(--flow-text, #151515);
+}
+
+.workflow-diff-viewer__main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.workflow-diff-viewer__header {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--flow-border, #d2d2d2);
+  background: var(--flow-bg-primary, #fff);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.workflow-diff-viewer__summary {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--flow-text-subtle, #6a6e73);
+  font-weight: 500;
+}
+
+.workflow-diff-viewer__legend {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.workflow-diff-viewer__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--flow-text-subtle, #6a6e73);
+  text-transform: uppercase;
+}
+
+.workflow-diff-viewer__legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid transparent;
+}
+
+.workflow-diff-viewer__legend-swatch--added {
+  background: var(--flow-status-success, #3e8635);
+}
+
+.workflow-diff-viewer__legend-swatch--removed {
+  background: var(--flow-status-danger, #c9190b);
+}
+
+.workflow-diff-viewer__legend-swatch--changed {
+  background: var(--flow-brand, #06c);
+}
+
+.workflow-diff-viewer__legend-swatch--cosmetic {
+  background: var(--flow-bg-secondary, #d2d2d2);
+}
+
+.workflow-diff-viewer__legend-swatch--unchanged {
+  background: transparent;
+  border-color: var(--flow-border, #d2d2d2);
+}
+
+.workflow-diff-viewer__warnings {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--flow-border, #d2d2d2);
+  background: var(--flow-status-waiting-bg, #fff3e0);
+  color: var(--flow-status-waiting-text, #5c3000);
+  font-size: 12px;
+}
+
+.workflow-diff-viewer__canvas {
+  flex: 1;
+}
+
+.flow-diff-node--added { opacity: 1; }
+.flow-diff-node--removed { opacity: 0.5; }
+.flow-diff-node--unchanged { opacity: 0.45; }
+.flow-diff-node--cosmetic { opacity: 0.85; }
+.flow-diff-node--changed { opacity: 1; }
+
+.flow-diff-edge--added .react-flow__edge-path { stroke: var(--flow-status-success, #3e8635); stroke-width: 2.5; }
+.flow-diff-edge--removed .react-flow__edge-path { stroke: var(--flow-status-danger, #c9190b); stroke-dasharray: 5 3; }
+.flow-diff-edge--changed .react-flow__edge-path { stroke: var(--flow-brand, #06c); stroke-width: 2.5; }
+.flow-diff-edge--unchanged .react-flow__edge-path { opacity: 0.35; }
+
+.workflow-diff-viewer__detail {
+  position: relative;
+  border-left: 1px solid var(--flow-border, #d2d2d2);
+  background: var(--flow-bg-primary, #fff);
+  padding: 12px;
+  overflow: auto;
+  flex-shrink: 0;
+}
+
+.workflow-diff-viewer__resize-handle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  cursor: col-resize;
+  z-index: 10;
+}
+
+.workflow-diff-viewer__resize-handle:hover {
+  background: var(--flow-brand, #06c);
+  opacity: 0.3;
+}
+
+.workflow-diff-viewer__detail-title {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.workflow-diff-viewer__status {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.workflow-diff-viewer__status--added {
+  background: var(--flow-status-completed-bg, #e6f5e4);
+  color: var(--flow-status-completed-text, #1e4620);
+}
+
+.workflow-diff-viewer__status--removed {
+  background: var(--flow-status-failed-bg, #fce4e4);
+  color: var(--flow-status-failed-text, #7d1007);
+}
+
+.workflow-diff-viewer__status--changed,
+.workflow-diff-viewer__status--cosmetic,
+.workflow-diff-viewer__status--unchanged {
+  background: var(--flow-bg-secondary, #f0f0f0);
+  color: var(--flow-text-subtle, #6a6e73);
+}
+
+.workflow-diff-viewer__changes {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+}
+
+.workflow-diff-viewer__changes-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.workflow-diff-viewer__changes-table th,
+.workflow-diff-viewer__changes-table td {
+  border: 1px solid var(--flow-border, #d2d2d2);
+  padding: 6px;
+  vertical-align: top;
+}
+
+.workflow-diff-viewer__changes-table th {
+  text-align: left;
+  background: var(--flow-bg-secondary, #f0f0f0);
+}
+
+.workflow-diff-viewer__changes-table pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+}
+
+.workflow-diff-viewer__empty {
+  font-size: 12px;
+  color: var(--flow-text-subtle, #6a6e73);
+}
