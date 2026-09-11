@@ -21,8 +21,9 @@ export async function exportCanvasImage(
   nodes: Node[],
   fileName: string,
   backgroundColor: string,
+  root?: ParentNode | null,
 ): Promise<void> {
-  const viewportEl = document.querySelector<HTMLElement>('.react-flow__viewport');
+  const viewportEl = (root ?? document).querySelector<HTMLElement>('.react-flow__viewport');
   if (!viewportEl || nodes.length === 0) return;
 
   const bounds = getNodesBounds(nodes);

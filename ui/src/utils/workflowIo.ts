@@ -44,7 +44,15 @@ export function parseWorkflow(text: string): ImportResult {
   }
 
   const workflow = raw as Workflow;
-  const problems = validateWorkflow(workflow);
+  let problems: ValidationProblem[];
+  try {
+    problems = validateWorkflow(workflow);
+  } catch (e) {
+    return {
+      problems: [],
+      error: `Invalid workflow definition: ${(e as Error).message}`,
+    };
+  }
   if (problems.some(p => p.severity === 'error')) {
     return { problems };
   }

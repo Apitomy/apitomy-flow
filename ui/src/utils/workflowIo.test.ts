@@ -67,6 +67,41 @@ describe('parseWorkflow', () => {
     expect(result.error).toBeUndefined();
     expect(result.problems.some(p => p.severity === 'error')).toBe(true);
   });
+
+  it('rejects malformed-but-shaped input with a fatal error instead of throwing', () => {
+    const malformed = JSON.stringify({
+      id: 'broken',
+      name: 'Broken',
+      nodes: [null],
+      edges: [],
+    });
+
+    const result = parseWorkflow(malformed);
+    expect(result.error).toBeDefined();
+    expect(result.workflow).toBeUndefined();
+    expect(result.problems).toEqual([]);
+  });
+
+  it('rejects an action node missing config with a fatal error instead of throwing', () => {
+    const malformed = JSON.stringify({
+      id: 'broken',
+      name: 'Broken',
+      nodes: [
+        { id: 'start', type: 'start', name: 'Start', config: { inputs: [] }, position: { x: 0, y: 0 } },
+        { id: 'act', type: 'action', name: 'Act', position: { x: 0, y: 100 } },
+        { id: 'end', type: 'end', name: 'End', config: {}, position: { x: 0, y: 200 } },
+      ],
+      edges: [
+        { id: 'e1', source: 'start', target: 'act', priority: 0, isDefault: false },
+        { id: 'e2', source: 'act', target: 'end', priority: 0, isDefault: false },
+      ],
+    });
+
+    const result = parseWorkflow(malformed);
+    expect(result.error).toBeDefined();
+    expect(result.workflow).toBeUndefined();
+    expect(result.problems).toEqual([]);
+  });
 });
 
 describe('workflowFileName', () => {

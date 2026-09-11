@@ -49,6 +49,20 @@ import './WorkflowEditor.css';
 
 export type FlowTheme = 'light' | 'dark';
 
+type WorkflowBase = Pick<Workflow, 'id' | 'name' | 'description' | 'version'>;
+
+interface PendingImportBase {
+  previous: WorkflowBase;
+  imported: WorkflowBase;
+}
+
+function sameWorkflowBase(left: WorkflowBase, right: WorkflowBase): boolean {
+  return left.id === right.id
+    && left.name === right.name
+    && left.description === right.description
+    && left.version === right.version;
+}
+
 /** A plausible sample value for a declared start-node input, based on its type (and name hints). */
 function sampleValueForInput(input: { name: string; type?: string }): unknown {
   switch (input.type) {
@@ -123,11 +137,14 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const editorRootRef = useRef<HTMLDivElement>(null);
+  const [pendingImportBase, setPendingImportBase] = useState<PendingImportBase | null>(null);
   const [contextMenu, setContextMenu] = useState<{ node: Node<FlowNodeData>; position: { x: number; y: number } } | null>(null);
   const [panelWidth, setPanelWidth] = useState(340);
   const [simActive, setSimActive] = useState(false);
   const [simState, setSimState] = useState<SimState | null>(null);
   const [simContextText, setSimContextText] = useState('{\n  \n}');
+
   // Canvas interactivity (drag/connect/select). Locked automatically while simulating so the graph
   // can't be edited mid-run; otherwise controlled by the lower-left lock button.
   const [interactive, setInteractive] = useState(true);
@@ -137,6 +154,13 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
   const changeNeededRef = useRef(false);
   const mountedRef = useRef(false);
   const fallbackAppliedRef = useRef(needsLayout(workflow.nodes));
+
+  const effectiveWorkflowBase = useMemo<WorkflowBase>(() => {
+    if (!pendingImportBase) return workflow;
+    return sameWorkflowBase(workflow, pendingImportBase.previous)
+      ? pendingImportBase.imported
+      : workflow;
+  }, [workflow, pendingImportBase]);
 
   // Suppress onChange during initial render — ReactFlow fires onNodesChange
   // (dimension measurements, fitView) before the user has interacted.
@@ -158,7 +182,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
   useEffect(() => {
     if (fallbackAppliedRef.current) {
       fallbackAppliedRef.current = false;
-      onChange(toWorkflow(workflow, initialNodes, initialEdges));
+      onChange(toWorkflow(effectiveWorkflowBase, initialNodes, initialEdges));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- run once for fallback persistence
   }, []);
@@ -174,7 +198,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
     }
     if (changeNeededRef.current && mountedRef.current) {
       changeNeededRef.current = false;
-      onChange(toWorkflow(workflow, nodes, edges));
+      onChange(toWorkflow(effectiveWorkflowBase, nodes, edges));
     }
     isRestoringRef.current = false;
   });
@@ -183,8 +207,8 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
   const selectedEdge = edges.find(e => e.id === selectedEdgeId);
 
   const currentWorkflow = useMemo(
-    () => toWorkflow(workflow, nodes, edges),
-    [workflow, nodes, edges],
+    () => toWorkflow(effectiveWorkflowBase, nodes, edges),
+    [effectiveWorkflowBase, nodes, edges],
   );
 
   const builtInProblems = useMemo(
@@ -350,11 +374,12 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
     takeSnapshot(rfNodes, rfEdges);
     setSelectedNodeId(null);
     setSelectedEdgeId(null);
+    setPendingImportBase({ previous: workflow, imported });
     // Emit onChange with the imported base (id/name/description/version) so the
     // host state adopts the new definition, not just its graph.
     onChange(toWorkflow(imported, rfNodes, rfEdges));
     window.requestAnimationFrame(() => fitView({ duration: 300 }));
-  }, [setNodes, setEdges, takeSnapshot, onChange, fitView]);
+  }, [setNodes, setEdges, takeSnapshot, onChange, fitView, workflow]);
 
   const onImportFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -389,7 +414,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
 
   const handleExportImage = useCallback(() => {
     const background = theme === 'dark' ? '#1b1b1b' : '#ffffff';
-    void exportCanvasImage(getNodes(), `${workflowFileName(currentWorkflow)}.png`, background);
+    void exportCanvasImage(getNodes(), `${workflowFileName(currentWorkflow)}.png`, background, editorRootRef.current);
   }, [getNodes, currentWorkflow, theme]);
 
   const onNodeDataChange = useCallback((id: string, dataUpdate: Partial<FlowNodeData>) => {
@@ -567,7 +592,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
   }, [edges, simActive, simState]);
 
   return (
-    <div className="workflow-editor" data-flow-theme={theme}>
+    <div ref={editorRootRef} className="workflow-editor" data-flow-theme={theme}>
       <NodePalette />
       <div className="workflow-editor__body">
         <div className={`workflow-editor__canvas${simActive ? ' workflow-editor__canvas--simulating' : ''}`}>
