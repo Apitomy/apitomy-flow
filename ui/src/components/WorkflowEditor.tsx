@@ -17,12 +17,14 @@ import {
   ReactFlowProvider,
 } from '@xyflow/react';
 import { Switch } from '@patternfly/react-core';
-import { UndoIcon, RedoIcon, LockIcon, LockOpenIcon } from '@patternfly/react-icons';
+import { UndoIcon, RedoIcon, LockIcon, LockOpenIcon, UploadIcon, DownloadIcon, ImageIcon } from '@patternfly/react-icons';
 import { type Workflow } from '../types/workflow.ts';
 import { type ValidationProblem } from '../types/validation.ts';
 import { type EditorSpi } from '../types/spi.ts';
 import { type FlowNodeData, toReactFlowNodes, toReactFlowEdges, toWorkflow, toWorkflowNodes, toWorkflowEdges } from '../utils/conversion.ts';
 import { generateNodeId, generateEdgeId } from '../utils/id.ts';
+import { parseWorkflow, downloadWorkflowJson, workflowFileName } from '../utils/workflowIo.ts';
+import { exportCanvasImage } from '../utils/exportImage.ts';
 import { simNodeClass, activeNodeIds, parallelRole } from '../utils/parallelView.ts';
 import { validateWorkflow } from '../validation/validateWorkflow.ts';
 import { analyzeParallelRegions } from '../simulation/parallelRegions.ts';
@@ -48,6 +50,20 @@ import './theme.css';
 import './WorkflowEditor.css';
 
 export type FlowTheme = 'light' | 'dark';
+
+type WorkflowBase = Pick<Workflow, 'id' | 'name' | 'description' | 'version'>;
+
+interface PendingImportBase {
+  previous: WorkflowBase;
+  imported: WorkflowBase;
+}
+
+function sameWorkflowBase(left: WorkflowBase, right: WorkflowBase): boolean {
+  return left.id === right.id
+    && left.name === right.name
+    && left.description === right.description
+    && left.version === right.version;
+}
 
 /** A plausible sample value for a declared start-node input, based on its type (and name hints). */
 function sampleValueForInput(input: { name: string; type?: string }): unknown {
@@ -105,17 +121,22 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
-  const { screenToFlowPosition, fitView } = useReactFlow();
+  const { screenToFlowPosition, fitView, getNodes } = useReactFlow();
   const { takeSnapshot, undo, redo, canUndo, canRedo } = useUndoRedo<FlowNodeData>();
   const isRestoringRef = useRef(false);
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const editorRootRef = useRef<HTMLDivElement>(null);
+  const [pendingImportBase, setPendingImportBase] = useState<PendingImportBase | null>(null);
   const [contextMenu, setContextMenu] = useState<{ node: Node<FlowNodeData>; position: { x: number; y: number } } | null>(null);
   const [panelWidth, setPanelWidth] = useState(340);
   const [simActive, setSimActive] = useState(false);
   const [simState, setSimState] = useState<SimState | null>(null);
   const [simContextText, setSimContextText] = useState('{\n  \n}');
+
   // Canvas interactivity (drag/connect/select). Locked automatically while simulating so the graph
   // can't be edited mid-run; otherwise controlled by the lower-left lock button.
   const [interactive, setInteractive] = useState(true);
@@ -125,6 +146,13 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
   const changeNeededRef = useRef(false);
   const mountedRef = useRef(false);
   const fallbackAppliedRef = useRef(needsLayout(workflow.nodes));
+
+  const effectiveWorkflowBase = useMemo<WorkflowBase>(() => {
+    if (!pendingImportBase) return workflow;
+    return sameWorkflowBase(workflow, pendingImportBase.previous)
+      ? pendingImportBase.imported
+      : workflow;
+  }, [workflow, pendingImportBase]);
 
   // Suppress onChange during initial render — ReactFlow fires onNodesChange
   // (dimension measurements, fitView) before the user has interacted.
@@ -146,7 +174,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
   useEffect(() => {
     if (fallbackAppliedRef.current) {
       fallbackAppliedRef.current = false;
-      onChange(toWorkflow(workflow, initialNodes, initialEdges));
+      onChange(toWorkflow(effectiveWorkflowBase, initialNodes, initialEdges));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- run once for fallback persistence
   }, []);
@@ -162,7 +190,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
     }
     if (changeNeededRef.current && mountedRef.current) {
       changeNeededRef.current = false;
-      onChange(toWorkflow(workflow, nodes, edges));
+      onChange(toWorkflow(effectiveWorkflowBase, nodes, edges));
     }
     isRestoringRef.current = false;
   });
@@ -171,8 +199,8 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
   const selectedEdge = edges.find(e => e.id === selectedEdgeId);
 
   const currentWorkflow = useMemo(
-    () => toWorkflow(workflow, nodes, edges),
-    [workflow, nodes, edges],
+    () => toWorkflow(effectiveWorkflowBase, nodes, edges),
+    [effectiveWorkflowBase, nodes, edges],
   );
 
   const builtInProblems = useMemo(
@@ -335,6 +363,64 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
     changeNeededRef.current = true;
     window.requestAnimationFrame(() => fitView({ duration: 300 }));
   }, [nodes, edges, takeSnapshot, setNodes, fitView]);
+
+  // --- Import / export ----------------------------------------------------
+  // Replaces the canvas with an imported definition. Applies fallback layout when
+  // node positions are missing and reframes the view so the whole graph is shown.
+  const applyImportedWorkflow = useCallback((imported: Workflow) => {
+    const source = needsLayout(imported.nodes)
+      ? layoutWorkflow(imported.nodes, imported.edges)
+      : imported.nodes;
+    const rfNodes = toReactFlowNodes(source);
+    const rfEdges = toReactFlowEdges(imported.edges);
+    isRestoringRef.current = true;
+    setNodes(rfNodes);
+    setEdges(rfEdges);
+    takeSnapshot(rfNodes, rfEdges);
+    setSelectedNodeId(null);
+    setSelectedEdgeId(null);
+    setPendingImportBase({ previous: workflow, imported });
+    // Emit onChange with the imported base (id/name/description/version) so the
+    // host state adopts the new definition, not just its graph.
+    onChange(toWorkflow(imported, rfNodes, rfEdges));
+    window.requestAnimationFrame(() => fitView({ duration: 300 }));
+  }, [setNodes, setEdges, takeSnapshot, onChange, fitView, workflow]);
+
+  const onImportFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = ''; // reset so re-selecting the same file fires change again
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = parseWorkflow(String(reader.result ?? ''));
+      if (result.error) {
+        setImportError(`Import failed: ${result.error}`);
+        return;
+      }
+      if (!result.workflow) {
+        const errorCount = result.problems.filter(p => p.severity === 'error').length;
+        setImportError(`Import rejected: the definition has ${errorCount} validation error${errorCount === 1 ? '' : 's'}. Fix them and try again.`);
+        return;
+      }
+      setImportError(null);
+      applyImportedWorkflow(result.workflow);
+    };
+    reader.onerror = () => setImportError('Import failed: could not read the selected file.');
+    reader.readAsText(file);
+  }, [applyImportedWorkflow]);
+
+  const handleImportClick = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const handleExportJson = useCallback(() => {
+    downloadWorkflowJson(currentWorkflow);
+  }, [currentWorkflow]);
+
+  const handleExportImage = useCallback(() => {
+    const background = theme === 'dark' ? '#1b1b1b' : '#ffffff';
+    void exportCanvasImage(getNodes(), `${workflowFileName(currentWorkflow)}.png`, background, editorRootRef.current);
+  }, [getNodes, currentWorkflow, theme]);
 
   const onNodeDataChange = useCallback((id: string, dataUpdate: Partial<FlowNodeData>) => {
     setNodes(nds => nds.map(n => n.id === id ? { ...n, data: { ...n.data, ...dataUpdate } } : n));
@@ -519,7 +605,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
   }, [edges, simActive, simState]);
 
   return (
-    <div className="workflow-editor" data-flow-theme={theme}>
+    <div ref={editorRootRef} className="workflow-editor" data-flow-theme={theme}>
       <NodePalette />
       <div className="workflow-editor__body">
         <div className={`workflow-editor__canvas${simActive ? ' workflow-editor__canvas--simulating' : ''}`}>
@@ -568,6 +654,22 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
                 <button title="Tidy up (auto-layout)" onClick={handleTidyUp}>
                   Tidy up
                 </button>
+                <button title="Import workflow from a JSON file" disabled={simActive} onClick={handleImportClick}>
+                  <UploadIcon /> Import
+                </button>
+                <button title="Export workflow to a JSON file" onClick={handleExportJson}>
+                  <DownloadIcon /> Export
+                </button>
+                <button title="Export the canvas as a PNG image" onClick={handleExportImage}>
+                  <ImageIcon /> Image
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="application/json,.json"
+                  style={{ display: 'none' }}
+                  onChange={onImportFileChange}
+                />
                 <Switch
                   id="workflow-editor-simulate-switch"
                   className="workflow-editor__sim-switch"
@@ -578,6 +680,20 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
                 />
               </div>
             </Panel>
+            {importError && (
+              <Panel position="top-center">
+                <div className="workflow-editor__import-error" role="alert">
+                  <span>{importError}</span>
+                  <button
+                    type="button"
+                    aria-label="Dismiss import error"
+                    onClick={() => setImportError(null)}
+                  >
+                    &times;
+                  </button>
+                </div>
+              </Panel>
+            )}
           </ReactFlow>
           {contextMenu && (
             <NodeContextMenu
