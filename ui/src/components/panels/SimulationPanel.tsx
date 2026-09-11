@@ -3,6 +3,7 @@ import { PlayIcon, StepForwardIcon, FastForwardIcon, SyncAltIcon } from '@patter
 import { type Workflow, type WorkflowNode } from '../../types/workflow.ts';
 import { type SimState, type SimMock, type SimStatus } from '../../simulation/simulate.ts';
 import { JsonCodeEditor } from '../common/JsonCodeEditor.tsx';
+import { activeNodeIds, parkedNodes, branchPaths, type ParkedNode } from '../../utils/parallelView.ts';
 import './SimulationPanel.css';
 
 interface SimulationPanelProps {
@@ -21,8 +22,8 @@ interface SimulationPanelProps {
   onRun: () => void;
   /** Clears the current run. */
   onReset: () => void;
-  /** Delivers a mock output/event to a blocked node and continues. */
-  onResume: (mock: SimMock) => void;
+  /** Delivers a mock output/event to a specific blocked node (by id) and continues. */
+  onResume: (mock: SimMock, nodeId?: string) => void;
   /** Exits simulation mode entirely. */
   onClose: () => void;
   /** Selects + centers a node on the canvas. */
@@ -95,17 +96,40 @@ export function SimulationPanel({
   const [mockError, setMockError] = useState<string | null>(null);
   const [seededFor, setSeededFor] = useState<string | undefined>(undefined);
 
-  const blockedNode = simState?.blockedOn
-    ? workflow.nodes.find(n => n.id === simState.blockedOn!.nodeId)
+  const nodeType = (nodeId: string) => workflow.nodes.find(n => n.id === nodeId)?.type;
+  const parked: ParkedNode[] = simState
+    ? parkedNodes(simState.activeBranches, simState.parkedBranchIds, nodeType)
+    : [];
+  const activeNodeList = simState
+    ? [...activeNodeIds(simState.activeBranches, simState.parkedBranchIds)]
+    : [];
+
+  // At terminal states activeBranches is empty; fall back to the terminal/failing node so the
+  // status row still shows a node link (mirrors WorkflowViewer's terminal fallback).
+  const statusNodeIds = activeNodeList.length > 0
+    ? activeNodeList
+    : (simState?.currentNodeId ? [simState.currentNodeId] : []);
+
+  // The parked node the mock editor currently targets. Default to the first parked node; reset when
+  // the current selection is no longer parked (adjusting state during render is React's recommended
+  // pattern for resetting state on a derived "key" change).
+  const [selectedParkedId, setSelectedParkedId] = useState<string | undefined>(undefined);
+  const selectedParked =
+    parked.find(p => p.nodeId === selectedParkedId) ?? parked[0];
+  if (parked.length > 0 && selectedParked && selectedParked.nodeId !== selectedParkedId) {
+    setSelectedParkedId(selectedParked.nodeId);
+  }
+  const selectedParkedNode = selectedParked
+    ? workflow.nodes.find(n => n.id === selectedParked.nodeId)
     : undefined;
-  const blockedNodeId = simState?.blockedOn?.nodeId;
 
   // Re-scaffold the mock-output editor each time the simulation blocks at a new node. Adjusting
   // state during render (rather than in an effect) is React's recommended pattern for resetting
   // state on a "key" change, and avoids the cascading-render effect lint rule.
-  if (blockedNodeId && blockedNodeId !== seededFor) {
-    setSeededFor(blockedNodeId);
-    setMockText(scaffoldOutputs(blockedNode));
+  const selectedParkedNodeId = selectedParked?.nodeId;
+  if (selectedParkedNodeId && selectedParkedNodeId !== seededFor) {
+    setSeededFor(selectedParkedNodeId);
+    setMockText(scaffoldOutputs(selectedParkedNode));
     setMockError(null);
   }
 
@@ -137,13 +161,14 @@ export function SimulationPanel({
   };
 
   const handleContinue = () => {
+    if (!selectedParked) return;
     const result = parseObject(mockText);
     if (!result.ok) {
       setMockError(result.error);
       return;
     }
     setMockError(null);
-    onResume({ output: result.value });
+    onResume({ output: result.value }, selectedParked.nodeId);
   };
 
   const status = simState?.status;
@@ -191,22 +216,41 @@ export function SimulationPanel({
             <span className={`simulation-panel__badge is-${simState.status}`}>
               {STATUS_LABEL[simState.status]}
             </span>
-            {simState.currentNodeId && (
-              <button className="simulation-panel__link" onClick={() => onFocusNode(simState.currentNodeId)}>
-                at {workflow.nodes.find(n => n.id === simState.currentNodeId)?.name || simState.currentNodeId}
+            {statusNodeIds.map(nodeId => (
+              <button
+                key={nodeId}
+                className="simulation-panel__link"
+                onClick={() => onFocusNode(nodeId)}
+              >
+                {workflow.nodes.find(n => n.id === nodeId)?.name || nodeId}
               </button>
-            )}
+            ))}
           </div>
         )}
 
-        {simState?.status === 'blocked' && simState.blockedOn && (
+        {simState?.status === 'blocked' && selectedParked && (
           <div className="simulation-panel__block">
+            {parked.length > 1 && (
+              <select
+                className="simulation-panel__block-select"
+                value={selectedParked.nodeId}
+                onChange={(e) => setSelectedParkedId(e.target.value)}
+                aria-label="Select blocked node"
+              >
+                {parked.map(p => (
+                  <option key={p.branchId} value={p.nodeId}>
+                    {(workflow.nodes.find(n => n.id === p.nodeId)?.name || p.nodeId)} ({p.kind})
+                    {p.branchId !== 'root' ? ` — ${p.branchId}` : ''}
+                  </option>
+                ))}
+              </select>
+            )}
             <div className="simulation-panel__block-title">
               Blocked at{' '}
-              <button className="simulation-panel__link" onClick={() => onFocusNode(simState.blockedOn!.nodeId)}>
-                {blockedNode?.name || simState.blockedOn.nodeId}
+              <button className="simulation-panel__link" onClick={() => onFocusNode(selectedParked.nodeId)}>
+                {selectedParkedNode?.name || selectedParked.nodeId}
               </button>{' '}
-              <span className="simulation-panel__kind">({simState.blockedOn.kind})</span>
+              <span className="simulation-panel__kind">({selectedParked.kind})</span>
             </div>
             <label>Mock output — merged into context (JSON)</label>
             <JsonCodeEditor
@@ -241,18 +285,25 @@ export function SimulationPanel({
           </div>
         )}
 
-        {simState && simState.visitedNodeIds.length > 0 && (
+        {simState && simState.history.length > 0 && (
           <div className="simulation-panel__field">
             <label>Path</label>
-            <ol className="simulation-panel__path">
-              {simState.visitedNodeIds.map((nodeId, i) => (
-                <li key={`${nodeId}-${i}`}>
-                  <button className="simulation-panel__link" onClick={() => onFocusNode(nodeId)}>
-                    {workflow.nodes.find(n => n.id === nodeId)?.name || nodeId}
-                  </button>
-                </li>
-              ))}
-            </ol>
+            {branchPaths(simState.history).map(bp => (
+              <div key={bp.branchId} className="simulation-panel__branch-path">
+                {bp.branchId !== 'root' && (
+                  <div className="simulation-panel__branch-label">Branch {bp.branchId}</div>
+                )}
+                <ol className="simulation-panel__path">
+                  {bp.nodeIds.map((nodeId, i) => (
+                    <li key={`${nodeId}-${i}`}>
+                      <button className="simulation-panel__link" onClick={() => onFocusNode(nodeId)}>
+                        {workflow.nodes.find(n => n.id === nodeId)?.name || nodeId}
+                      </button>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            ))}
           </div>
         )}
 

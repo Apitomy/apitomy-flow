@@ -117,6 +117,19 @@ warnings — carrying the highest-severity problem for that node, with the messa
 
 **Problems panel:** A collapsible panel at the bottom lists all validation problems grouped by severity (errors first). Click a problem to select and center the affected node or edge on the canvas.
 
+### Fork/Join Hint
+
+The editor tags nodes with a small corner badge showing their role in a parallel region: **Fork** on a
+node whose outgoing edges all run in parallel, and **Join** on the node where those branches
+re-converge. The hint is derived live from the graph shape as you draw edges, so it appears as soon as
+a node gains two or more unconditional outgoing edges and disappears if you add a condition or default
+that turns the branch into an exclusive choice.
+
+To author a fork, draw two or more edges out of a node and leave them all unconditional (no condition,
+no default). To make the same node an exclusive choice instead, give the edges conditions and mark one
+as the default. The editor validates parallel structure live and flags `MIXED_FORK_EDGES`,
+`FORK_WITHOUT_JOIN`, and `PARALLEL_BRANCH_REACHES_END` in the Problems panel and on the node.
+
 ### Auto-Layout
 
 The editor can arrange nodes automatically using a layered graph layout (powered by
@@ -192,6 +205,11 @@ evolving **context**, and any **error** — tied to the offending node or edge, 
 panel shows a **Test condition** affordance below the condition field. Paste or edit a sample
 context and click **Evaluate** to see the condition's boolean result — or a clear evaluation error —
 for that one edge, using the same evaluator as the full simulation.
+
+Simulation supports parallel workflows. After a fork, the panel lists every active node and animates
+each active branch on the canvas. When more than one branch is blocked on input, a picker lets you
+choose which blocked node to resume: fill in its mock output, deliver it, and repeat for the next
+blocked branch. The execution path is shown grouped per branch.
 
 > Simulation executes routing logic only. It never runs real host node executors or side effects,
 > and simulation state is transient — it is never persisted into the saved workflow.

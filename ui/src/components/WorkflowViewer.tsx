@@ -5,12 +5,14 @@ import { type HistoryEntry, type InstanceStatus } from '../types/instance.ts';
 import { type Workflow } from '../types/workflow.ts';
 import { type WorkflowInstance } from '../types/instance.ts';
 import { toReactFlowNodes, toReactFlowEdges } from '../utils/conversion.ts';
-import { nodeVisits } from '../utils/nodeHistory.ts';
+import { nodeVisits, nodeVisitsByBranch, type NodeBranchVisits } from '../utils/nodeHistory.ts';
+import { activeNodeIds, activeEdgeIds } from '../utils/parallelView.ts';
 import { type FlowTheme } from './WorkflowEditor.tsx';
 import { nodeTypes } from './nodes/nodeTypes.ts';
 import { edgeTypes } from './edges/edgeTypes.ts';
 import { NodeActionMenu } from './NodeActionMenu.tsx';
 import { needsLayout, layoutWorkflow } from '../layout/layoutWorkflow.ts';
+import { isNodeSelected } from './selectedNodeState.ts';
 import './theme.css';
 import './WorkflowViewer.css';
 
@@ -67,9 +69,34 @@ function WorkflowViewerInner({ workflow, instance, theme = 'light', nodeContextM
     [workflow.nodes, workflow.edges],
   );
 
+  // Nodes where branches currently sit. At a terminal state the branch set is empty, so fall back to
+  // the preserved terminal/failing node id to keep completed/failed highlighting unchanged.
+  const activeIds = useMemo(
+    () => (isTerminal
+      ? new Set([instance.currentNodeId].filter((id): id is string => !!id))
+      : activeNodeIds(instance.activeBranches)),
+    [isTerminal, instance.currentNodeId, instance.activeBranches],
+  );
+
+  // Arrival edges of the currently-active branches (empty at terminal states).
+  const activeEdges = useMemo(
+    () => (isTerminal ? new Set<string>() : activeEdgeIds(instance.activeBranches, instance.history)),
+    [isTerminal, instance.activeBranches, instance.history],
+  );
+
+  const [collapsed, setCollapsed] = useState(false);
+  const [panelWidth, setPanelWidth] = useState(340);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  // Index of the visit shown in the node-detail panel. `null` means "follow the
+  // most recent visit", which keeps live-updating viewers pinned to the latest
+  // pass as new history entries arrive.
+  const [selectedVisitIndex, setSelectedVisitIndex] = useState<number | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ nodeId: string; x: number; y: number } | null>(null);
+  const isResizing = useRef(false);
+
   const nodes = useMemo(() => {
     return toReactFlowNodes(laidOutNodes).map(node => {
-      const isCurrent = node.id === instance.currentNodeId;
+      const isCurrent = activeIds.has(node.id);
       const isVisited = visitedNodeIds.has(node.id);
       let className: string;
       if (isCurrent && isTerminal) {
@@ -87,10 +114,11 @@ function WorkflowViewerInner({ workflow, instance, theme = 'light', nodeContextM
         ...node,
         data: { ...node.data, isCurrent: isCurrent && !isTerminal },
         className,
+        selected: isNodeSelected(node.id, selectedNodeId),
         draggable: false,
       };
     });
-  }, [laidOutNodes, instance.currentNodeId, instance.status, isTerminal, visitedNodeIds]);
+  }, [laidOutNodes, activeIds, instance.status, isTerminal, visitedNodeIds, selectedNodeId]);
 
   const edges = useMemo(() => {
     return toReactFlowEdges(workflow.edges).map(edge => {
@@ -103,20 +131,10 @@ function WorkflowViewerInner({ workflow, instance, theme = 'light', nodeContextM
           stroke: isVisited ? 'var(--flow-status-success, #3e8635)' : undefined,
           opacity: isVisited ? 1 : 0.3,
         },
-        animated: !isTerminal && edge.id === instance.history[instance.history.length - 1]?.edgeId,
+        animated: !isTerminal && activeEdges.has(edge.id),
       };
     });
-  }, [workflow.edges, visitedEdgeIds, instance.history, isTerminal]);
-
-  const [collapsed, setCollapsed] = useState(false);
-  const [panelWidth, setPanelWidth] = useState(340);
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  // Index of the visit shown in the node-detail panel. `null` means "follow the
-  // most recent visit", which keeps live-updating viewers pinned to the latest
-  // pass as new history entries arrive.
-  const [selectedVisitIndex, setSelectedVisitIndex] = useState<number | null>(null);
-  const [contextMenu, setContextMenu] = useState<{ nodeId: string; x: number; y: number } | null>(null);
-  const isResizing = useRef(false);
+  }, [workflow.edges, visitedEdgeIds, activeEdges, isTerminal]);
 
   const resolveMenuItems = useCallback((nodeId: string): WorkflowViewerNodeMenuItem[] => {
     if (!nodeContextMenuItems) return [];
@@ -127,6 +145,11 @@ function WorkflowViewerInner({ workflow, instance, theme = 'light', nodeContextM
 
   const selectedNodeVisits = useMemo(
     () => nodeVisits(instance.history, selectedNodeId),
+    [selectedNodeId, instance.history],
+  );
+
+  const selectedNodeVisitsByBranch = useMemo(
+    () => nodeVisitsByBranch(instance.history, selectedNodeId),
     [selectedNodeId, instance.history],
   );
 
@@ -252,9 +275,10 @@ function WorkflowViewerInner({ workflow, instance, theme = 'light', nodeContextM
               node={selectedWorkflowNode}
               history={selectedNodeHistory}
               visits={selectedNodeVisits}
+              visitsByBranch={selectedNodeVisitsByBranch}
               visitIndex={effectiveVisitIndex}
               onSelectVisit={setSelectedVisitIndex}
-              isCurrent={selectedNodeId === instance.currentNodeId}
+              isCurrent={selectedNodeId ? activeIds.has(selectedNodeId) : false}
               instanceStatus={instance.status}
             />
           ) : (
@@ -285,10 +309,11 @@ function formatValue(value: unknown): string {
   return String(value);
 }
 
-function NodeDetail({ node, history, visits, visitIndex, onSelectVisit, isCurrent, instanceStatus }: {
+function NodeDetail({ node, history, visits, visitsByBranch, visitIndex, onSelectVisit, isCurrent, instanceStatus }: {
   node: WorkflowViewerProps['workflow']['nodes'][number] | null;
   history: HistoryEntry | null;
   visits: HistoryEntry[];
+  visitsByBranch: NodeBranchVisits[];
   visitIndex: number;
   onSelectVisit: (index: number) => void;
   isCurrent: boolean;
@@ -314,11 +339,24 @@ function NodeDetail({ node, history, visits, visitIndex, onSelectVisit, isCurren
           onChange={(e) => onSelectVisit(Number(e.target.value))}
           aria-label="Select visit"
         >
-          {visits.map((visit, index) => (
-            <option key={index} value={index}>
-              Visit {index + 1} of {visits.length} — {new Date(visit.enteredOn).toLocaleString()}
-            </option>
-          ))}
+          {visitsByBranch.length > 1
+            ? visitsByBranch.map(group => (
+                <optgroup key={group.branchId} label={`Branch ${group.branchId}`}>
+                  {group.visits.map(visit => {
+                    const index = visits.indexOf(visit);
+                    return (
+                      <option key={index} value={index}>
+                        Visit {index + 1} of {visits.length} — {new Date(visit.enteredOn).toLocaleString()}
+                      </option>
+                    );
+                  })}
+                </optgroup>
+              ))
+            : visits.map((visit, index) => (
+                <option key={index} value={index}>
+                  Visit {index + 1} of {visits.length} — {new Date(visit.enteredOn).toLocaleString()}
+                </option>
+              ))}
         </select>
       )}
       <div className="workflow-viewer__context-entry">
@@ -329,6 +367,12 @@ function NodeDetail({ node, history, visits, visitIndex, onSelectVisit, isCurren
         <span className="workflow-viewer__context-key">Node ID</span>
         <span className="workflow-viewer__context-value">{node.id}</span>
       </div>
+      {history?.branchId && history.branchId !== 'root' && (
+        <div className="workflow-viewer__context-entry">
+          <span className="workflow-viewer__context-key">Branch</span>
+          <span className="workflow-viewer__context-value">{history.branchId}</span>
+        </div>
+      )}
       <div className="workflow-viewer__context-entry">
         <span className="workflow-viewer__context-key">Status</span>
         <span className="workflow-viewer__context-value">

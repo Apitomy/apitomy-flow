@@ -53,6 +53,7 @@ nav:
     - Validation: user-guide/validation.md
     - Visual Editor: user-guide/visual-editor.md
     - Workflow Viewer: user-guide/workflow-viewer.md
+    - Parallel Fork/Join: user-guide/parallel-fork-join.md
   - Developer Guide:
     - Building: developer-guide/building.md
     - Architecture: developer-guide/architecture.md

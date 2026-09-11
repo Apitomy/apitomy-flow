@@ -697,4 +697,45 @@ class WorkflowValidatorTest {
         assertTrue(hasCode(problems, "MISSING_ACTION_TYPE"),
             "Null config should be treated as empty map, triggering MISSING_ACTION_TYPE");
     }
+
+    // --- Structured parallelism ---
+
+    @Test
+    void balancedForkJoinHasNoParallelProblems() {
+        Workflow wf = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), actionNode("a1", "t1"), actionNode("a2", "t2"),
+                actionNode("j", "tj"), endNode("end")),
+            List.of(edge("e1", "start", "a1"), edge("e2", "start", "a2"),
+                edge("e3", "a1", "j"), edge("e4", "a2", "j"), edge("e5", "j", "end")));
+        List<ValidationProblem> problems = new WorkflowValidator().validate(wf);
+        assertTrue(problems.stream().noneMatch(p -> p.code().equals("UNCONDITIONAL_MULTIPLE_EDGES")));
+        assertTrue(problems.stream().noneMatch(p -> p.code().startsWith("FORK_")
+            || p.code().equals("MIXED_FORK_EDGES") || p.code().equals("UNBALANCED_PARALLEL")));
+    }
+
+    @Test
+    void mixedForkEdgesIsError() {
+        Workflow wf = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), actionNode("a", "t"), actionNode("b", "t2"),
+                actionNode("j", "tj"), endNode("end")),
+            List.of(edge("e1", "start", "a"), edge("e2", "start", "b", "context.x == 1", 1),
+                edge("e3", "a", "j"), edge("e4", "b", "j"), edge("e5", "j", "end")));
+        WorkflowValidator validator = new WorkflowValidator();
+        List<ValidationProblem> problems = validator.validate(wf);
+        assertTrue(problems.stream().anyMatch(p -> p.code().equals("MIXED_FORK_EDGES")
+            && p.severity() == ValidationSeverity.ERROR));
+        assertTrue(validator.hasErrors(problems));
+    }
+
+    @Test
+    void forkBranchReachingEndIsError() {
+        Workflow wf = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), actionNode("a1", "t1"), actionNode("a2", "t2"),
+                endNode("end1"), endNode("end2")),
+            List.of(edge("e1", "start", "a1"), edge("e2", "start", "a2"),
+                edge("e3", "a1", "end1"), edge("e4", "a2", "end2")));
+        List<ValidationProblem> problems = new WorkflowValidator().validate(wf);
+        assertTrue(problems.stream().anyMatch(p ->
+            p.code().equals("PARALLEL_BRANCH_REACHES_END") || p.code().equals("FORK_WITHOUT_JOIN")));
+    }
 }

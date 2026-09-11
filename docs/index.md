@@ -37,6 +37,7 @@ The engine has no framework dependencies — it works in any Java application. T
 - [Validation](user-guide/validation.md) — the validation rules reference
 - [Visual Editor](user-guide/visual-editor.md) — the `WorkflowEditor` component
 - [Workflow Viewer](user-guide/workflow-viewer.md) — the `WorkflowViewer` component
+- [Parallel Fork/Join](user-guide/parallel-fork-join.md) — a worked fork/join workflow
 
 ## Developer Guide
 
