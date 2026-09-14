@@ -276,4 +276,52 @@ class WorkflowEngineParallelTest {
         assertEquals(true, result.context().get("innerJoined"));
         assertEquals(true, result.context().get("outerJoined"));
     }
+
+    // --- Repro for issue #105: fork into ACTION nodes that PARK (PENDING) only enters first branch ---
+
+    @Test
+    void forkIntoPendingActionNodesActivatesBothBranches() {
+        NodeExecutor pendingA1 = new NodeExecutor() {
+            public String actionType() { return "t1"; }
+            public NodeResult execute(NodeExecutionContext ctx) {
+                return new NodeResult(NodeResultStatus.PENDING, Map.of());
+            }
+        };
+        NodeExecutor pendingA2 = new NodeExecutor() {
+            public String actionType() { return "t2"; }
+            public NodeResult execute(NodeExecutionContext ctx) {
+                return new NodeResult(NodeResultStatus.PENDING, Map.of());
+            }
+        };
+        WorkflowEngine engine = engine(pendingA1, pendingA2, echo("tj", "joined", true));
+        WorkflowInstance result = engine.startWorkflow(
+            diamondForkJoinWorkflow("t1", "t2", "tj"), Map.of());
+
+        assertEquals(InstanceStatus.WAITING, result.status());
+        assertEquals(2, result.activeBranches().size(),
+            "both fork branches must be parked as active, not just the first");
+        List<String> parkedNodeIds = result.activeBranches().stream()
+            .map(ActiveBranch::nodeId).sorted().toList();
+        assertEquals(List.of("a1", "a2"), parkedNodeIds);
+    }
+
+    @Test
+    void forkWithOnePendingAndOneCompletingBranchLeavesOnlyThePendingOneParked() {
+        // a1 completes normally and proceeds to (and is absorbed by) the join; a2 parks as PENDING.
+        // The join must not fire (a2 hasn't arrived) and only a2 should remain as an active branch.
+        NodeExecutor pendingA2 = new NodeExecutor() {
+            public String actionType() { return "t2"; }
+            public NodeResult execute(NodeExecutionContext ctx) {
+                return new NodeResult(NodeResultStatus.PENDING, Map.of());
+            }
+        };
+        WorkflowEngine engine = engine(echo("t1", "left", 1), pendingA2, echo("tj", "joined", true));
+        WorkflowInstance result = engine.startWorkflow(
+            diamondForkJoinWorkflow("t1", "t2", "tj"), Map.of());
+
+        assertEquals(InstanceStatus.WAITING, result.status());
+        assertEquals(1, result.activeBranches().size());
+        assertEquals("a2", result.activeBranches().getFirst().nodeId());
+        assertFalse(result.context().containsKey("joined"), "join must not have fired");
+    }
 }

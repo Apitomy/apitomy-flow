@@ -165,8 +165,19 @@ public class WorkflowEngine {
                 .updatedOn(Instant.now())
                 .build();
             WorkflowInstance executed = executeActionNode(workflow, running, branchId, actionNode);
-            if (executed.status() != InstanceStatus.RUNNING) {
+            if (executed.status() == InstanceStatus.FAILED) {
                 return executed;
+            }
+            String continueNodeId = executed.activeBranches().stream()
+                .filter(b -> b.branchId().equals(branchId))
+                .map(ActiveBranch::nodeId)
+                .findFirst()
+                .orElse(actionNode.id());
+            if (isBranchOpen(executed, branchId, continueNodeId)) {
+                // Re-parked (PENDING again, or a TRANSITION recovery landed on a blocking node) —
+                // don't advance() past it; the derived WAITING status is set directly here since
+                // there's no surrounding advanceBranches loop/quiesce() call on this path.
+                return executed.toBuilder().status(InstanceStatus.WAITING).updatedOn(Instant.now()).build();
             }
             return advance(workflow, executed);
         }
@@ -697,16 +708,24 @@ public class WorkflowEngine {
         switch (node.type()) {
             case ACTION -> {
                 instance = executeActionNode(workflow, instance, branchId, node);
-                if (instance.status() == InstanceStatus.RUNNING) {
-                    // The branch may have moved via an error-handler TRANSITION inside
-                    // executeActionNode (which enters and executes the recovery target). Continue
-                    // from wherever the branch now actually sits so multi-step recovery chains
-                    // follow the recovery target's own edges — not the original node's edges.
-                    String continueNodeId = instance.activeBranches().stream()
-                        .filter(b -> b.branchId().equals(branchId))
-                        .map(ActiveBranch::nodeId)
-                        .findFirst()
-                        .orElse(node.id());
+                if (instance.status() == InstanceStatus.FAILED) {
+                    return instance;
+                }
+                // The branch may have moved via an error-handler TRANSITION inside
+                // executeActionNode (which enters and executes the recovery target). Continue
+                // from wherever the branch now actually sits so multi-step recovery chains
+                // follow the recovery target's own edges — not the original node's edges.
+                String continueNodeId = instance.activeBranches().stream()
+                    .filter(b -> b.branchId().equals(branchId))
+                    .map(ActiveBranch::nodeId)
+                    .findFirst()
+                    .orElse(node.id());
+                // Only continue if the branch's current node actually finished (its history entry
+                // is closed). A PENDING result (or landing on a genuinely blocking recovery target)
+                // leaves that entry open — the branch is parked and must NOT be enqueued. Checking
+                // this instead of instance-wide status() keeps a sibling fork branch parking from
+                // affecting whether THIS branch continues.
+                if (!isBranchOpen(instance, branchId, continueNodeId)) {
                     work.add(new ActiveBranch(branchId, continueNodeId)); // continue from here
                 }
                 return instance;
@@ -734,9 +753,11 @@ public class WorkflowEngine {
     }
 
     /**
-     * Derives the instance status once no branch is runnable: WAITING if any branch is parked on a blocking
-     * node, otherwise a defensive failure (structured validation prevents an empty non-terminal state).
-     * Keeps {@code currentNodeId} = the sole active branch's node when there is exactly one.
+     * Derives the instance status once no branch is runnable: WAITING if any branch is parked (its current
+     * node's history entry is still open — e.g. a HUMAN_TASK/RECEIVE_EVENT/WAIT node, or an ACTION node
+     * whose executor returned PENDING), otherwise a defensive failure (structured validation prevents an
+     * empty non-terminal state). Keeps {@code currentNodeId} = the sole active branch's node when there is
+     * exactly one.
      *
      * @param workflow the workflow definition
      * @param instance the instance whose queue has drained
@@ -751,7 +772,8 @@ public class WorkflowEngine {
             return failWorkflow(instance,
                 "No active branches and workflow did not complete (parallel deadlock)", null);
         }
-        boolean anyBlocked = active.stream().anyMatch(b -> isBlockingNode(workflow, b.nodeId()));
+        boolean anyBlocked = active.stream()
+            .anyMatch(b -> isBranchOpen(instance, b.branchId(), b.nodeId()));
         String current = active.size() == 1 ? active.getFirst().nodeId() : null;
         return instance.toBuilder()
             .status(anyBlocked ? InstanceStatus.WAITING : InstanceStatus.RUNNING)
@@ -761,13 +783,26 @@ public class WorkflowEngine {
     }
 
     /**
-     * @param workflow the workflow definition
-     * @param nodeId   the node id to classify
-     * @return true if the node is a blocking node (HUMAN_TASK, RECEIVE_EVENT or WAIT)
+     * Reports whether a branch's current node is still "open" (parked) — i.e. its most recent history
+     * entry for {@code (branchId, nodeId)} has no {@code completedOn}. This is true for blocking node
+     * types (HUMAN_TASK, RECEIVE_EVENT, WAIT) and equally for an ACTION node whose executor returned
+     * PENDING, without needing to special-case node types: any node still open when the work queue has
+     * fully drained is, by construction, genuinely parked awaiting external completion.
+     *
+     * @param instance the instance to inspect
+     * @param branchId the branch id
+     * @param nodeId   the node id the branch currently sits at
+     * @return true if the branch's entry for this node is still open (not completed)
      */
-    private boolean isBlockingNode(Workflow workflow, String nodeId) {
-        NodeType type = workflow.findNodeById(nodeId).map(WorkflowNode::type).orElse(null);
-        return type == NodeType.HUMAN_TASK || type == NodeType.RECEIVE_EVENT || type == NodeType.WAIT;
+    private boolean isBranchOpen(WorkflowInstance instance, String branchId, String nodeId) {
+        List<HistoryEntry> history = instance.history();
+        for (int i = history.size() - 1; i >= 0; i--) {
+            HistoryEntry h = history.get(i);
+            if (Objects.equals(h.branchId(), branchId) && h.nodeId().equals(nodeId)) {
+                return h.completedOn() == null;
+            }
+        }
+        return false;
     }
 
     /**
@@ -866,13 +901,18 @@ public class WorkflowEngine {
             }
 
             if (result.status() == NodeResultStatus.PENDING) {
+                // Park this branch: leave its history entry open (never closed here) and leave
+                // instance.status() untouched (still RUNNING). The WAITING status is derived later,
+                // once the whole work queue drains, by quiesce() inspecting open history entries —
+                // NOT set inline here — so that a sibling fork branch parking on a PENDING ACTION
+                // node cannot short-circuit the fork fan-out before the remaining fork targets are
+                // entered (see issue #105).
                 if (result.output() != null && !result.output().isEmpty()) {
                     instance = instance.toBuilder()
                         .mergeContext(result.output())
                         .build();
                 }
                 return instance.toBuilder()
-                    .status(InstanceStatus.WAITING)
                     .updatedOn(Instant.now())
                     .build();
             }
