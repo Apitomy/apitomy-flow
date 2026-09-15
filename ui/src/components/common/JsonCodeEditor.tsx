@@ -1,4 +1,4 @@
-import Editor from './CodeEditor.tsx';
+import Editor from '../vendor/CodeEditor.tsx';
 import { highlightJson } from './highlightJson.ts';
 import './JsonCodeEditor.css';
 
