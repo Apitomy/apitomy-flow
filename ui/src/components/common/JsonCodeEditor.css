@@ -1,7 +1,7 @@
 /*
- * A lightweight JSON code editor (react-simple-code-editor + a small bundled JSON highlighter). Token
- * colors are scoped to `.flow-json-editor` so the library never ships global highlighting styles that
- * could clash with a host.
+ * A lightweight JSON code editor (a vendored code-editor component + a small bundled JSON
+ * highlighter). Token colors are scoped to `.flow-json-editor` so the library never ships global
+ * highlighting styles that could clash with a host.
  */
 .flow-json-editor {
   box-sizing: border-box;
@@ -15,8 +15,8 @@
   overflow: auto;
 }
 
-/* react-simple-code-editor renders a <textarea> layered over a highlighted <pre>. Both must share
-   identical metrics so the caret aligns with the highlighted text. */
+/* The editor renders a <textarea> layered over a highlighted <pre>. Both must share identical
+   metrics so the caret aligns with the highlighted text. */
 .flow-json-editor__textarea,
 .flow-json-editor__pre {
   font-family: inherit !important;
