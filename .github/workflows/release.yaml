@@ -110,19 +110,8 @@ jobs:
     secrets: inherit
 
 
-  npm-publish:
-    needs: release
-    permissions:
-      id-token: write
-      contents: read
-    uses: ./.github/workflows/npm-publish.yaml
-    with:
-      release-version: ${{ needs.release.outputs.release-version }}
-    secrets: inherit
-
-
   finalize:
-    needs: [release, maven-publish, npm-publish]
+    needs: [release, maven-publish]
     runs-on: ubuntu-latest
     if: always() && needs.release.result == 'success'
     steps:
@@ -170,14 +159,9 @@ jobs:
         run: |
           echo "Release workflow completed"
           echo "Maven publish status: ${{ needs.maven-publish.result }}"
-          echo "NPM publish status: ${{ needs.npm-publish.result }}"
           if [[ "${{ needs.maven-publish.result }}" != "success" ]]; then
             echo "WARNING: Maven publish failed. You can retry it manually:"
             echo "  https://github.com/${{ github.repository }}/actions/workflows/maven-publish.yaml"
-          fi
-          if [[ "${{ needs.npm-publish.result }}" != "success" ]]; then
-            echo "WARNING: NPM publish failed. You can retry it manually:"
-            echo "  https://github.com/${{ github.repository }}/actions/workflows/npm-publish.yaml"
           fi
 
 
@@ -185,9 +169,8 @@ jobs:
         if: always()
         run: |
           MAVEN_STATUS="${{ needs.maven-publish.result }}"
-          NPM_STATUS="${{ needs.npm-publish.result }}"
-          if [[ "$MAVEN_STATUS" != "success" || "$NPM_STATUS" != "success" ]]; then
-            MESSAGE="Release ${{ needs.release.outputs.release-version }} completed with warnings. Maven: $MAVEN_STATUS, NPM: $NPM_STATUS. Manual retry may be needed."
+          if [[ "$MAVEN_STATUS" != "success" ]]; then
+            MESSAGE="Release ${{ needs.release.outputs.release-version }} completed with warnings. Maven: $MAVEN_STATUS. Manual retry may be needed."
           else
             MESSAGE="Release ${{ needs.release.outputs.release-version }} completed successfully"
           fi
@@ -197,9 +180,9 @@ jobs:
           curl -X POST -H "Content-Type: application/json" -d "$PAYLOAD" ${{ secrets.SLACK_NOTIFICATION_WEBHOOK }}
 
       - name: Slack Notification (Publishing Failures)
-        if: needs.maven-publish.result != 'success' || needs.npm-publish.result != 'success'
+        if: needs.maven-publish.result != 'success'
         run: |
-          MESSAGE="Release ${{ needs.release.outputs.release-version }}: Publishing failures — Maven: ${{ needs.maven-publish.result }}, NPM: ${{ needs.npm-publish.result }}. Retry at https://github.com/${{ github.repository }}/actions"
+          MESSAGE="Release ${{ needs.release.outputs.release-version }}: Publishing failures — Maven: ${{ needs.maven-publish.result }}. Retry at https://github.com/${{ github.repository }}/actions"
           REPO="${{ github.repository }}"
           LINK="https://github.com/$REPO/actions/runs/${{ github.run_id }}"
           PAYLOAD="{\"workflow\": \"${{ github.workflow }}\", \"status\": \"warning\", \"message\": \"$MESSAGE\", \"link\": \"$LINK\", \"repository\": \"$REPO\"}"
