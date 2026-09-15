@@ -6,7 +6,7 @@ const JSON_TOKEN =
 
 /**
  * Produces an HTML string with Prism-compatible `<span class="token …">` wrappers for a JSON
- * document, suitable for {@code react-simple-code-editor}'s `highlight` callback (which injects the
+ * document, suitable for {@link CodeEditor}'s `highlight` callback (which injects the
  * result as markup). The input is HTML-escaped first, so it is safe to render, and the function
  * never throws — partial/invalid JSON typed mid-edit simply leaves unmatched text unstyled.
  *

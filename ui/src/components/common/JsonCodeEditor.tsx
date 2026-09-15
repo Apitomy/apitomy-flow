@@ -1,12 +1,6 @@
-import CodeEditor from 'react-simple-code-editor';
+import Editor from '../vendor/CodeEditor.tsx';
 import { highlightJson } from './highlightJson.ts';
 import './JsonCodeEditor.css';
-
-// `react-simple-code-editor` is published as CommonJS (`exports.default = Editor`). Depending on the
-// bundler's ESM interop, the default import can arrive as the module namespace object rather than the
-// component itself, so normalize to the actual component before rendering it.
-const Editor =
-    (CodeEditor as unknown as { default?: typeof CodeEditor }).default ?? CodeEditor;
 
 interface JsonCodeEditorProps {
   /** The JSON source text. */
@@ -24,10 +18,11 @@ interface JsonCodeEditorProps {
 }
 
 /**
- * A lightweight, syntax-highlighted JSON editor built on {@code react-simple-code-editor} and
- * Prism. Used for the sample-context and mock-output fields in the simulation panel, the inline
- * condition tester, and (read-only) the evolving simulation context view. Bundled into the library
- * (no peer dependency) so consumers get highlighting without extra setup.
+ * A lightweight, syntax-highlighted JSON editor built on the vendored {@link CodeEditor} component
+ * and a dependency-free JSON highlighter. Used for the sample-context and mock-output fields in the
+ * simulation panel, the inline condition tester, and (read-only) the evolving simulation context
+ * view. Bundled into the library (no peer dependency) so consumers get highlighting without extra
+ * setup.
  */
 export function JsonCodeEditor({ value, onChange, minRows = 6, readOnly = false, className, ariaLabel }: JsonCodeEditorProps) {
     return (
