@@ -419,17 +419,20 @@ function valueMatchesType(value: unknown, type: string): boolean {
 }
 
 function validateOutputNames(outputDefs: unknown[], nodeId: string, problems: ValidationProblem[]) {
-  const outputNames = new Set<string>();
+  const contextKeys = new Set<string>();
   for (const defObj of outputDefs) {
     if (typeof defObj === 'object' && defObj !== null) {
       const nameVal = (defObj as Record<string, unknown>).name;
       if (nameVal !== undefined && nameVal !== null) {
         const name = String(nameVal);
-        if (outputNames.has(name)) {
+        const contextKeyVal = (defObj as Record<string, unknown>).contextKey;
+        const contextKey = typeof contextKeyVal === 'string' && contextKeyVal.trim() !== ''
+          ? contextKeyVal : name;
+        if (contextKeys.has(contextKey)) {
           problems.push(problem('warning', 'DUPLICATE_OUTPUT_NAME',
-            `Duplicate output name: ${name}`, nodeId));
+            `Duplicate output context key: ${contextKey}`, nodeId));
         }
-        outputNames.add(name);
+        contextKeys.add(contextKey);
       }
     }
   }

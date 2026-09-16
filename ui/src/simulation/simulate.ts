@@ -241,11 +241,47 @@ export function resumeSimulation(
     if (!target) {
         return state;
     }
-    const output = mock.output ?? {};
+    const targetNode = findNode(workflow, target.nodeId);
+    const output = resolveContextKeys(targetNode, mock.output ?? {});
     const context = { ...state.context, ...output };
     const history = recordOutputOnBranch(state.history, target.branchId, target.nodeId, output);
     const parkedBranchIds = state.parkedBranchIds.filter(id => id !== target.branchId);
     return derive(workflow, { ...state, status: 'running', context, history, parkedBranchIds });
+}
+
+/**
+ * Remaps a node's raw mock output so each value is keyed by its declared output's effective
+ * context key (the `contextKey` override when present, else the declared `name`), mirroring the
+ * Java engine's merge behavior. Keys not matching any declared output (or when the node declares
+ * no `outputs`) pass through unchanged.
+ */
+function resolveContextKeys(
+    node: WorkflowNode | undefined,
+    rawOutput: Record<string, unknown>,
+): Record<string, unknown> {
+    const outputDefs = node?.config?.outputs;
+    if (!Array.isArray(outputDefs) || outputDefs.length === 0) {
+        return rawOutput;
+    }
+    const renames = new Map<string, string>();
+    for (const def of outputDefs) {
+        if (typeof def === 'object' && def !== null) {
+            const name = (def as Record<string, unknown>).name;
+            const contextKey = (def as Record<string, unknown>).contextKey;
+            if (typeof name === 'string' && typeof contextKey === 'string'
+                && contextKey.trim() !== '' && contextKey !== name) {
+                renames.set(name, contextKey);
+            }
+        }
+    }
+    if (renames.size === 0) {
+        return rawOutput;
+    }
+    const remapped: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(rawOutput)) {
+        remapped[renames.get(key) ?? key] = value;
+    }
+    return remapped;
 }
 
 // ---------------------------------------------------------------------------

@@ -432,15 +432,17 @@ public class WorkflowValidator {
 
     private void validateOutputNames(List<?> outputDefs, String nodeId,
                                       List<ValidationProblem> problems) {
-        Set<String> outputNames = new HashSet<>();
+        Set<String> contextKeys = new HashSet<>();
         for (Object defObj : outputDefs) {
             if (defObj instanceof Map<?, ?> def) {
                 Object nameVal = def.get("name");
                 if (nameVal != null) {
                     String name = String.valueOf(nameVal);
-                    if (!outputNames.add(name)) {
+                    String contextKey = def.get("contextKey") instanceof String ck && !ck.isBlank()
+                        ? ck : name;
+                    if (!contextKeys.add(contextKey)) {
                         problems.add(ValidationProblem.warning("DUPLICATE_OUTPUT_NAME",
-                            "Duplicate output name: " + name, nodeId));
+                            "Duplicate output context key: " + contextKey, nodeId));
                     }
                 }
             }
