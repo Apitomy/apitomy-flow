@@ -306,10 +306,10 @@ export const loopWorkflow: Workflow = {
         description: 'Approve the mitigation plan or request changes.',
         inputs: {
           'Issue Key': 'context.issueKey',
-          'Current Plan': 'context.plan',
+          'Current Plan': 'context.revisedPlan',
         },
         outputs: [
-          { name: 'approved', type: 'boolean', required: true },
+          { name: 'approved', type: 'boolean', required: true, contextKey: 'reviewerApproved' },
           { name: 'reviewNotes', type: 'string', required: false },
         ],
       },
@@ -325,7 +325,7 @@ export const loopWorkflow: Workflow = {
           body: '{"notes": context.reviewNotes}',
         },
         outputs: [
-          { name: 'plan', type: 'string', required: true },
+          { name: 'plan', type: 'string', required: true, contextKey: 'revisedPlan' },
         ],
       },
       position: { x: 740, y: 110 },
@@ -337,7 +337,7 @@ export const loopWorkflow: Workflow = {
         inputs: {
           to: "'secops@apitomy.io'",
           subject: "'Plan approved: ' + context.issueKey",
-          body: 'context.plan',
+          body: 'context.revisedPlan',
         },
         outputs: [
           { name: 'messageId', type: 'string', required: true },
@@ -354,7 +354,7 @@ export const loopWorkflow: Workflow = {
   edges: [
     { id: 'lp1', source: 'start', target: 'draft', priority: 0, isDefault: false },
     { id: 'lp2', source: 'draft', target: 'review', priority: 0, isDefault: false },
-    { id: 'lp3', source: 'review', target: 'publish', condition: 'context.approved == true', priority: 0, isDefault: false, label: 'Approved' },
+    { id: 'lp3', source: 'review', target: 'publish', condition: 'context.reviewerApproved == true', priority: 0, isDefault: false, label: 'Approved' },
     { id: 'lp4', source: 'review', target: 'revise', priority: 1, isDefault: true, label: 'Needs revisions' },
     { id: 'lp5', source: 'revise', target: 'review', priority: 0, isDefault: false },
     { id: 'lp6', source: 'publish', target: 'end', priority: 0, isDefault: false },
@@ -371,15 +371,15 @@ export const loopWorkflowInstance: WorkflowInstance = {
   context: {
     ticketId: 'SEC-42',
     issueKey: 'SEC-42',
-    approved: false,
+    reviewerApproved: false,
     reviewNotes: 'Please tighten rollback steps.',
-    plan: 'Updated rollout with rollback verification checklist.',
+    revisedPlan: 'Updated rollout with rollback verification checklist.',
   },
   history: [
     { nodeId: 'start', nodeName: 'Start', enteredOn: '2026-09-09T14:10:00Z', completedOn: '2026-09-09T14:10:00Z', branchId: 'root' },
     { nodeId: 'draft', nodeName: 'Draft Plan', edgeId: 'lp1', enteredOn: '2026-09-09T14:10:01Z', completedOn: '2026-09-09T14:10:05Z', output: { issueKey: 'SEC-42' }, branchId: 'root' },
-    { nodeId: 'review', nodeName: 'Review Plan', edgeId: 'lp2', enteredOn: '2026-09-09T14:10:05Z', completedOn: '2026-09-09T14:11:00Z', output: { approved: false, reviewNotes: 'Please tighten rollback steps.' }, branchId: 'root' },
-    { nodeId: 'revise', nodeName: 'Revise Plan', edgeId: 'lp4', enteredOn: '2026-09-09T14:11:00Z', completedOn: '2026-09-09T14:12:30Z', output: { plan: 'Updated rollout with rollback verification checklist.' }, branchId: 'root' },
+    { nodeId: 'review', nodeName: 'Review Plan', edgeId: 'lp2', enteredOn: '2026-09-09T14:10:05Z', completedOn: '2026-09-09T14:11:00Z', output: { reviewerApproved: false, reviewNotes: 'Please tighten rollback steps.' }, branchId: 'root' },
+    { nodeId: 'revise', nodeName: 'Revise Plan', edgeId: 'lp4', enteredOn: '2026-09-09T14:11:00Z', completedOn: '2026-09-09T14:12:30Z', output: { revisedPlan: 'Updated rollout with rollback verification checklist.' }, branchId: 'root' },
     { nodeId: 'review', nodeName: 'Review Plan', edgeId: 'lp5', enteredOn: '2026-09-09T14:12:30Z', branchId: 'root' },
   ],
   createdOn: '2026-09-09T14:10:00Z',
