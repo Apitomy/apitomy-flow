@@ -6,6 +6,8 @@ import { type Workflow } from '../types/workflow.ts';
 import { type WorkflowInstance } from '../types/instance.ts';
 import { toReactFlowNodes, toReactFlowEdges } from '../utils/conversion.ts';
 import { nodeVisits, nodeVisitsByBranch, type NodeBranchVisits } from '../utils/nodeHistory.ts';
+import { getNodeDefinition } from '../utils/nodeDefinition.ts';
+import { getNodeStatusBadge } from '../utils/nodeStatus.ts';
 import { activeNodeIds, activeEdgeIds } from '../utils/parallelView.ts';
 import { type FlowTheme } from './WorkflowEditor.tsx';
 import { nodeTypes } from './nodes/nodeTypes.ts';
@@ -91,6 +93,10 @@ function WorkflowViewerInner({ workflow, instance, theme = 'light', nodeContextM
   // most recent visit", which keeps live-updating viewers pinned to the latest
   // pass as new history entries arrive.
   const [selectedVisitIndex, setSelectedVisitIndex] = useState<number | null>(null);
+  // Which detail view the node-detail panel shows. Persists across node selections so switching
+  // between nodes keeps the reviewer's chosen view (e.g. staying on "Definition" while inspecting
+  // several action nodes in a row).
+  const [detailViewMode, setDetailViewMode] = useState<'state' | 'definition'>('state');
   const [contextMenu, setContextMenu] = useState<{ nodeId: string; x: number; y: number } | null>(null);
   const isResizing = useRef(false);
 
@@ -253,13 +259,24 @@ function WorkflowViewerInner({ workflow, instance, theme = 'light', nodeContextM
                 </span>
               )}
               {selectedNodeId && (
-                <button
-                  className="workflow-viewer__collapse-btn"
-                  title="Back to instance context"
-                  onClick={() => { setSelectedNodeId(null); setSelectedVisitIndex(null); }}
-                >
-                  &times;
-                </button>
+                <div className="workflow-viewer__view-toggle" role="group" aria-label="Detail view">
+                  <button
+                    type="button"
+                    className={`workflow-viewer__view-toggle-btn${detailViewMode === 'state' ? ' workflow-viewer__view-toggle-btn--active' : ''}`}
+                    aria-pressed={detailViewMode === 'state'}
+                    onClick={() => setDetailViewMode('state')}
+                  >
+                    State
+                  </button>
+                  <button
+                    type="button"
+                    className={`workflow-viewer__view-toggle-btn${detailViewMode === 'definition' ? ' workflow-viewer__view-toggle-btn--active' : ''}`}
+                    aria-pressed={detailViewMode === 'definition'}
+                    onClick={() => setDetailViewMode('definition')}
+                  >
+                    Definition
+                  </button>
+                </div>
               )}
               <button
                 className="workflow-viewer__collapse-btn"
@@ -280,6 +297,7 @@ function WorkflowViewerInner({ workflow, instance, theme = 'light', nodeContextM
               onSelectVisit={setSelectedVisitIndex}
               isCurrent={selectedNodeId ? activeIds.has(selectedNodeId) : false}
               instanceStatus={instance.status}
+              viewMode={detailViewMode}
             />
           ) : (
             <div className="workflow-viewer__context-entries">
@@ -309,7 +327,7 @@ function formatValue(value: unknown): string {
   return String(value);
 }
 
-function NodeDetail({ node, history, visits, visitsByBranch, visitIndex, onSelectVisit, isCurrent, instanceStatus }: {
+function NodeDetail({ node, history, visits, visitsByBranch, visitIndex, onSelectVisit, isCurrent, instanceStatus, viewMode }: {
   node: WorkflowViewerProps['workflow']['nodes'][number] | null;
   history: HistoryEntry | null;
   visits: HistoryEntry[];
@@ -318,6 +336,7 @@ function NodeDetail({ node, history, visits, visitsByBranch, visitIndex, onSelec
   onSelectVisit: (index: number) => void;
   isCurrent: boolean;
   instanceStatus: InstanceStatus;
+  viewMode: 'state' | 'definition';
 }) {
   if (!node) {
     return <div className="workflow-viewer__context-empty">Node not found</div>;
@@ -329,10 +348,11 @@ function NodeDetail({ node, history, visits, visitsByBranch, visitIndex, onSelec
   // most recent visit. An earlier visit of a looping node has completed, even
   // when the node happens to be the instance's current node.
   const isCurrentVisit = isCurrent && visitIndex >= visits.length - 1;
+  const statusBadge = getNodeStatusBadge({ isCurrentVisit, wasVisited, instanceStatus });
 
   return (
     <div className="workflow-viewer__node-detail">
-      {visits.length > 1 && (
+      {viewMode === 'state' && visits.length > 1 && (
         <select
           className="workflow-viewer__visit-select"
           value={visitIndex}
@@ -367,70 +387,106 @@ function NodeDetail({ node, history, visits, visitsByBranch, visitIndex, onSelec
         <span className="workflow-viewer__context-key">Node ID</span>
         <span className="workflow-viewer__context-value">{node.id}</span>
       </div>
-      {history?.branchId && history.branchId !== 'root' && (
-        <div className="workflow-viewer__context-entry">
-          <span className="workflow-viewer__context-key">Branch</span>
-          <span className="workflow-viewer__context-value">{history.branchId}</span>
-        </div>
-      )}
-      <div className="workflow-viewer__context-entry">
-        <span className="workflow-viewer__context-key">Status</span>
-        <span className="workflow-viewer__context-value">
-          {isCurrentVisit
-            ? (instanceStatus === 'completed' ? 'Completed'
-              : instanceStatus === 'failed' ? 'Failed'
-              : instanceStatus === 'cancelled' ? 'Cancelled'
-              : 'Current (waiting)')
-            : wasVisited ? 'Completed' : 'Not yet reached'}
-        </span>
-      </div>
-      {history?.enteredOn && (
-        <div className="workflow-viewer__context-entry">
-          <span className="workflow-viewer__context-key">Entered</span>
-          <span className="workflow-viewer__context-value">{new Date(history.enteredOn).toLocaleString()}</span>
-        </div>
-      )}
-      {history?.completedOn && (
-        <div className="workflow-viewer__context-entry">
-          <span className="workflow-viewer__context-key">Completed</span>
-          <span className="workflow-viewer__context-value">{new Date(history.completedOn).toLocaleString()}</span>
-        </div>
-      )}
-      {history?.edgeId && (
-        <div className="workflow-viewer__context-entry">
-          <span className="workflow-viewer__context-key">Arrived via edge</span>
-          <span className="workflow-viewer__context-value">
-            {history.edgeCondition ? `${history.edgeId} (${history.edgeCondition})` : history.edgeId}
-          </span>
-        </div>
-      )}
-      {node.type === 'start' && Array.isArray(node.config.inputs) && node.config.inputs.length > 0 && (
+      {viewMode === 'definition' ? (
+        <NodeDefinitionDetail node={node} />
+      ) : (
         <>
-          <div className="workflow-viewer__section-label">Inputs</div>
-          {(node.config.inputs as { name: string; type: string; required: boolean }[]).map((input) => (
-            <div key={input.name} className="workflow-viewer__context-entry">
-              <span className="workflow-viewer__context-key">
-                {input.name} <span className="workflow-viewer__type-badge">{input.type}{input.required ? '' : '?'}</span>
+          {history?.branchId && history.branchId !== 'root' && (
+            <div className="workflow-viewer__context-entry">
+              <span className="workflow-viewer__context-key">Branch</span>
+              <span className="workflow-viewer__context-value">{history.branchId}</span>
+            </div>
+          )}
+          <div className="workflow-viewer__context-entry">
+            <span className="workflow-viewer__context-key">Status</span>
+            <span className={`workflow-viewer__status workflow-viewer__status--${statusBadge.key}`}>
+              {statusBadge.label}
+            </span>
+          </div>
+          {history?.enteredOn && (
+            <div className="workflow-viewer__context-entry">
+              <span className="workflow-viewer__context-key">Entered</span>
+              <span className="workflow-viewer__context-value">{new Date(history.enteredOn).toLocaleString()}</span>
+            </div>
+          )}
+          {history?.completedOn && (
+            <div className="workflow-viewer__context-entry">
+              <span className="workflow-viewer__context-key">Completed</span>
+              <span className="workflow-viewer__context-value">{new Date(history.completedOn).toLocaleString()}</span>
+            </div>
+          )}
+          {history?.edgeId && (
+            <div className="workflow-viewer__context-entry">
+              <span className="workflow-viewer__context-key">Arrived via edge</span>
+              <span className="workflow-viewer__context-value">
+                {history.edgeCondition ? `${history.edgeId} (${history.edgeCondition})` : history.edgeId}
               </span>
             </div>
-          ))}
+          )}
+          {node.type === 'start' && Array.isArray(node.config.inputs) && node.config.inputs.length > 0 && (
+            <>
+              <div className="workflow-viewer__section-label">Inputs</div>
+              {(node.config.inputs as { name: string; type: string; required: boolean }[]).map((input) => (
+                <div key={input.name} className="workflow-viewer__context-entry">
+                  <span className="workflow-viewer__context-key">
+                    {input.name} <span className="workflow-viewer__type-badge">{input.type}{input.required ? '' : '?'}</span>
+                  </span>
+                </div>
+              ))}
+            </>
+          )}
+          {history?.output && Object.keys(history.output).length > 0 && (
+            <>
+              <div className="workflow-viewer__section-label">Outputs</div>
+              {Object.entries(history.output).map(([key, value]) => (
+                <div key={key} className="workflow-viewer__context-entry">
+                  <span className="workflow-viewer__context-key">{key}</span>
+                  <span className="workflow-viewer__context-value">{formatValue(value)}</span>
+                </div>
+              ))}
+            </>
+          )}
+          {wasVisited && (!history?.output || Object.keys(history.output).length === 0) && (
+            <div className="workflow-viewer__context-empty">No outputs recorded</div>
+          )}
         </>
-      )}
-      {history?.output && Object.keys(history.output).length > 0 && (
-        <>
-          <div className="workflow-viewer__section-label">Outputs</div>
-          {Object.entries(history.output).map(([key, value]) => (
-            <div key={key} className="workflow-viewer__context-entry">
-              <span className="workflow-viewer__context-key">{key}</span>
-              <span className="workflow-viewer__context-value">{formatValue(value)}</span>
-            </div>
-          ))}
-        </>
-      )}
-      {wasVisited && (!history?.output || Object.keys(history.output).length === 0) && (
-        <div className="workflow-viewer__context-empty">No outputs recorded</div>
       )}
     </div>
+  );
+}
+
+function NodeDefinitionDetail({ node }: { node: WorkflowViewerProps['workflow']['nodes'][number] }) {
+  const definition = useMemo(() => getNodeDefinition(node), [node]);
+
+  if (!definition.description && definition.sections.length === 0) {
+    return <div className="workflow-viewer__context-empty">No definition details</div>;
+  }
+
+  return (
+    <>
+      {definition.description && (
+        <div className="workflow-viewer__context-entry">
+          <span className="workflow-viewer__context-key">Description</span>
+          <span className="workflow-viewer__context-value">{definition.description}</span>
+        </div>
+      )}
+      {definition.sections.map(section => (
+        <div key={section.label}>
+          <div className="workflow-viewer__section-label">{section.label}</div>
+          {section.fields.map(field => (
+            <div key={field.label} className="workflow-viewer__context-entry">
+              <span className="workflow-viewer__context-key">
+                {field.label}
+                {field.badge && <span className="workflow-viewer__type-badge">{field.badge}</span>}
+              </span>
+              {field.value !== undefined && (
+                <span className="workflow-viewer__context-value">{field.value}</span>
+              )}
+            </div>
+          ))}
+        </div>
+      ))}
+    </>
   );
 }
 

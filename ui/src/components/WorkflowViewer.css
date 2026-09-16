@@ -84,6 +84,7 @@
 .workflow-viewer__status--completed { background: var(--flow-status-completed-bg, #e6f5e4); color: var(--flow-status-completed-text, #1e4620); }
 .workflow-viewer__status--failed { background: var(--flow-status-failed-bg, #fce4e4); color: var(--flow-status-failed-text, #7d1007); }
 .workflow-viewer__status--cancelled { background: var(--flow-status-cancelled-bg, #ececec); color: var(--flow-status-cancelled-text, #3c3c3c); }
+.workflow-viewer__status--not-reached { background: var(--flow-status-cancelled-bg, #ececec); color: var(--flow-text-subtle, #6a6e73); }
 .workflow-viewer__context-collapsed {
   border-left: 1px solid var(--flow-border, #d2d2d2);
   background: var(--flow-bg-primary, #fff);
@@ -91,6 +92,32 @@
   display: flex;
   align-items: flex-start;
   flex-shrink: 0;
+}
+.workflow-viewer__view-toggle {
+  display: flex;
+  border: 1px solid var(--flow-border, #d2d2d2);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.workflow-viewer__view-toggle-btn {
+  background: none;
+  border: none;
+  border-left: 1px solid var(--flow-border, #d2d2d2);
+  cursor: pointer;
+  padding: 4px 8px;
+  font-size: 11px;
+  color: var(--flow-text-subtle, #6a6e73);
+}
+.workflow-viewer__view-toggle-btn:first-child {
+  border-left: none;
+}
+.workflow-viewer__view-toggle-btn:hover {
+  background: var(--flow-bg-hover, #f0f0f0);
+  color: var(--flow-text, #151515);
+}
+.workflow-viewer__view-toggle-btn--active {
+  background: var(--flow-status-running-bg, #e0ecff);
+  color: var(--flow-status-running-text, #002952);
 }
 .workflow-viewer__collapse-btn,
 .workflow-viewer__expand-btn {
