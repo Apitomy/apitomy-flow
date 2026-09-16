@@ -134,6 +134,48 @@ describe('node lifecycle', () => {
         expect(state.currentNodeId).toBe('end');
     });
 
+    it('merges an action node\'s mock output under its declared contextKey override', () => {
+        const wf = workflow(
+            [
+                node('start', 'start'),
+                node('act', 'action', {
+                    actionType: 'x',
+                    outputs: [{ name: 'result', type: 'string', required: true, contextKey: 'orderResult' }],
+                }),
+                node('end', 'end'),
+            ],
+            [edge('e1', 'start', 'act'), edge('e2', 'act', 'end')],
+        );
+        let state = stepSimulation(wf, startSimulation(wf, {}));
+        state = resumeSimulation(wf, state, { output: { result: '42' } });
+        expect(state.context.orderResult).toBe('42');
+        expect(state.context.result).toBeUndefined();
+    });
+
+    it('does not shadow two same-typed action nodes when each aliases its output', () => {
+        const wf = workflow(
+            [
+                node('start', 'start'),
+                node('first', 'action', {
+                    actionType: 'x',
+                    outputs: [{ name: 'result', type: 'string', required: true, contextKey: 'firstResult' }],
+                }),
+                node('second', 'action', {
+                    actionType: 'x',
+                    outputs: [{ name: 'result', type: 'string', required: true, contextKey: 'secondResult' }],
+                }),
+                node('end', 'end'),
+            ],
+            [edge('e1', 'start', 'first'), edge('e2', 'first', 'second'), edge('e3', 'second', 'end')],
+        );
+        let state = stepSimulation(wf, startSimulation(wf, {}));
+        state = resumeSimulation(wf, state, { output: { result: 'A' } });
+        state = stepSimulation(wf, state);
+        state = resumeSimulation(wf, state, { output: { result: 'B' } });
+        expect(state.context.firstResult).toBe('A');
+        expect(state.context.secondResult).toBe('B');
+    });
+
     it('blocks at a human-task node', () => {
         const wf = workflow(
             [node('start', 'start'), node('task', 'human-task'), node('end', 'end')],

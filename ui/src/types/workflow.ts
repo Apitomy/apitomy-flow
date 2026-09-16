@@ -40,6 +40,29 @@ export interface HumanTaskOutput {
   defaultValue?: unknown;
   /** Choices for `widget: 'select'`. */
   options?: OutputOption[];
+  /**
+   * Optional override for the context key the answer is stored under. Defaults to `name` when
+   * omitted. Useful to avoid collisions when the same action/human-task type is used more than
+   * once in a workflow and both calls would otherwise write to the same context key.
+   */
+  contextKey?: string;
+}
+
+/**
+ * An action node's declared output (`node.config.outputs` entries). Mirrors the shape read from
+ * the action type descriptor (`ActionTypeField`), plus the per-node-instance `contextKey`
+ * override.
+ */
+export interface ActionOutputConfig {
+  /** The output's declared name (as produced by the action executor). */
+  name: string;
+  type: 'string' | 'number' | 'boolean' | 'object';
+  required?: boolean;
+  /**
+   * Optional override for the context key the value is stored under. Defaults to `name` when
+   * omitted.
+   */
+  contextKey?: string;
 }
 
 export interface WorkflowNode {

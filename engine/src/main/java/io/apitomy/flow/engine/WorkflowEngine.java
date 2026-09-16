@@ -111,16 +111,17 @@ public class WorkflowEngine {
         if (result.status() == NodeResultStatus.PENDING) {
             WorkflowInstance reparked = instance;
             if (result.output() != null && !result.output().isEmpty()) {
-                reparked = reparked.toBuilder().mergeContext(result.output()).build();
+                reparked = reparked.toBuilder().mergeContext(resolveContextKeys(node, result.output())).build();
             }
             return reparked.toBuilder().status(InstanceStatus.WAITING).updatedOn(Instant.now()).build();
         }
 
         // COMPLETED — record output on the branch's history entry, merge context, then continue this branch.
+        Map<String, Object> resolvedOutput = resolveContextKeys(node, result.output());
         WorkflowInstance updated = completeHistoryEntry(instance, branch.branchId(), nodeId,
-            Instant.now(), result.output());
+            Instant.now(), resolvedOutput);
         updated = updated.toBuilder()
-            .mergeContext(result.output())
+            .mergeContext(resolvedOutput)
             .status(InstanceStatus.RUNNING)
             .updatedOn(Instant.now())
             .build();
@@ -452,7 +453,9 @@ public class WorkflowEngine {
                 .map(o -> new OutputDefinition(
                     String.valueOf(o.get("name")),
                     o.get("type") != null ? String.valueOf(o.get("type")) : "string",
-                    Boolean.TRUE.equals(o.get("required"))
+                    Boolean.TRUE.equals(o.get("required")),
+                    null, null, null, null, null,
+                    o.get("contextKey") instanceof String ck && !ck.isBlank() ? ck : null
                 ))
                 .toList();
         }
@@ -909,7 +912,7 @@ public class WorkflowEngine {
                 // entered (see issue #105).
                 if (result.output() != null && !result.output().isEmpty()) {
                     instance = instance.toBuilder()
-                        .mergeContext(result.output())
+                        .mergeContext(resolveContextKeys(actionNode, result.output()))
                         .build();
                 }
                 return instance.toBuilder()
@@ -938,10 +941,11 @@ public class WorkflowEngine {
             }
 
             // Success — record output on history, merge into context, fire completed
+            Map<String, Object> resolvedOutput = resolveContextKeys(actionNode, result.output());
             instance = completeHistoryEntry(instance, branchId, actionNode.id(), Instant.now(),
-                result.output());
+                resolvedOutput);
             instance = instance.toBuilder()
-                .mergeContext(result.output())
+                .mergeContext(resolvedOutput)
                 .updatedOn(Instant.now())
                 .build();
 
@@ -1060,6 +1064,46 @@ public class WorkflowEngine {
         return instance.toBuilder().history(history).build();
     }
 
+    /**
+     * Remaps a node's raw produced output map so each value is keyed by its declared output's
+     * effective context key (the {@code contextKey} override when present, else the declared
+     * {@code name}) rather than always by {@code name}. Keys not matching any declared output for
+     * this node (or present when the node declares no {@code outputs}) pass through unchanged.
+     *
+     * @param node      the node that produced the output
+     * @param rawOutput the raw output map, keyed by declared output name
+     * @return a new map with keys renamed to their effective context keys
+     */
+    private Map<String, Object> resolveContextKeys(WorkflowNode node, Map<String, Object> rawOutput) {
+        if (rawOutput == null || rawOutput.isEmpty()) {
+            return rawOutput;
+        }
+        Map<String, String> renames = new HashMap<>();
+        if (node.config().get("outputs") instanceof List<?> outputDefs) {
+            for (Object defObj : outputDefs) {
+                if (defObj instanceof Map<?, ?> def) {
+                    Object nameVal = def.get("name");
+                    if (nameVal == null) {
+                        continue;
+                    }
+                    String name = String.valueOf(nameVal);
+                    if (def.get("contextKey") instanceof String ck && !ck.isBlank() && !ck.equals(name)) {
+                        renames.put(name, ck);
+                    }
+                }
+            }
+        }
+        if (renames.isEmpty()) {
+            return rawOutput;
+        }
+        Map<String, Object> remapped = new HashMap<>();
+        for (Map.Entry<String, Object> entry : rawOutput.entrySet()) {
+            String key = renames.getOrDefault(entry.getKey(), entry.getKey());
+            remapped.put(key, entry.getValue());
+        }
+        return remapped;
+    }
+
     private void fireEvent(java.util.function.Consumer<WorkflowEventListener> action) {
         for (WorkflowEventListener listener : listeners) {
             try {
@@ -1087,6 +1131,7 @@ public class WorkflowEngine {
         String description = o.get("description") instanceof String d ? d : null;
         String widget = o.get("widget") instanceof String w && !w.isBlank() ? w : inferWidget(type);
         Object defaultValue = o.get("defaultValue");
+        String contextKey = o.get("contextKey") instanceof String ck && !ck.isBlank() ? ck : null;
 
         List<OutputOption> options = null;
         if (o.get("options") instanceof List<?> rawOptions) {
@@ -1100,7 +1145,8 @@ public class WorkflowEngine {
                 .toList();
         }
 
-        return new OutputDefinition(name, type, required, label, description, widget, defaultValue, options);
+        return new OutputDefinition(name, type, required, label, description, widget, defaultValue, options,
+            contextKey);
     }
 
     /**

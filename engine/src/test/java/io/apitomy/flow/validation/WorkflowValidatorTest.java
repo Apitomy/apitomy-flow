@@ -665,6 +665,36 @@ class WorkflowValidatorTest {
         assertTrue(hasCode(validate(w), "DUPLICATE_OUTPUT_NAME"));
     }
 
+    @Test
+    void duplicateEffectiveContextKeyViaContextKeyAlias() {
+        WorkflowNode actionWithAliasCollision = new WorkflowNode("a", NodeType.ACTION, "A",
+            Map.of("actionType", "test",
+                "outputs", List.of(
+                    Map.of("name", "result", "type", "string", "required", true),
+                    Map.of("name", "other", "type", "number", "required", false, "contextKey", "result"))),
+            new Position(0, 0));
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start", List.of(inputDef("x", "string", true))),
+                actionWithAliasCollision, endNode("end")),
+            List.of(edge("e1", "start", "a"), edge("e2", "a", "end")));
+        assertTrue(hasCode(validate(w), "DUPLICATE_OUTPUT_NAME"));
+    }
+
+    @Test
+    void distinctContextKeysDoNotCollide() {
+        WorkflowNode actionWithAliases = new WorkflowNode("a", NodeType.ACTION, "A",
+            Map.of("actionType", "test",
+                "outputs", List.of(
+                    Map.of("name", "result", "type", "string", "required", true, "contextKey", "firstResult"),
+                    Map.of("name", "result", "type", "number", "required", false, "contextKey", "secondResult"))),
+            new Position(0, 0));
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start", List.of(inputDef("x", "string", true))),
+                actionWithAliases, endNode("end")),
+            List.of(edge("e1", "start", "a"), edge("e2", "a", "end")));
+        assertFalse(hasCode(validate(w), "DUPLICATE_OUTPUT_NAME"));
+    }
+
     // --- Null-safety ---
 
     @Test

@@ -551,6 +551,36 @@ describe('validateWorkflow', () => {
       );
       expect(hasProblem(validateWorkflow(w), 'DUPLICATE_OUTPUT_NAME')).toBe(true);
     });
+
+    it('DUPLICATE_OUTPUT_NAME when a contextKey alias collides with another output', () => {
+      const w = workflow(
+        [
+          node('start', 'start', { inputs: [{ name: 'x', type: 'string', required: true }] }),
+          node('a', 'action', { actionType: 'test', outputs: [
+            { name: 'result', type: 'string', required: true },
+            { name: 'other', type: 'number', required: false, contextKey: 'result' },
+          ] }),
+          node('end', 'end'),
+        ],
+        [edge('e1', 'start', 'a'), edge('e2', 'a', 'end')],
+      );
+      expect(hasProblem(validateWorkflow(w), 'DUPLICATE_OUTPUT_NAME')).toBe(true);
+    });
+
+    it('no DUPLICATE_OUTPUT_NAME when contextKeys are distinct', () => {
+      const w = workflow(
+        [
+          node('start', 'start', { inputs: [{ name: 'x', type: 'string', required: true }] }),
+          node('a', 'action', { actionType: 'test', outputs: [
+            { name: 'result', type: 'string', required: true, contextKey: 'firstResult' },
+            { name: 'result', type: 'number', required: false, contextKey: 'secondResult' },
+          ] }),
+          node('end', 'end'),
+        ],
+        [edge('e1', 'start', 'a'), edge('e2', 'a', 'end')],
+      );
+      expect(hasProblem(validateWorkflow(w), 'DUPLICATE_OUTPUT_NAME')).toBe(false);
+    });
   });
 
   describe('human-task output metadata', () => {

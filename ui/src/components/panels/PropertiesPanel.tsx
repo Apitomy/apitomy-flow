@@ -14,7 +14,7 @@ import { TimesIcon } from '@patternfly/react-icons';
 import { type FlowNodeData } from '../../utils/conversion.ts';
 import { type EditorSpi } from '../../types/spi.ts';
 import { type ActionTypeDescriptor } from '../../types/spi.ts';
-import { type HumanTaskOutput, type OutputOption, type OutputWidget } from '../../types/workflow.ts';
+import { type HumanTaskOutput, type OutputOption, type OutputWidget, type ActionOutputConfig } from '../../types/workflow.ts';
 import { type ValidationProblem } from '../../types/validation.ts';
 import { mapToPairs, pairsToMap, duplicateKeys, nextPairId, type KeyValuePair } from '../../utils/mapInputs.ts';
 import { evaluateCondition, ElEvaluationError } from '../../simulation/elEvaluator.ts';
@@ -324,6 +324,19 @@ function HumanTaskOutputsEditor({ outputs, onChange }: {
                     output={output}
                     onChange={(defaultValue) => update(i, { defaultValue })}
                   />
+                </div>
+                <div className="properties-panel__output-field">
+                  <label>Context key</label>
+                  <input
+                    type="text"
+                    value={output.contextKey ?? ''}
+                    placeholder={output.name || 'Defaults to name'}
+                    onChange={(e) => update(i, { contextKey: e.target.value || undefined })}
+                  />
+                  <div className="properties-panel__field-hint">
+                    Context key the answer is stored under. Override this to avoid collisions when
+                    the same output name is used by more than one node.
+                  </div>
                 </div>
               </div>
             )}
@@ -910,19 +923,39 @@ function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading 
             <div className="properties-panel__field">
               <label>Outputs</label>
               <div className="properties-panel__inputs-list">
-                {descriptor.outputs.map((field) => (
-                  <div key={field.name} className="properties-panel__input-item">
-                    <div className="properties-panel__spi-field-header">
-                      <span className="properties-panel__spi-field-name">{field.name}</span>
-                      <span className="properties-panel__spi-field-type">
-                        {field.type}{field.required ? '' : '?'}
-                      </span>
+                {descriptor.outputs.map((field) => {
+                  const configOutputs = (node.data.config.outputs as ActionOutputConfig[]) || [];
+                  const configOutput = configOutputs.find(o => o.name === field.name);
+                  return (
+                    <div key={field.name} className="properties-panel__input-item">
+                      <div className="properties-panel__spi-field-header">
+                        <span className="properties-panel__spi-field-name">{field.name}</span>
+                        <span className="properties-panel__spi-field-type">
+                          {field.type}{field.required ? '' : '?'}
+                        </span>
+                      </div>
+                      {field.description && (
+                        <div className="properties-panel__field-hint">{field.description}</div>
+                      )}
+                      <input
+                        type="text"
+                        value={configOutput?.contextKey ?? ''}
+                        placeholder={`Context key (defaults to "${field.name}")`}
+                        onChange={(e) => {
+                          const contextKey = e.target.value || undefined;
+                          const nextOutputs = configOutputs.some(o => o.name === field.name)
+                            ? configOutputs.map(o => (o.name === field.name ? { ...o, contextKey } : o))
+                            : [...configOutputs, {
+                              name: field.name, type: field.type, required: field.required ?? false, contextKey,
+                            }];
+                          onNodeChange(node.id, {
+                            config: { ...node.data.config, outputs: nextOutputs },
+                          });
+                        }}
+                      />
                     </div>
-                    {field.description && (
-                      <div className="properties-panel__field-hint">{field.description}</div>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
@@ -944,7 +977,7 @@ function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading 
           <div className="properties-panel__field">
             <label>Outputs (expected results)</label>
             <div className="properties-panel__inputs-list">
-              {((node.data.config.outputs as { name: string; type: string; required: boolean }[]) || []).map((output, i) => (
+              {((node.data.config.outputs as ActionOutputConfig[]) || []).map((output, i) => (
                 <div key={i} className="properties-panel__input-item">
                   <div className="properties-panel__input-row">
                     <input
@@ -1001,6 +1034,21 @@ function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading 
                     />
                     Required
                   </label>
+                  <div className="properties-panel__output-field">
+                    <label>Context key</label>
+                    <input
+                      type="text"
+                      value={output.contextKey ?? ''}
+                      placeholder={output.name || 'Defaults to name'}
+                      onChange={(e) => {
+                        const outputs = [...((node.data.config.outputs as any[]) || [])];
+                        outputs[i] = { ...outputs[i], contextKey: e.target.value || undefined };
+                        onNodeChange(node.id, {
+                          config: { ...node.data.config, outputs },
+                        });
+                      }}
+                    />
+                  </div>
                 </div>
               ))}
               <button
