@@ -57,6 +57,41 @@ describe('getNodeDefinition', () => {
     ]);
   });
 
+  it('surfaces a human-task output\'s contextKey override alongside its description', () => {
+    const def = getNodeDefinition(node({
+      type: 'human-task',
+      config: {
+        outputs: [
+          {
+            name: 'approved', type: 'boolean', required: true, label: 'Approved?',
+            description: 'Approve or reject', contextKey: 'managerApproved',
+          },
+        ],
+      },
+    }));
+
+    const outputs = def.sections.find(s => s.label === 'Outputs');
+    expect(outputs!.fields).toEqual([
+      { label: 'Approved?', badge: 'boolean', value: 'Approve or reject — stored as context.managerApproved' },
+    ]);
+  });
+
+  it('surfaces a human-task output\'s contextKey override when there is no description', () => {
+    const def = getNodeDefinition(node({
+      type: 'human-task',
+      config: {
+        outputs: [
+          { name: 'approved', type: 'boolean', required: true, contextKey: 'managerApproved' },
+        ],
+      },
+    }));
+
+    const outputs = def.sections.find(s => s.label === 'Outputs');
+    expect(outputs!.fields).toEqual([
+      { label: 'approved', badge: 'boolean', value: 'stored as context.managerApproved' },
+    ]);
+  });
+
   it('exposes a human-task node\'s config.description as the definition description', () => {
     const def = getNodeDefinition(node({
       type: 'human-task',
@@ -131,6 +166,21 @@ describe('getNodeDefinition', () => {
     const outputs = def.sections.find(s => s.label === 'Outputs');
     expect(outputs!.fields).toEqual([
       { label: 'messageId', badge: 'string', value: undefined },
+    ]);
+  });
+
+  it('surfaces an action output\'s contextKey override', () => {
+    const def = getNodeDefinition(node({
+      type: 'action',
+      config: {
+        actionType: 'send-email',
+        outputs: [{ name: 'result', type: 'string', required: true, contextKey: 'orderResult' }],
+      },
+    }));
+
+    const outputs = def.sections.find(s => s.label === 'Outputs');
+    expect(outputs!.fields).toEqual([
+      { label: 'result', badge: 'string', value: 'stored as context.orderResult' },
     ]);
   });
 

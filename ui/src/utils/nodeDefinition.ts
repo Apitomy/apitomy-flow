@@ -73,12 +73,26 @@ function humanTaskOutputsSection(config: Record<string, any>): DefinitionSection
   if (!Array.isArray(outputs) || outputs.length === 0) return null;
   return {
     label: 'Outputs',
-    fields: outputs.map((output: { name: string; type?: string; label?: string; description?: string }) => ({
+    fields: outputs.map((output: {
+      name: string; type?: string; label?: string; description?: string; contextKey?: string;
+    }) => ({
       label: output.label ?? output.name,
       badge: output.type ?? 'string',
-      value: output.description,
+      value: describeOutputValue(output.description, output.contextKey),
     })),
   };
+}
+
+/**
+ * Combines an output's optional description with its optional `contextKey` override into a single
+ * display value, e.g. `"Approve or reject — stored as context.managerApproved"`, or just
+ * `"stored as context.managerApproved"` when there's no description. Returns `undefined` when
+ * neither is present.
+ */
+function describeOutputValue(description: string | undefined, contextKey: string | undefined): string | undefined {
+  const storedAs = contextKey ? `stored as context.${contextKey}` : undefined;
+  if (description && storedAs) return `${description} — ${storedAs}`;
+  return description ?? storedAs;
 }
 
 function actionSections(config: Record<string, any>): DefinitionSection[] {
@@ -98,9 +112,10 @@ function actionSections(config: Record<string, any>): DefinitionSection[] {
   if (Array.isArray(outputs) && outputs.length > 0) {
     sections.push({
       label: 'Outputs',
-      fields: outputs.map((output: { name: string; type: string; required: boolean }) => ({
+      fields: outputs.map((output: { name: string; type: string; required: boolean; contextKey?: string }) => ({
         label: output.name,
         badge: output.type,
+        value: describeOutputValue(undefined, output.contextKey),
       })),
     });
   }
