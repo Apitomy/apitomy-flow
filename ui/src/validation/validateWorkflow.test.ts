@@ -659,6 +659,66 @@ describe('validateWorkflow', () => {
       expect(hasProblem(problems, 'INVALID_OUTPUT_EXPRESSION')).toBe(false);
       expect(hasProblem(problems, 'DUPLICATE_OUTPUT_NAME')).toBe(false);
     });
+
+    it('INVALID_OUTPUT_EXPRESSION for a malformed expression that is delimiter-balanced', () => {
+      // Balanced parens/brackets/quotes but not valid EL syntax — must be caught by real
+      // syntax parsing, not the delimiter-balance heuristic used for the pre-existing (and
+      // out-of-scope) edge-condition check.
+      const w = workflow(
+        [
+          node('start', 'start'),
+          node('r', 'receive-event', {
+            eventType: 'order.created',
+            outputs: [{ contextKey: 'orderId', expression: 'event. .id !!!' }],
+          }),
+          node('end', 'end'),
+        ],
+        [edge('e1', 'start', 'r'), edge('e2', 'r', 'end')],
+      );
+      expect(hasProblem(validateWorkflow(w), 'INVALID_OUTPUT_EXPRESSION')).toBe(true);
+    });
+
+    it('MISSING_OUTPUT_CONTEXT_KEY when contextKey is not a string', () => {
+      const w = workflow(
+        [
+          node('start', 'start'),
+          node('r', 'receive-event', {
+            eventType: 'order.created',
+            outputs: [{ contextKey: 42, expression: 'event.id' }],
+          }),
+          node('end', 'end'),
+        ],
+        [edge('e1', 'start', 'r'), edge('e2', 'r', 'end')],
+      );
+      expect(hasProblem(validateWorkflow(w), 'MISSING_OUTPUT_CONTEXT_KEY')).toBe(true);
+    });
+
+    it('MISSING_OUTPUT_EXPRESSION when expression is not a string', () => {
+      const w = workflow(
+        [
+          node('start', 'start'),
+          node('r', 'receive-event', {
+            eventType: 'order.created',
+            outputs: [{ contextKey: 'answer', expression: 42 }],
+          }),
+          node('end', 'end'),
+        ],
+        [edge('e1', 'start', 'r'), edge('e2', 'r', 'end')],
+      );
+      expect(hasProblem(validateWorkflow(w), 'MISSING_OUTPUT_EXPRESSION')).toBe(true);
+    });
+
+    it('MISSING_OUTPUT_CONTEXT_KEY when a mapping entry is not an object', () => {
+      const w = workflow(
+        [
+          node('start', 'start'),
+          node('r', 'receive-event', { eventType: 'order.created', outputs: [null] }),
+          node('end', 'end'),
+        ],
+        [edge('e1', 'start', 'r'), edge('e2', 'r', 'end')],
+      );
+      expect(hasProblem(validateWorkflow(w), 'MISSING_OUTPUT_CONTEXT_KEY')).toBe(true);
+    });
   });
 
   describe('human-task output metadata', () => {

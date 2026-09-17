@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonFormat;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -107,9 +108,11 @@ public record WorkflowInstance(
         public WorkflowInstance build() {
             Map<String, List<String>> frozenArrivals = new LinkedHashMap<>();
             joinArrivals.forEach((k, v) -> frozenArrivals.put(k, List.copyOf(v)));
+            // Map.copyOf rejects null values (e.g. an output mapping expression that legitimately
+            // resolves to null); wrap in an unmodifiable copy instead so such values are preserved.
             return new WorkflowInstance(id, workflowId, currentNodeId, status,
-                Map.copyOf(context), List.copyOf(history), List.copyOf(activeBranches),
-                Map.copyOf(frozenArrivals), failureReason, createdOn, updatedOn);
+                Collections.unmodifiableMap(new LinkedHashMap<>(context)), List.copyOf(history),
+                List.copyOf(activeBranches), Map.copyOf(frozenArrivals), failureReason, createdOn, updatedOn);
         }
     }
 }

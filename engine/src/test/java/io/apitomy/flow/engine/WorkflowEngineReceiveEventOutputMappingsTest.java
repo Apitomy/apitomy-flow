@@ -123,4 +123,74 @@ class WorkflowEngineReceiveEventOutputMappingsTest {
         assertEquals("A", afterSecond.context().get("firstOrderId"));
         assertEquals("B", afterSecond.context().get("secondOrderId"));
     }
+
+    @Test
+    void mappingExpressionResolvingToNullIsStoredInContextWithoutCrashing() {
+        WorkflowEngine engine = engine();
+        WorkflowNode receive = receiveEventNode("wait", "order.created", List.of(),
+            List.of(Map.of("contextKey", "orderId", "expression", "event.id")));
+        Workflow workflow = new Workflow("wf", "W", null, null,
+            List.of(startNode("start"), receive, endNode("end")),
+            List.of(edge("e1", "start", "wait"), edge("e2", "wait", "end")));
+        WorkflowInstance waiting = engine.startWorkflow(workflow, Map.of());
+
+        // The event has no "id" field, so "event.id" resolves to null.
+        WorkflowInstance completed = engine.completeNode(workflow, waiting, "wait",
+            new NodeResult(NodeResultStatus.COMPLETED, Map.of("other", "x")));
+
+        assertEquals(InstanceStatus.COMPLETED, completed.status());
+        assertTrue(completed.context().containsKey("orderId"));
+        assertNull(completed.context().get("orderId"));
+    }
+
+    @Test
+    void mappingEvaluationFailureRoutesThroughErrorHandlerInsteadOfThrowing() {
+        Exception[] capturedException = {null};
+        WorkflowNode[] capturedNode = {null};
+        WorkflowErrorHandler capturingHandler = new WorkflowErrorHandler() {
+            public ErrorResolution handleNodeError(WorkflowInstance i, WorkflowNode n,
+                                                    NodeResult r, Exception e) {
+                capturedException[0] = e;
+                capturedNode[0] = n;
+                return ErrorResolution.fail();
+            }
+            public ErrorResolution handleNoMatchingEdge(WorkflowInstance i, WorkflowNode n) {
+                return ErrorResolution.fail();
+            }
+        };
+        WorkflowEngine engine = new WorkflowEngine(NodeExecutorProvider.fromList(), List.of(), capturingHandler);
+        WorkflowNode receive = receiveEventNode("wait", "order.created", List.of(),
+            // Valid expression, but fails at evaluation time given the delivered event.
+            List.of(Map.of("contextKey", "total", "expression", "event.amount + 1")));
+        Workflow workflow = new Workflow("wf", "W", null, null,
+            List.of(startNode("start"), receive, endNode("end")),
+            List.of(edge("e1", "start", "wait"), edge("e2", "wait", "end")));
+        WorkflowInstance waiting = engine.startWorkflow(workflow, Map.of());
+
+        WorkflowInstance result = engine.completeNode(workflow, waiting, "wait",
+            new NodeResult(NodeResultStatus.COMPLETED, Map.of("amount", "not-a-number")));
+
+        assertEquals(InstanceStatus.FAILED, result.status());
+        assertNotNull(capturedException[0], "Error handler should receive the mapping evaluation exception");
+        assertInstanceOf(ConditionEvaluationException.class, capturedException[0]);
+        assertNotNull(capturedNode[0]);
+        assertEquals("wait", capturedNode[0].id());
+    }
+
+    @Test
+    void mappingEntriesWithNonStringContextKeyOrExpressionAreSkippedAtRuntime() {
+        WorkflowEngine engine = engine();
+        WorkflowNode receive = receiveEventNode("wait", "order.created", List.of(),
+            List.of(Map.of("contextKey", "answer", "expression", 42)));
+        Workflow workflow = new Workflow("wf", "W", null, null,
+            List.of(startNode("start"), receive, endNode("end")),
+            List.of(edge("e1", "start", "wait"), edge("e2", "wait", "end")));
+        WorkflowInstance waiting = engine.startWorkflow(workflow, Map.of());
+
+        WorkflowInstance completed = engine.completeNode(workflow, waiting, "wait",
+            new NodeResult(NodeResultStatus.COMPLETED, Map.of("x", "y")));
+
+        assertEquals(InstanceStatus.COMPLETED, completed.status());
+        assertFalse(completed.context().containsKey("answer"), "non-string expression entries must be skipped, not stringified");
+    }
 }

@@ -127,12 +127,17 @@ function actionSections(config: Record<string, any>): DefinitionSection[] {
 function receiveEventOutputsSection(config: Record<string, any>): DefinitionSection | null {
   const outputs = config.outputs;
   if (!Array.isArray(outputs) || outputs.length === 0) return null;
-  return {
-    label: 'Output mappings',
-    fields: outputs.map((output: { contextKey?: string; expression?: string }) => ({
+  const fields = outputs
+    .filter((output): output is { contextKey?: string; expression?: string } =>
+      typeof output === 'object' && output !== null)
+    .map(output => ({
       label: output.contextKey ?? '(missing contextKey)',
       value: output.expression,
-    })),
+    }));
+  if (fields.length === 0) return null;
+  return {
+    label: 'Output mappings',
+    fields,
   };
 }
 

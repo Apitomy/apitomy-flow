@@ -111,13 +111,24 @@ public class WorkflowEngine {
         if (result.status() == NodeResultStatus.PENDING) {
             WorkflowInstance reparked = instance;
             if (result.output() != null && !result.output().isEmpty()) {
-                reparked = reparked.toBuilder().mergeContext(resolveMergeOutput(instance, node, result.output())).build();
+                Map<String, Object> resolvedOutput;
+                try {
+                    resolvedOutput = resolveMergeOutput(instance, node, result.output());
+                } catch (Exception e) {
+                    return resolveMergeOutputError(workflow, instance, branch.branchId(), node, result, e);
+                }
+                reparked = reparked.toBuilder().mergeContext(resolvedOutput).build();
             }
             return reparked.toBuilder().status(InstanceStatus.WAITING).updatedOn(Instant.now()).build();
         }
 
         // COMPLETED — record output on the branch's history entry, merge context, then continue this branch.
-        Map<String, Object> resolvedOutput = resolveMergeOutput(instance, node, result.output());
+        Map<String, Object> resolvedOutput;
+        try {
+            resolvedOutput = resolveMergeOutput(instance, node, result.output());
+        } catch (Exception e) {
+            return resolveMergeOutputError(workflow, instance, branch.branchId(), node, result, e);
+        }
         WorkflowInstance updated = completeHistoryEntry(instance, branch.branchId(), nodeId,
             Instant.now(), resolvedOutput);
         updated = updated.toBuilder()
@@ -146,6 +157,31 @@ public class WorkflowEngine {
                 "Multiple branches are waiting; use completeNode(workflow, instance, nodeId, result)");
         }
         return completeNode(workflow, instance, nodeId, result);
+    }
+
+    /**
+     * Reuses the existing error handler when {@link #resolveMergeOutput} throws (e.g. a receive-event
+     * output mapping's expression fails to evaluate against the delivered event/context), instead of
+     * letting the exception propagate out of {@link #completeNode} and leave the instance stuck in
+     * WAITING. Mirrors {@link #resolveEdgeError}'s handler-dispatch/fail-safe pattern.
+     *
+     * @param workflow the workflow definition
+     * @param instance the instance being completed
+     * @param branchId the id of the branch whose node's output failed to resolve
+     * @param node     the node whose output mapping failed to resolve
+     * @param result   the node result that was being merged
+     * @param e        the failure that occurred while resolving the merge output
+     * @return the resolved instance
+     */
+    private WorkflowInstance resolveMergeOutputError(Workflow workflow, WorkflowInstance instance, String branchId,
+                                                      WorkflowNode node, NodeResult result, Exception e) {
+        ErrorResolution resolution;
+        try {
+            resolution = errorHandler.handleNodeError(instance, node, result, e);
+        } catch (Exception handlerError) {
+            return failWorkflow(instance, "Error handler threw: " + handlerError.getMessage(), handlerError);
+        }
+        return applyResolution(workflow, instance, branchId, node, resolution);
     }
 
     private WorkflowInstance handleFailedCompletion(Workflow workflow, WorkflowInstance instance,
@@ -1102,20 +1138,18 @@ public class WorkflowEngine {
     /**
      * Evaluates each raw {@code {contextKey, expression}} mapping entry against the given
      * {@code event} and {@code context}, building the map of resolved values keyed by
-     * {@code contextKey}. Entries missing either field are skipped (caught separately by
-     * validation).
+     * {@code contextKey}. Entries missing either field, or with a non-string {@code contextKey}
+     * or {@code expression}, are skipped (flagged separately by validation) rather than coerced
+     * via {@code String.valueOf}, matching the UI simulator's equivalent runtime check.
      */
     private Map<String, Object> applyEventOutputMappings(List<?> outputDefs, Map<String, Object> context,
                                                           Map<String, Object> event) {
         Map<String, Object> mapped = new HashMap<>();
         for (Object defObj : outputDefs) {
-            if (defObj instanceof Map<?, ?> def) {
-                Object contextKeyVal = def.get("contextKey");
-                Object expressionVal = def.get("expression");
-                if (contextKeyVal != null && expressionVal != null) {
-                    mapped.put(String.valueOf(contextKeyVal),
-                        conditionEvaluator.resolve(String.valueOf(expressionVal), context, event));
-                }
+            if (defObj instanceof Map<?, ?> def
+                && def.get("contextKey") instanceof String contextKey && !contextKey.isBlank()
+                && def.get("expression") instanceof String expression && !expression.isBlank()) {
+                mapped.put(contextKey, conditionEvaluator.resolve(expression, context, event));
             }
         }
         return mapped;

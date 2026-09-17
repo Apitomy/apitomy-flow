@@ -222,6 +222,31 @@ describe('getNodeDefinition', () => {
     expect(config!.fields.some(f => f.label === 'outputs')).toBe(false);
   });
 
+  it('does not throw and skips a null entry in a receive-event node\'s outputs array', () => {
+    const def = getNodeDefinition(node({
+      type: 'receive-event',
+      config: {
+        eventType: 'order.created',
+        outputs: [null, { contextKey: 'orderId', expression: 'event.payload.id' }],
+      },
+    }));
+
+    const outputs = def.sections.find(s => s.label === 'Output mappings');
+    expect(outputs).toBeDefined();
+    expect(outputs!.fields).toEqual([
+      { label: 'orderId', badge: undefined, value: 'event.payload.id' },
+    ]);
+  });
+
+  it('does not throw when a receive-event node\'s outputs config is not an array', () => {
+    const def = getNodeDefinition(node({
+      type: 'receive-event',
+      config: { eventType: 'order.created', outputs: 'not-an-array' },
+    }));
+
+    expect(def.sections.find(s => s.label === 'Output mappings')).toBeUndefined();
+  });
+
   it('falls back to a generic Config section for node types without a special-cased shape', () => {
     const def = getNodeDefinition(node({
       type: 'wait',

@@ -38,6 +38,20 @@ interface PropertiesPanelProps {
 }
 
 /**
+ * Reads a node's `config.outputs` as a list of receive-event output mappings, defensively:
+ * a missing/non-array `outputs` yields an empty list, and any non-object entry (e.g. `null`
+ * from a malformed imported definition) is dropped rather than crashing the editor. Missing
+ * `contextKey`/`expression` fields on an otherwise-valid entry default to `''` for editing.
+ */
+function getOutputMappings(config: Record<string, any>): EventOutputMapping[] {
+  const outputs = config.outputs;
+  if (!Array.isArray(outputs)) return [];
+  return outputs
+    .filter((o): o is Partial<EventOutputMapping> => typeof o === 'object' && o !== null)
+    .map(o => ({ contextKey: o.contextKey ?? '', expression: o.expression ?? '' }));
+}
+
+/**
  * Lists the validation problems for the selected node (errors first) at the top
  * of the properties panel, so the reader can see exactly what is wrong with the
  * node they are editing.
@@ -691,15 +705,15 @@ export function PropertiesPanel({ selectedNode, selectedEdge, nodeProblems = [],
             <div className="properties-panel__field">
               <label>Output mappings</label>
               <div className="properties-panel__inputs-list">
-                {((selectedNode.data.config.outputs as EventOutputMapping[]) || []).map((mapping, i) => (
+                {getOutputMappings(selectedNode.data.config).map((mapping, i) => (
                   <div key={i} className="properties-panel__input-item">
                     <div className="properties-panel__input-row">
                       <input
                         type="text"
-                        value={mapping.contextKey ?? ''}
+                        value={mapping.contextKey}
                         placeholder="Context key"
                         onChange={(e) => {
-                          const outputs = [...((selectedNode.data.config.outputs as EventOutputMapping[]) || [])];
+                          const outputs = getOutputMappings(selectedNode.data.config);
                           outputs[i] = { ...outputs[i], contextKey: e.target.value };
                           onNodeChange(selectedNode.id, {
                             config: { ...selectedNode.data.config, outputs },
@@ -708,10 +722,10 @@ export function PropertiesPanel({ selectedNode, selectedEdge, nodeProblems = [],
                       />
                       <input
                         type="text"
-                        value={mapping.expression ?? ''}
+                        value={mapping.expression}
                         placeholder="e.g. event.payload.id"
                         onChange={(e) => {
-                          const outputs = [...((selectedNode.data.config.outputs as EventOutputMapping[]) || [])];
+                          const outputs = getOutputMappings(selectedNode.data.config);
                           outputs[i] = { ...outputs[i], expression: e.target.value };
                           onNodeChange(selectedNode.id, {
                             config: { ...selectedNode.data.config, outputs },
@@ -722,8 +736,7 @@ export function PropertiesPanel({ selectedNode, selectedEdge, nodeProblems = [],
                         className="properties-panel__match-remove"
                         title="Remove output mapping"
                         onClick={() => {
-                          const outputs = ((selectedNode.data.config.outputs as EventOutputMapping[]) || [])
-                            .filter((_, j) => j !== i);
+                          const outputs = getOutputMappings(selectedNode.data.config).filter((_, j) => j !== i);
                           onNodeChange(selectedNode.id, {
                             config: { ...selectedNode.data.config, outputs },
                           });
@@ -738,7 +751,7 @@ export function PropertiesPanel({ selectedNode, selectedEdge, nodeProblems = [],
                   className="properties-panel__match-add"
                   onClick={() => {
                     const outputs = [
-                      ...((selectedNode.data.config.outputs as EventOutputMapping[]) || []),
+                      ...getOutputMappings(selectedNode.data.config),
                       { contextKey: '', expression: '' },
                     ];
                     onNodeChange(selectedNode.id, {

@@ -242,7 +242,15 @@ export function resumeSimulation(
         return state;
     }
     const targetNode = findNode(workflow, target.nodeId);
-    const output = resolveMergeOutput(targetNode, state.context, mock.output ?? {});
+    let output: Record<string, unknown>;
+    try {
+        output = resolveMergeOutput(targetNode, state.context, mock.output ?? {});
+    } catch (e) {
+        if (e instanceof ElEvaluationError) {
+            return derive(workflow, fail(state, { message: e.message, nodeId: target.nodeId }));
+        }
+        throw e;
+    }
     const context = { ...state.context, ...output };
     const history = recordOutputOnBranch(state.history, target.branchId, target.nodeId, output);
     const parkedBranchIds = state.parkedBranchIds.filter(id => id !== target.branchId);
@@ -273,19 +281,22 @@ function resolveMergeOutput(
 /**
  * Evaluates each raw `{contextKey, expression}` mapping entry against the given `event` and
  * `context`, building the map of resolved values keyed by `contextKey`. Entries missing either
- * field are skipped (caught separately by validation).
+ * field, or with a non-string `contextKey`/`expression`, are skipped (flagged separately by
+ * validation) rather than coerced, matching the Java engine's equivalent runtime check. Uses a
+ * null-prototype accumulator so a `contextKey` of `"__proto__"` lands as an own property instead
+ * of being swallowed by the inherited prototype setter.
  */
 function applyEventOutputMappings(
     outputDefs: unknown[],
     context: Record<string, unknown>,
     event: Record<string, unknown>,
 ): Record<string, unknown> {
-    const mapped: Record<string, unknown> = {};
+    const mapped: Record<string, unknown> = Object.create(null);
     for (const def of outputDefs) {
         if (typeof def !== 'object' || def === null) continue;
         const contextKey = (def as Record<string, unknown>).contextKey;
         const expression = (def as Record<string, unknown>).expression;
-        if (typeof contextKey === 'string' && contextKey !== '' && typeof expression === 'string') {
+        if (typeof contextKey === 'string' && contextKey.trim() !== '' && typeof expression === 'string' && expression.trim() !== '') {
             mapped[contextKey] = resolveExpression(expression, { context, event });
         }
     }
