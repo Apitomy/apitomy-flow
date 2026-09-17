@@ -1,7 +1,7 @@
 name: NPM Publish Workflow
 on:
   release:
-    types: [created]
+    types: [released]
   workflow_dispatch:
     inputs:
       release-version:
