@@ -583,6 +583,84 @@ describe('validateWorkflow', () => {
     });
   });
 
+  describe('receive-event output mappings', () => {
+    it('MISSING_OUTPUT_CONTEXT_KEY when a mapping has no contextKey', () => {
+      const w = workflow(
+        [
+          node('start', 'start'),
+          node('r', 'receive-event', { eventType: 'order.created', outputs: [{ expression: 'event.id' }] }),
+          node('end', 'end'),
+        ],
+        [edge('e1', 'start', 'r'), edge('e2', 'r', 'end')],
+      );
+      expect(hasProblem(validateWorkflow(w), 'MISSING_OUTPUT_CONTEXT_KEY')).toBe(true);
+    });
+
+    it('MISSING_OUTPUT_EXPRESSION when a mapping has no expression', () => {
+      const w = workflow(
+        [
+          node('start', 'start'),
+          node('r', 'receive-event', { eventType: 'order.created', outputs: [{ contextKey: 'orderId' }] }),
+          node('end', 'end'),
+        ],
+        [edge('e1', 'start', 'r'), edge('e2', 'r', 'end')],
+      );
+      expect(hasProblem(validateWorkflow(w), 'MISSING_OUTPUT_EXPRESSION')).toBe(true);
+    });
+
+    it('INVALID_OUTPUT_EXPRESSION when a mapping\'s expression is not valid EL', () => {
+      const w = workflow(
+        [
+          node('start', 'start'),
+          node('r', 'receive-event', {
+            eventType: 'order.created',
+            outputs: [{ contextKey: 'orderId', expression: '(((unbalanced' }],
+          }),
+          node('end', 'end'),
+        ],
+        [edge('e1', 'start', 'r'), edge('e2', 'r', 'end')],
+      );
+      expect(hasProblem(validateWorkflow(w), 'INVALID_OUTPUT_EXPRESSION')).toBe(true);
+    });
+
+    it('DUPLICATE_OUTPUT_NAME when two mappings on the same node share a contextKey', () => {
+      const w = workflow(
+        [
+          node('start', 'start'),
+          node('r', 'receive-event', {
+            eventType: 'order.created',
+            outputs: [
+              { contextKey: 'orderId', expression: 'event.id' },
+              { contextKey: 'orderId', expression: 'event.otherId' },
+            ],
+          }),
+          node('end', 'end'),
+        ],
+        [edge('e1', 'start', 'r'), edge('e2', 'r', 'end')],
+      );
+      expect(hasProblem(validateWorkflow(w), 'DUPLICATE_OUTPUT_NAME')).toBe(true);
+    });
+
+    it('no output-mapping problems for a valid mapping', () => {
+      const w = workflow(
+        [
+          node('start', 'start'),
+          node('r', 'receive-event', {
+            eventType: 'order.created',
+            outputs: [{ contextKey: 'orderId', expression: 'event.id' }],
+          }),
+          node('end', 'end'),
+        ],
+        [edge('e1', 'start', 'r'), edge('e2', 'r', 'end')],
+      );
+      const problems = validateWorkflow(w);
+      expect(hasProblem(problems, 'MISSING_OUTPUT_CONTEXT_KEY')).toBe(false);
+      expect(hasProblem(problems, 'MISSING_OUTPUT_EXPRESSION')).toBe(false);
+      expect(hasProblem(problems, 'INVALID_OUTPUT_EXPRESSION')).toBe(false);
+      expect(hasProblem(problems, 'DUPLICATE_OUTPUT_NAME')).toBe(false);
+    });
+  });
+
   describe('human-task output metadata', () => {
     function humanTask(outputs: any[]): Workflow {
       return workflow(

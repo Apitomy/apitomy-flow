@@ -278,6 +278,9 @@ function validateSemantics(workflow: Workflow, problems: ValidationProblem[]) {
     } else if (typeof eventTypeVal !== 'string' || eventTypeVal.trim() === '') {
       problems.push(problem('warning', 'INVALID_EVENT_TYPE_VALUE', 'Receive-event node eventType must be a non-blank string', node.id));
     }
+    if (Array.isArray(node.config.outputs) && node.config.outputs.length > 0) {
+      validateEventOutputMappings(node.config.outputs, node.id, problems);
+    }
   }
 
   const receivers = workflow.nodes.filter(n => n.type === 'receive-event' && n.config.eventType);
@@ -434,6 +437,35 @@ function validateOutputNames(outputDefs: unknown[], nodeId: string, problems: Va
         }
         contextKeys.add(contextKey);
       }
+    }
+  }
+}
+
+function validateEventOutputMappings(outputDefs: unknown[], nodeId: string, problems: ValidationProblem[]) {
+  const contextKeys = new Set<string>();
+  for (const defObj of outputDefs) {
+    if (typeof defObj !== 'object' || defObj === null) continue;
+    const def = defObj as Record<string, unknown>;
+    const contextKeyVal = def.contextKey;
+    if (contextKeyVal === undefined || contextKeyVal === null || String(contextKeyVal).trim() === '') {
+      problems.push(problem('warning', 'MISSING_OUTPUT_CONTEXT_KEY',
+        'Receive-event output mapping has no contextKey', nodeId));
+      continue;
+    }
+    const contextKey = String(contextKeyVal);
+    if (contextKeys.has(contextKey)) {
+      problems.push(problem('warning', 'DUPLICATE_OUTPUT_NAME',
+        `Duplicate output context key: ${contextKey}`, nodeId));
+    }
+    contextKeys.add(contextKey);
+
+    const expressionVal = def.expression;
+    if (expressionVal === undefined || expressionVal === null || String(expressionVal).trim() === '') {
+      problems.push(problem('warning', 'MISSING_OUTPUT_EXPRESSION',
+        `Receive-event output mapping "${contextKey}" has no EL expression`, nodeId));
+    } else if (!isValidCondition(String(expressionVal))) {
+      problems.push(problem('error', 'INVALID_OUTPUT_EXPRESSION',
+        `Receive-event output mapping "${contextKey}" is not valid EL: ${expressionVal}`, nodeId));
     }
   }
 }
