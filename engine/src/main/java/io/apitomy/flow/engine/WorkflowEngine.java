@@ -1077,16 +1077,6 @@ public class WorkflowEngine {
     }
 
     /**
-     * Remaps a node's raw produced output map so each value is keyed by its declared output's
-     * effective context key (the {@code contextKey} override when present, else the declared
-     * {@code name}) rather than always by {@code name}. Keys not matching any declared output for
-     * this node (or present when the node declares no {@code outputs}) pass through unchanged.
-     *
-     * @param node      the node that produced the output
-     * @param rawOutput the raw output map, keyed by declared output name
-     * @return a new map with keys renamed to their effective context keys
-     */
-    /**
      * Resolves what should actually be merged into context for a completed node's raw output:
      * for a {@code receive-event} node with a non-empty {@code config.outputs} (output mappings),
      * evaluates each mapping's expression against the incoming event and the instance's current
@@ -1131,6 +1121,16 @@ public class WorkflowEngine {
         return mapped;
     }
 
+    /**
+     * Remaps a node's raw produced output map so each value is keyed by its declared output's
+     * effective context key (the {@code contextKey} override when present, else the declared
+     * {@code name}) rather than always by {@code name}. Keys not matching any declared output for
+     * this node (or present when the node declares no {@code outputs}) pass through unchanged.
+     *
+     * @param node      the node that produced the output
+     * @param rawOutput the raw output map, keyed by declared output name
+     * @return a new map with keys renamed to their effective context keys
+     */
     private Map<String, Object> resolveContextKeys(WorkflowNode node, Map<String, Object> rawOutput) {
         if (rawOutput == null || rawOutput.isEmpty()) {
             return rawOutput;
