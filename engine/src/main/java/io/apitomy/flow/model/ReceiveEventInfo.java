@@ -6,5 +6,6 @@ public record ReceiveEventInfo(
     String nodeId,
     String nodeName,
     String eventType,
-    List<String> matchExpressions
+    List<String> matchExpressions,
+    List<EventOutputMapping> outputMappings
 ) {}

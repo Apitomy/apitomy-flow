@@ -340,7 +340,19 @@ public class WorkflowEngine {
                 .toList();
         }
 
-        return new ReceiveEventInfo(node.id(), node.name(), eventType, matchExpressions);
+        List<EventOutputMapping> outputMappings = List.of();
+        if (node.config().get("outputs") instanceof List<?> outputDefs) {
+            outputMappings = outputDefs.stream()
+                .filter(Map.class::isInstance)
+                .map(o -> (Map<?, ?>) o)
+                .map(o -> new EventOutputMapping(
+                    o.get("contextKey") != null ? String.valueOf(o.get("contextKey")) : null,
+                    o.get("expression") != null ? String.valueOf(o.get("expression")) : null
+                ))
+                .toList();
+        }
+
+        return new ReceiveEventInfo(node.id(), node.name(), eventType, matchExpressions, outputMappings);
     }
 
     /**
