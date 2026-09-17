@@ -253,7 +253,17 @@ function App() {
   const masthead = (
     <Masthead>
       <MastheadMain>
-        <MastheadBrand>Apitomy Flow Demo</MastheadBrand>
+        <MastheadBrand>
+          Apitomy Flow Demo
+          <a
+            href="https://apitomy.io/projects/flow/"
+            target="_blank"
+            rel="noreferrer"
+            style={{ marginLeft: '1rem', fontSize: '0.75rem', fontWeight: 'normal' }}
+          >
+            apitomy.io <ExternalLinkAltIcon />
+          </a>
+        </MastheadBrand>
       </MastheadMain>
       <MastheadContent>
         <Toolbar id="masthead-theme-toolbar" isStatic>
