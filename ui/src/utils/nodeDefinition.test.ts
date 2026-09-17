@@ -184,6 +184,44 @@ describe('getNodeDefinition', () => {
     ]);
   });
 
+  it('builds an "Output mappings" section from a receive-event node\'s config.outputs array', () => {
+    const def = getNodeDefinition(node({
+      type: 'receive-event',
+      config: {
+        eventType: 'order.created',
+        outputs: [{ contextKey: 'orderId', expression: 'event.payload.id' }],
+      },
+    }));
+
+    const outputs = def.sections.find(s => s.label === 'Output mappings');
+    expect(outputs).toBeDefined();
+    expect(outputs!.fields).toEqual([
+      { label: 'orderId', badge: undefined, value: 'event.payload.id' },
+    ]);
+  });
+
+  it('omits the "Output mappings" section for a receive-event node with no outputs declared', () => {
+    const def = getNodeDefinition(node({
+      type: 'receive-event',
+      config: { eventType: 'order.created' },
+    }));
+
+    expect(def.sections.find(s => s.label === 'Output mappings')).toBeUndefined();
+  });
+
+  it('excludes outputs from the generic Config fallback for receive-event nodes', () => {
+    const def = getNodeDefinition(node({
+      type: 'receive-event',
+      config: {
+        eventType: 'order.created',
+        outputs: [{ contextKey: 'orderId', expression: 'event.payload.id' }],
+      },
+    }));
+
+    const config = def.sections.find(s => s.label === 'Config');
+    expect(config!.fields.some(f => f.label === 'outputs')).toBe(false);
+  });
+
   it('falls back to a generic Config section for node types without a special-cased shape', () => {
     const def = getNodeDefinition(node({
       type: 'wait',
