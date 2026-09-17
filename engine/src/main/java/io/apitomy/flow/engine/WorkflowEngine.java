@@ -111,13 +111,13 @@ public class WorkflowEngine {
         if (result.status() == NodeResultStatus.PENDING) {
             WorkflowInstance reparked = instance;
             if (result.output() != null && !result.output().isEmpty()) {
-                reparked = reparked.toBuilder().mergeContext(resolveContextKeys(node, result.output())).build();
+                reparked = reparked.toBuilder().mergeContext(resolveMergeOutput(instance, node, result.output())).build();
             }
             return reparked.toBuilder().status(InstanceStatus.WAITING).updatedOn(Instant.now()).build();
         }
 
         // COMPLETED — record output on the branch's history entry, merge context, then continue this branch.
-        Map<String, Object> resolvedOutput = resolveContextKeys(node, result.output());
+        Map<String, Object> resolvedOutput = resolveMergeOutput(instance, node, result.output());
         WorkflowInstance updated = completeHistoryEntry(instance, branch.branchId(), nodeId,
             Instant.now(), resolvedOutput);
         updated = updated.toBuilder()
@@ -1086,6 +1086,51 @@ public class WorkflowEngine {
      * @param rawOutput the raw output map, keyed by declared output name
      * @return a new map with keys renamed to their effective context keys
      */
+    /**
+     * Resolves what should actually be merged into context for a completed node's raw output:
+     * for a {@code receive-event} node with a non-empty {@code config.outputs} (output mappings),
+     * evaluates each mapping's expression against the incoming event and the instance's current
+     * (pre-merge) context; for every other node — including a receive-event node with no
+     * mappings declared — falls through to the existing {@link #resolveContextKeys} rename logic,
+     * which is a no-op when the node declares no {@code outputs} at all (preserving today's flat
+     * merge for receive-event nodes with no mappings).
+     *
+     * @param instance  the instance being completed (its pre-merge context is available to mapping expressions)
+     * @param node      the node that produced the output
+     * @param rawOutput the raw output map (for receive-event, the raw event payload)
+     * @return the map to actually merge into context
+     */
+    private Map<String, Object> resolveMergeOutput(WorkflowInstance instance, WorkflowNode node,
+                                                    Map<String, Object> rawOutput) {
+        if (node.type() == NodeType.RECEIVE_EVENT
+            && node.config().get("outputs") instanceof List<?> outputDefs && !outputDefs.isEmpty()) {
+            return applyEventOutputMappings(outputDefs, instance.context(), rawOutput == null ? Map.of() : rawOutput);
+        }
+        return resolveContextKeys(node, rawOutput);
+    }
+
+    /**
+     * Evaluates each raw {@code {contextKey, expression}} mapping entry against the given
+     * {@code event} and {@code context}, building the map of resolved values keyed by
+     * {@code contextKey}. Entries missing either field are skipped (caught separately by
+     * validation).
+     */
+    private Map<String, Object> applyEventOutputMappings(List<?> outputDefs, Map<String, Object> context,
+                                                          Map<String, Object> event) {
+        Map<String, Object> mapped = new HashMap<>();
+        for (Object defObj : outputDefs) {
+            if (defObj instanceof Map<?, ?> def) {
+                Object contextKeyVal = def.get("contextKey");
+                Object expressionVal = def.get("expression");
+                if (contextKeyVal != null && expressionVal != null) {
+                    mapped.put(String.valueOf(contextKeyVal),
+                        conditionEvaluator.resolve(String.valueOf(expressionVal), context, event));
+                }
+            }
+        }
+        return mapped;
+    }
+
     private Map<String, Object> resolveContextKeys(WorkflowNode node, Map<String, Object> rawOutput) {
         if (rawOutput == null || rawOutput.isEmpty()) {
             return rawOutput;
