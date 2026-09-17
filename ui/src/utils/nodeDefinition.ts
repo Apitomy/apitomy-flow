@@ -136,7 +136,8 @@ function receiveEventOutputsSection(config: Record<string, any>): DefinitionSect
   };
 }
 
-function genericConfigSection(config: Record<string, any>, handledKeys: Set<string>): DefinitionSection | null {  const entries = Object.entries(config).filter(([key]) => !handledKeys.has(key));
+function genericConfigSection(config: Record<string, any>, handledKeys: Set<string>): DefinitionSection | null {
+  const entries = Object.entries(config).filter(([key]) => !handledKeys.has(key));
   if (entries.length === 0) return null;
   return {
     label: 'Config',
