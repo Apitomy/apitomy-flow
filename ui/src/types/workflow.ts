@@ -65,6 +65,19 @@ export interface ActionOutputConfig {
   contextKey?: string;
 }
 
+/**
+ * A single output mapping declared on a `receive-event` node: an EL `expression` (evaluated
+ * against the `event` and `context` root beans) whose result is stored under `contextKey` when
+ * the node's branch completes. When a receive-event node declares no mappings, its entire raw
+ * event payload is flat-merged into context instead (unchanged legacy behavior).
+ */
+export interface EventOutputMapping {
+  /** The context key the computed value is stored under. */
+  contextKey: string;
+  /** The EL expression to evaluate, with `event` and `context` root beans available. */
+  expression: string;
+}
+
 export interface WorkflowNode {
   id: string;
   type: NodeType;
