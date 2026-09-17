@@ -14,7 +14,7 @@ import { TimesIcon } from '@patternfly/react-icons';
 import { type FlowNodeData } from '../../utils/conversion.ts';
 import { type EditorSpi } from '../../types/spi.ts';
 import { type ActionTypeDescriptor } from '../../types/spi.ts';
-import { type HumanTaskOutput, type OutputOption, type OutputWidget, type ActionOutputConfig } from '../../types/workflow.ts';
+import { type HumanTaskOutput, type OutputOption, type OutputWidget, type ActionOutputConfig, type EventOutputMapping } from '../../types/workflow.ts';
 import { type ValidationProblem } from '../../types/validation.ts';
 import { mapToPairs, pairsToMap, duplicateKeys, nextPairId, type KeyValuePair } from '../../utils/mapInputs.ts';
 import { evaluateCondition, ElEvaluationError } from '../../simulation/elEvaluator.ts';
@@ -685,6 +685,68 @@ export function PropertiesPanel({ selectedNode, selectedEdge, nodeProblems = [],
                   }}
                 >
                   + Add expression
+                </button>
+              </div>
+            </div>
+            <div className="properties-panel__field">
+              <label>Output mappings</label>
+              <div className="properties-panel__inputs-list">
+                {((selectedNode.data.config.outputs as EventOutputMapping[]) || []).map((mapping, i) => (
+                  <div key={i} className="properties-panel__input-item">
+                    <div className="properties-panel__input-row">
+                      <input
+                        type="text"
+                        value={mapping.contextKey ?? ''}
+                        placeholder="Context key"
+                        onChange={(e) => {
+                          const outputs = [...((selectedNode.data.config.outputs as EventOutputMapping[]) || [])];
+                          outputs[i] = { ...outputs[i], contextKey: e.target.value };
+                          onNodeChange(selectedNode.id, {
+                            config: { ...selectedNode.data.config, outputs },
+                          });
+                        }}
+                      />
+                      <input
+                        type="text"
+                        value={mapping.expression ?? ''}
+                        placeholder="e.g. event.payload.id"
+                        onChange={(e) => {
+                          const outputs = [...((selectedNode.data.config.outputs as EventOutputMapping[]) || [])];
+                          outputs[i] = { ...outputs[i], expression: e.target.value };
+                          onNodeChange(selectedNode.id, {
+                            config: { ...selectedNode.data.config, outputs },
+                          });
+                        }}
+                      />
+                      <button
+                        className="properties-panel__match-remove"
+                        title="Remove output mapping"
+                        onClick={() => {
+                          const outputs = ((selectedNode.data.config.outputs as EventOutputMapping[]) || [])
+                            .filter((_, j) => j !== i);
+                          onNodeChange(selectedNode.id, {
+                            config: { ...selectedNode.data.config, outputs },
+                          });
+                        }}
+                      >
+                        &times;
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                <button
+                  className="properties-panel__match-add"
+                  onClick={() => {
+                    const outputs = [
+                      ...((selectedNode.data.config.outputs as EventOutputMapping[]) || []),
+                      { contextKey: '', expression: '' },
+                    ];
+                    onNodeChange(selectedNode.id, {
+                      config: { ...selectedNode.data.config, outputs },
+                    });
+                  }}
+                >
+                  + Add output mapping
                 </button>
               </div>
             </div>
