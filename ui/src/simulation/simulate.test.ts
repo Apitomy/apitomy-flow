@@ -176,6 +176,128 @@ describe('node lifecycle', () => {
         expect(state.context.secondResult).toBe('B');
     });
 
+    it('preserves the flat-merge for a receive-event node with no output mappings declared', () => {
+        const wf = workflow(
+            [node('start', 'start'), node('recv', 'receive-event', { eventType: 'order.created' }), node('end', 'end')],
+            [edge('e1', 'start', 'recv'), edge('e2', 'recv', 'end')],
+        );
+        let state = stepSimulation(wf, startSimulation(wf, {}));
+        state = resumeSimulation(wf, state, { output: { orderId: 'ord-42', storeId: 's1' } });
+        expect(state.context.orderId).toBe('ord-42');
+        expect(state.context.storeId).toBe('s1');
+    });
+
+    it('evaluates a receive-event node\'s output mappings against the event, replacing the flat merge', () => {
+        const wf = workflow(
+            [
+                node('start', 'start'),
+                node('recv', 'receive-event', {
+                    eventType: 'order.created',
+                    outputs: [{ contextKey: 'orderId', expression: 'event.payload.id' }],
+                }),
+                node('end', 'end'),
+            ],
+            [edge('e1', 'start', 'recv'), edge('e2', 'recv', 'end')],
+        );
+        let state = stepSimulation(wf, startSimulation(wf, {}));
+        state = resumeSimulation(wf, state, { output: { payload: { id: 'ord-42' }, storeId: 's1' } });
+        expect(state.context.orderId).toBe('ord-42');
+        expect(state.context.storeId).toBeUndefined();
+        expect(state.context.payload).toBeUndefined();
+    });
+
+    it('lets a receive-event output mapping expression reference existing context', () => {
+        const wf = workflow(
+            [
+                node('start', 'start'),
+                node('recv', 'receive-event', {
+                    eventType: 'order.created',
+                    outputs: [{ contextKey: 'region', expression: 'context.defaultRegion' }],
+                }),
+                node('end', 'end'),
+            ],
+            [edge('e1', 'start', 'recv'), edge('e2', 'recv', 'end')],
+        );
+        let state = stepSimulation(wf, startSimulation(wf, { defaultRegion: 'us-east' }));
+        state = resumeSimulation(wf, state, { output: { orderId: 'ord-42' } });
+        expect(state.context.region).toBe('us-east');
+    });
+
+    it('stores a mapping expression that resolves to null without throwing', () => {
+        const wf = workflow(
+            [
+                node('start', 'start'),
+                node('recv', 'receive-event', {
+                    eventType: 'order.created',
+                    outputs: [{ contextKey: 'orderId', expression: 'event.id' }],
+                }),
+                node('end', 'end'),
+            ],
+            [edge('e1', 'start', 'recv'), edge('e2', 'recv', 'end')],
+        );
+        let state = stepSimulation(wf, startSimulation(wf, {}));
+        // The event has no "id" field, so "event.id" resolves to null.
+        state = resumeSimulation(wf, state, { output: { other: 'x' } });
+        expect(state.status).toBe('running');
+        expect(state.context).toHaveProperty('orderId');
+        expect(state.context.orderId).toBeNull();
+    });
+
+    it('fails the simulation when a mapping expression throws instead of resuming successfully', () => {
+        const wf = workflow(
+            [
+                node('start', 'start'),
+                node('recv', 'receive-event', {
+                    eventType: 'order.created',
+                    outputs: [{ contextKey: 'total', expression: 'event.amount + 1' }],
+                }),
+                node('end', 'end'),
+            ],
+            [edge('e1', 'start', 'recv'), edge('e2', 'recv', 'end')],
+        );
+        let state = stepSimulation(wf, startSimulation(wf, {}));
+        state = resumeSimulation(wf, state, { output: { amount: 'not-a-number' } });
+        expect(state.status).toBe('failed');
+        expect(state.error?.nodeId).toBe('recv');
+    });
+
+    it('skips a mapping entry with a non-string contextKey or expression instead of coercing it', () => {
+        const wf = workflow(
+            [
+                node('start', 'start'),
+                node('recv', 'receive-event', {
+                    eventType: 'order.created',
+                    outputs: [{ contextKey: 'answer', expression: 42 }],
+                }),
+                node('end', 'end'),
+            ],
+            [edge('e1', 'start', 'recv'), edge('e2', 'recv', 'end')],
+        );
+        let state = stepSimulation(wf, startSimulation(wf, {}));
+        state = resumeSimulation(wf, state, { output: { x: 'y' } });
+        expect(state.status).toBe('running');
+        expect(state.context).not.toHaveProperty('answer');
+    });
+
+    it('stores a mapping to the "__proto__" context key as an own property', () => {
+        const wf = workflow(
+            [
+                node('start', 'start'),
+                node('recv', 'receive-event', {
+                    eventType: 'order.created',
+                    outputs: [{ contextKey: '__proto__', expression: 'event.payload' }],
+                }),
+                node('end', 'end'),
+            ],
+            [edge('e1', 'start', 'recv'), edge('e2', 'recv', 'end')],
+        );
+        let state = stepSimulation(wf, startSimulation(wf, {}));
+        state = resumeSimulation(wf, state, { output: { payload: { id: 42 } } });
+        expect(state.status).toBe('running');
+        expect(Object.prototype.hasOwnProperty.call(state.context, '__proto__')).toBe(true);
+        expect(state.context.__proto__).toEqual({ id: 42 });
+    });
+
     it('blocks at a human-task node', () => {
         const wf = workflow(
             [node('start', 'start'), node('task', 'human-task'), node('end', 'end')],

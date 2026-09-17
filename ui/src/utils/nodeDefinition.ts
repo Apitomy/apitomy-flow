@@ -34,6 +34,7 @@ const HANDLED_CONFIG_KEYS: Record<string, Set<string>> = {
   start: new Set(['inputs']),
   'human-task': new Set(['description', 'inputs', 'outputs']),
   action: new Set(['actionType', 'inputs', 'outputs']),
+  'receive-event': new Set(['outputs']),
 };
 
 function formatConfigValue(value: unknown): string {
@@ -123,6 +124,23 @@ function actionSections(config: Record<string, any>): DefinitionSection[] {
   return sections;
 }
 
+function receiveEventOutputsSection(config: Record<string, any>): DefinitionSection | null {
+  const outputs = config.outputs;
+  if (!Array.isArray(outputs) || outputs.length === 0) return null;
+  const fields = outputs
+    .filter((output): output is { contextKey?: string; expression?: string } =>
+      typeof output === 'object' && output !== null)
+    .map(output => ({
+      label: output.contextKey ?? '(missing contextKey)',
+      value: output.expression,
+    }));
+  if (fields.length === 0) return null;
+  return {
+    label: 'Output mappings',
+    fields,
+  };
+}
+
 function genericConfigSection(config: Record<string, any>, handledKeys: Set<string>): DefinitionSection | null {
   const entries = Object.entries(config).filter(([key]) => !handledKeys.has(key));
   if (entries.length === 0) return null;
@@ -153,6 +171,8 @@ export function getNodeDefinition(node: WorkflowNode): NodeDefinitionView {
       .filter((s): s is DefinitionSection => s !== null);
   } else if (node.type === 'action') {
     sections = actionSections(config);
+  } else if (node.type === 'receive-event') {
+    sections = [receiveEventOutputsSection(config)].filter((s): s is DefinitionSection => s !== null);
   } else {
     sections = [];
   }

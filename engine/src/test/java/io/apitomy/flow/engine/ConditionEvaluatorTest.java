@@ -122,6 +122,42 @@ class ConditionEvaluatorTest {
     }
 
     @Test
+    void resolveWithEventReturnsValueFromEvent() {
+        Map<String, Object> context = Map.of("storeId", "s1");
+        Map<String, Object> event = Map.of("orderId", "ord-42", "storeId", "s1");
+        assertEquals("ord-42", evaluator.resolve("event.orderId", context, event));
+    }
+
+    @Test
+    void resolveWithEventSupportsNestedFieldAccess() {
+        Map<String, Object> event = Map.of("payload", Map.of("customer", Map.of("email", "a@b.com")));
+        assertEquals("a@b.com", evaluator.resolve("event.payload.customer.email", Map.of(), event));
+    }
+
+    @Test
+    void resolveWithEventCanReferenceBothContextAndEvent() {
+        Map<String, Object> context = Map.of("prefix", "ORD-");
+        Map<String, Object> event = Map.of("id", "42");
+        assertEquals("ORD-", evaluator.resolve("context.prefix", context, event));
+        assertEquals("42", evaluator.resolve("event.id", context, event));
+    }
+
+    @Test
+    void resolveWithEventBlankOrNullReturnsNull() {
+        Map<String, Object> event = Map.of("orderId", "ord-42");
+        assertNull(evaluator.resolve(null, Map.of(), event));
+        assertNull(evaluator.resolve("", Map.of(), event));
+        assertNull(evaluator.resolve("   ", Map.of(), event));
+    }
+
+    @Test
+    void resolveWithEventInvalidExpressionThrows() {
+        Map<String, Object> event = Map.of("orderId", "ord-42");
+        assertThrows(ConditionEvaluationException.class, () ->
+            evaluator.resolve("this is not valid !!!", Map.of(), event));
+    }
+
+    @Test
     void jacksonObjectNodeNestedAccess() throws Exception {
         ObjectMapper mapper = new ObjectMapper();
         JsonNode payload = mapper.readTree("""

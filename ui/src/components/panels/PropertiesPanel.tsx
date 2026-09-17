@@ -14,7 +14,7 @@ import { TimesIcon } from '@patternfly/react-icons';
 import { type FlowNodeData } from '../../utils/conversion.ts';
 import { type EditorSpi } from '../../types/spi.ts';
 import { type ActionTypeDescriptor } from '../../types/spi.ts';
-import { type HumanTaskOutput, type OutputOption, type OutputWidget, type ActionOutputConfig } from '../../types/workflow.ts';
+import { type HumanTaskOutput, type OutputOption, type OutputWidget, type ActionOutputConfig, type EventOutputMapping } from '../../types/workflow.ts';
 import { type ValidationProblem } from '../../types/validation.ts';
 import { mapToPairs, pairsToMap, duplicateKeys, nextPairId, type KeyValuePair } from '../../utils/mapInputs.ts';
 import { evaluateCondition, ElEvaluationError } from '../../simulation/elEvaluator.ts';
@@ -35,6 +35,20 @@ interface PropertiesPanelProps {
   width?: number;
   /** Starts a drag-resize when the user presses the panel's resize handle. */
   onResizeStart?: (e: React.MouseEvent) => void;
+}
+
+/**
+ * Reads a node's `config.outputs` as a list of receive-event output mappings, defensively:
+ * a missing/non-array `outputs` yields an empty list, and any non-object entry (e.g. `null`
+ * from a malformed imported definition) is dropped rather than crashing the editor. Missing
+ * `contextKey`/`expression` fields on an otherwise-valid entry default to `''` for editing.
+ */
+function getOutputMappings(config: Record<string, any>): EventOutputMapping[] {
+  const outputs = config.outputs;
+  if (!Array.isArray(outputs)) return [];
+  return outputs
+    .filter((o): o is Partial<EventOutputMapping> => typeof o === 'object' && o !== null)
+    .map(o => ({ contextKey: o.contextKey ?? '', expression: o.expression ?? '' }));
 }
 
 /**
@@ -685,6 +699,67 @@ export function PropertiesPanel({ selectedNode, selectedEdge, nodeProblems = [],
                   }}
                 >
                   + Add expression
+                </button>
+              </div>
+            </div>
+            <div className="properties-panel__field">
+              <label>Output mappings</label>
+              <div className="properties-panel__inputs-list">
+                {getOutputMappings(selectedNode.data.config).map((mapping, i) => (
+                  <div key={i} className="properties-panel__input-item">
+                    <div className="properties-panel__input-row">
+                      <input
+                        type="text"
+                        value={mapping.contextKey}
+                        placeholder="Context key"
+                        onChange={(e) => {
+                          const outputs = getOutputMappings(selectedNode.data.config);
+                          outputs[i] = { ...outputs[i], contextKey: e.target.value };
+                          onNodeChange(selectedNode.id, {
+                            config: { ...selectedNode.data.config, outputs },
+                          });
+                        }}
+                      />
+                      <input
+                        type="text"
+                        value={mapping.expression}
+                        placeholder="e.g. event.payload.id"
+                        onChange={(e) => {
+                          const outputs = getOutputMappings(selectedNode.data.config);
+                          outputs[i] = { ...outputs[i], expression: e.target.value };
+                          onNodeChange(selectedNode.id, {
+                            config: { ...selectedNode.data.config, outputs },
+                          });
+                        }}
+                      />
+                      <button
+                        className="properties-panel__match-remove"
+                        title="Remove output mapping"
+                        onClick={() => {
+                          const outputs = getOutputMappings(selectedNode.data.config).filter((_, j) => j !== i);
+                          onNodeChange(selectedNode.id, {
+                            config: { ...selectedNode.data.config, outputs },
+                          });
+                        }}
+                      >
+                        &times;
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                <button
+                  className="properties-panel__match-add"
+                  onClick={() => {
+                    const outputs = [
+                      ...getOutputMappings(selectedNode.data.config),
+                      { contextKey: '', expression: '' },
+                    ];
+                    onNodeChange(selectedNode.id, {
+                      config: { ...selectedNode.data.config, outputs },
+                    });
+                  }}
+                >
+                  + Add output mapping
                 </button>
               </div>
             </div>

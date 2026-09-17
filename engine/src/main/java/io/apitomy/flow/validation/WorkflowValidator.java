@@ -336,6 +336,9 @@ public class WorkflowValidator {
                     problems.add(ValidationProblem.warning("INVALID_EVENT_TYPE_VALUE",
                         "Receive-event node eventType must be a non-blank string", node.id()));
                 }
+                if (node.config().get("outputs") instanceof List<?> outputs && !outputs.isEmpty()) {
+                    validateEventOutputMappings(outputs, node.id(), problems);
+                }
             });
 
         // Duplicate event receivers
@@ -445,6 +448,50 @@ public class WorkflowValidator {
                             "Duplicate output context key: " + contextKey, nodeId));
                     }
                 }
+            }
+        }
+    }
+
+    /**
+     * Validates a receive-event node's output mappings: each entry must be an object with a
+     * non-blank string {@code contextKey} and a non-blank string, syntactically valid EL
+     * {@code expression}, and {@code contextKey}s must be unique within the node (mirroring
+     * {@link #validateOutputNames}'s duplicate-key check, but driven directly by {@code contextKey}
+     * since there's no separate {@code name} field for these mappings). A non-object entry, or a
+     * {@code contextKey}/{@code expression} of the wrong type, is treated the same as a missing
+     * value rather than coerced via {@code String.valueOf} — this keeps validation aligned with the
+     * runtime, which requires actual strings and otherwise skips the entry (see
+     * {@link WorkflowEngine#applyEventOutputMappings}) and with the UI simulator's equivalent
+     * runtime check.
+     *
+     * @param outputDefs the raw {@code config.outputs} list
+     * @param nodeId     the receive-event node's id
+     * @param problems   the problems list to append to
+     */
+    private void validateEventOutputMappings(List<?> outputDefs, String nodeId,
+                                              List<ValidationProblem> problems) {
+        Set<String> contextKeys = new HashSet<>();
+        for (Object defObj : outputDefs) {
+            Map<?, ?> def = defObj instanceof Map<?, ?> m ? m : Map.of();
+            Object contextKeyVal = def.get("contextKey");
+            if (!(contextKeyVal instanceof String contextKey) || contextKey.isBlank()) {
+                problems.add(ValidationProblem.warning("MISSING_OUTPUT_CONTEXT_KEY",
+                    "Receive-event output mapping has no contextKey", nodeId));
+                continue;
+            }
+            if (!contextKeys.add(contextKey)) {
+                problems.add(ValidationProblem.warning("DUPLICATE_OUTPUT_NAME",
+                    "Duplicate output context key: " + contextKey, nodeId));
+            }
+
+            Object expressionVal = def.get("expression");
+            if (!(expressionVal instanceof String expression) || expression.isBlank()) {
+                problems.add(ValidationProblem.warning("MISSING_OUTPUT_EXPRESSION",
+                    "Receive-event output mapping \"" + contextKey + "\" has no EL expression", nodeId));
+            } else if (!conditionEvaluator.isValid(expression)) {
+                problems.add(ValidationProblem.error("INVALID_OUTPUT_EXPRESSION",
+                    "Receive-event output mapping \"" + contextKey + "\" is not valid EL: " + expression,
+                    nodeId));
             }
         }
     }

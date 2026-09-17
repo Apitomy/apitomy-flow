@@ -1,6 +1,7 @@
 import { type Workflow, type WorkflowEdge } from '../types/workflow.ts';
 import { type ValidationProblem, type ValidationSeverity } from '../types/validation.ts';
 import { analyzeParallelRegions } from '../simulation/parallelRegions.ts';
+import { isValidExpression } from '../simulation/elEvaluator.ts';
 
 function problem(severity: ValidationSeverity, code: string, message: string, nodeId?: string, edgeId?: string): ValidationProblem {
   return { severity, code, message, nodeId, edgeId };
@@ -278,6 +279,9 @@ function validateSemantics(workflow: Workflow, problems: ValidationProblem[]) {
     } else if (typeof eventTypeVal !== 'string' || eventTypeVal.trim() === '') {
       problems.push(problem('warning', 'INVALID_EVENT_TYPE_VALUE', 'Receive-event node eventType must be a non-blank string', node.id));
     }
+    if (Array.isArray(node.config.outputs) && node.config.outputs.length > 0) {
+      validateEventOutputMappings(node.config.outputs, node.id, problems);
+    }
   }
 
   const receivers = workflow.nodes.filter(n => n.type === 'receive-event' && n.config.eventType);
@@ -434,6 +438,43 @@ function validateOutputNames(outputDefs: unknown[], nodeId: string, problems: Va
         }
         contextKeys.add(contextKey);
       }
+    }
+  }
+}
+
+/**
+ * Validates a receive-event node's output mappings: each entry must be an object with a
+ * non-blank string `contextKey` and a non-blank string, syntactically valid EL `expression`, and
+ * `contextKey`s must be unique within the node. A non-object entry, or a `contextKey`/`expression`
+ * of the wrong type, is treated the same as a missing value rather than coerced with `String(...)`
+ * — this keeps validation aligned with the simulator's runtime check, which requires actual
+ * strings and otherwise skips the entry, and mirrors the Java engine validator/runtime. Syntax
+ * validity is checked with {@link isValidExpression} (real EL parsing), not the delimiter-balance
+ * heuristic used for the pre-existing (and out-of-scope) edge-condition check.
+ */
+function validateEventOutputMappings(outputDefs: unknown[], nodeId: string, problems: ValidationProblem[]) {
+  const contextKeys = new Set<string>();
+  for (const defObj of outputDefs) {
+    const def = (typeof defObj === 'object' && defObj !== null ? defObj : {}) as Record<string, unknown>;
+    const contextKeyVal = def.contextKey;
+    if (typeof contextKeyVal !== 'string' || contextKeyVal.trim() === '') {
+      problems.push(problem('warning', 'MISSING_OUTPUT_CONTEXT_KEY',
+        'Receive-event output mapping has no contextKey', nodeId));
+      continue;
+    }
+    if (contextKeys.has(contextKeyVal)) {
+      problems.push(problem('warning', 'DUPLICATE_OUTPUT_NAME',
+        `Duplicate output context key: ${contextKeyVal}`, nodeId));
+    }
+    contextKeys.add(contextKeyVal);
+
+    const expressionVal = def.expression;
+    if (typeof expressionVal !== 'string' || expressionVal.trim() === '') {
+      problems.push(problem('warning', 'MISSING_OUTPUT_EXPRESSION',
+        `Receive-event output mapping "${contextKeyVal}" has no EL expression`, nodeId));
+    } else if (!isValidExpression(expressionVal)) {
+      problems.push(problem('error', 'INVALID_OUTPUT_EXPRESSION',
+        `Receive-event output mapping "${contextKeyVal}" is not valid EL: ${expressionVal}`, nodeId));
     }
   }
 }

@@ -695,6 +695,110 @@ class WorkflowValidatorTest {
         assertFalse(hasCode(validate(w), "DUPLICATE_OUTPUT_NAME"));
     }
 
+    // --- Receive-event output mappings ---
+
+    @Test
+    void missingContextKeyOnEventOutputMapping() {
+        WorkflowNode receive = new WorkflowNode("r", NodeType.RECEIVE_EVENT, "R",
+            Map.of("eventType", "order.created",
+                "outputs", List.of(Map.of("expression", "event.id"))),
+            new Position(0, 0));
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), receive, endNode("end")),
+            List.of(edge("e1", "start", "r"), edge("e2", "r", "end")));
+        assertTrue(hasCode(validate(w), "MISSING_OUTPUT_CONTEXT_KEY"));
+    }
+
+    @Test
+    void missingExpressionOnEventOutputMapping() {
+        WorkflowNode receive = new WorkflowNode("r", NodeType.RECEIVE_EVENT, "R",
+            Map.of("eventType", "order.created",
+                "outputs", List.of(Map.of("contextKey", "orderId"))),
+            new Position(0, 0));
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), receive, endNode("end")),
+            List.of(edge("e1", "start", "r"), edge("e2", "r", "end")));
+        assertTrue(hasCode(validate(w), "MISSING_OUTPUT_EXPRESSION"));
+    }
+
+    @Test
+    void invalidExpressionOnEventOutputMapping() {
+        WorkflowNode receive = new WorkflowNode("r", NodeType.RECEIVE_EVENT, "R",
+            Map.of("eventType", "order.created",
+                "outputs", List.of(Map.of("contextKey", "orderId", "expression", "event. .id !!!"))),
+            new Position(0, 0));
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), receive, endNode("end")),
+            List.of(edge("e1", "start", "r"), edge("e2", "r", "end")));
+        assertTrue(hasCode(validate(w), "INVALID_OUTPUT_EXPRESSION"));
+    }
+
+    @Test
+    void duplicateContextKeyAcrossEventOutputMappings() {
+        WorkflowNode receive = new WorkflowNode("r", NodeType.RECEIVE_EVENT, "R",
+            Map.of("eventType", "order.created",
+                "outputs", List.of(
+                    Map.of("contextKey", "orderId", "expression", "event.id"),
+                    Map.of("contextKey", "orderId", "expression", "event.otherId"))),
+            new Position(0, 0));
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), receive, endNode("end")),
+            List.of(edge("e1", "start", "r"), edge("e2", "r", "end")));
+        assertTrue(hasCode(validate(w), "DUPLICATE_OUTPUT_NAME"));
+    }
+
+    @Test
+    void nonStringContextKeyOnEventOutputMappingIsTreatedAsMissing() {
+        WorkflowNode receive = new WorkflowNode("r", NodeType.RECEIVE_EVENT, "R",
+            Map.of("eventType", "order.created",
+                "outputs", List.of(Map.of("contextKey", 42, "expression", "event.id"))),
+            new Position(0, 0));
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), receive, endNode("end")),
+            List.of(edge("e1", "start", "r"), edge("e2", "r", "end")));
+        assertTrue(hasCode(validate(w), "MISSING_OUTPUT_CONTEXT_KEY"));
+    }
+
+    @Test
+    void nonStringExpressionOnEventOutputMappingIsTreatedAsMissing() {
+        WorkflowNode receive = new WorkflowNode("r", NodeType.RECEIVE_EVENT, "R",
+            Map.of("eventType", "order.created",
+                "outputs", List.of(Map.of("contextKey", "answer", "expression", 42))),
+            new Position(0, 0));
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), receive, endNode("end")),
+            List.of(edge("e1", "start", "r"), edge("e2", "r", "end")));
+        assertTrue(hasCode(validate(w), "MISSING_OUTPUT_EXPRESSION"));
+    }
+
+    @Test
+    void nonMapEventOutputMappingEntryIsTreatedAsMissingContextKey() {
+        WorkflowNode receive = new WorkflowNode("r", NodeType.RECEIVE_EVENT, "R",
+            Map.of("eventType", "order.created",
+                "outputs", java.util.Arrays.asList((Object) null)),
+            new Position(0, 0));
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), receive, endNode("end")),
+            List.of(edge("e1", "start", "r"), edge("e2", "r", "end")));
+        assertTrue(hasCode(validate(w), "MISSING_OUTPUT_CONTEXT_KEY"));
+    }
+
+    @Test
+    void validEventOutputMappingsProduceNoOutputMappingProblems() {
+        WorkflowNode receive = new WorkflowNode("r", NodeType.RECEIVE_EVENT, "R",
+            Map.of("eventType", "order.created",
+                "outputs", List.of(Map.of("contextKey", "orderId", "expression", "event.id"))),
+            new Position(0, 0));
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), receive, endNode("end")),
+            List.of(edge("e1", "start", "r"), edge("e2", "r", "end")));
+        List<ValidationProblem> problems = validate(w);
+        assertFalse(hasCode(problems, "MISSING_OUTPUT_CONTEXT_KEY"));
+        assertFalse(hasCode(problems, "MISSING_OUTPUT_EXPRESSION"));
+        assertFalse(hasCode(problems, "INVALID_OUTPUT_EXPRESSION"));
+        assertFalse(hasCode(problems, "DUPLICATE_OUTPUT_NAME"));
+    }
+
     // --- Null-safety ---
 
     @Test
