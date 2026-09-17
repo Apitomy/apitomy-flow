@@ -1,6 +1,6 @@
 import { type Workflow, type WorkflowEdge, type WorkflowNode, type NodeType } from '../types/workflow.ts';
 import { type HistoryEntry, type ActiveBranch } from '../types/instance.ts';
-import { evaluateCondition, ElEvaluationError, type ElScope } from './elEvaluator.ts';
+import { evaluateCondition, ElEvaluationError, resolveExpression, type ElScope } from './elEvaluator.ts';
 import { analyzeParallelRegions, type ParallelAnalysis } from './parallelRegions.ts';
 
 /**
@@ -242,11 +242,54 @@ export function resumeSimulation(
         return state;
     }
     const targetNode = findNode(workflow, target.nodeId);
-    const output = resolveContextKeys(targetNode, mock.output ?? {});
+    const output = resolveMergeOutput(targetNode, state.context, mock.output ?? {});
     const context = { ...state.context, ...output };
     const history = recordOutputOnBranch(state.history, target.branchId, target.nodeId, output);
     const parkedBranchIds = state.parkedBranchIds.filter(id => id !== target.branchId);
     return derive(workflow, { ...state, status: 'running', context, history, parkedBranchIds });
+}
+
+/**
+ * Resolves what should actually be merged into context for a node's raw mock output: for a
+ * `receive-event` node with a non-empty `config.outputs` (output mappings), evaluates each
+ * mapping's expression against the event and the current (pre-merge) context; for every other
+ * node — including a receive-event node with no mappings declared — falls through to
+ * {@link resolveContextKeys}, which is a no-op when the node declares no `outputs` at all
+ * (preserving the flat merge for receive-event nodes with no mappings). Mirrors the Java engine's
+ * `WorkflowEngine.resolveMergeOutput`.
+ */
+function resolveMergeOutput(
+    node: WorkflowNode | undefined,
+    context: Record<string, unknown>,
+    rawOutput: Record<string, unknown>,
+): Record<string, unknown> {
+    const outputDefs = node?.config?.outputs;
+    if (node?.type === 'receive-event' && Array.isArray(outputDefs) && outputDefs.length > 0) {
+        return applyEventOutputMappings(outputDefs, context, rawOutput);
+    }
+    return resolveContextKeys(node, rawOutput);
+}
+
+/**
+ * Evaluates each raw `{contextKey, expression}` mapping entry against the given `event` and
+ * `context`, building the map of resolved values keyed by `contextKey`. Entries missing either
+ * field are skipped (caught separately by validation).
+ */
+function applyEventOutputMappings(
+    outputDefs: unknown[],
+    context: Record<string, unknown>,
+    event: Record<string, unknown>,
+): Record<string, unknown> {
+    const mapped: Record<string, unknown> = {};
+    for (const def of outputDefs) {
+        if (typeof def !== 'object' || def === null) continue;
+        const contextKey = (def as Record<string, unknown>).contextKey;
+        const expression = (def as Record<string, unknown>).expression;
+        if (typeof contextKey === 'string' && contextKey !== '' && typeof expression === 'string') {
+            mapped[contextKey] = resolveExpression(expression, { context, event });
+        }
+    }
+    return mapped;
 }
 
 /**

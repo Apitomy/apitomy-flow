@@ -176,6 +176,53 @@ describe('node lifecycle', () => {
         expect(state.context.secondResult).toBe('B');
     });
 
+    it('preserves the flat-merge for a receive-event node with no output mappings declared', () => {
+        const wf = workflow(
+            [node('start', 'start'), node('recv', 'receive-event', { eventType: 'order.created' }), node('end', 'end')],
+            [edge('e1', 'start', 'recv'), edge('e2', 'recv', 'end')],
+        );
+        let state = stepSimulation(wf, startSimulation(wf, {}));
+        state = resumeSimulation(wf, state, { output: { orderId: 'ord-42', storeId: 's1' } });
+        expect(state.context.orderId).toBe('ord-42');
+        expect(state.context.storeId).toBe('s1');
+    });
+
+    it('evaluates a receive-event node\'s output mappings against the event, replacing the flat merge', () => {
+        const wf = workflow(
+            [
+                node('start', 'start'),
+                node('recv', 'receive-event', {
+                    eventType: 'order.created',
+                    outputs: [{ contextKey: 'orderId', expression: 'event.payload.id' }],
+                }),
+                node('end', 'end'),
+            ],
+            [edge('e1', 'start', 'recv'), edge('e2', 'recv', 'end')],
+        );
+        let state = stepSimulation(wf, startSimulation(wf, {}));
+        state = resumeSimulation(wf, state, { output: { payload: { id: 'ord-42' }, storeId: 's1' } });
+        expect(state.context.orderId).toBe('ord-42');
+        expect(state.context.storeId).toBeUndefined();
+        expect(state.context.payload).toBeUndefined();
+    });
+
+    it('lets a receive-event output mapping expression reference existing context', () => {
+        const wf = workflow(
+            [
+                node('start', 'start'),
+                node('recv', 'receive-event', {
+                    eventType: 'order.created',
+                    outputs: [{ contextKey: 'region', expression: 'context.defaultRegion' }],
+                }),
+                node('end', 'end'),
+            ],
+            [edge('e1', 'start', 'recv'), edge('e2', 'recv', 'end')],
+        );
+        let state = stepSimulation(wf, startSimulation(wf, { defaultRegion: 'us-east' }));
+        state = resumeSimulation(wf, state, { output: { orderId: 'ord-42' } });
+        expect(state.context.region).toBe('us-east');
+    });
+
     it('blocks at a human-task node', () => {
         const wf = workflow(
             [node('start', 'start'), node('task', 'human-task'), node('end', 'end')],
