@@ -1,0 +1,6 @@
+[
+    { "name": "initial exact fork parks all 100 children", "prefixMoves": 0, "children": 100, "arrived": 100, "status": "blocked", "transitions": 100 },
+    { "name": "initial excess fork retains only first 100 children", "prefixMoves": 0, "children": 101, "arrived": 100, "status": "failed", "transitions": 100 },
+    { "name": "partial budget exact fork parks remaining 97 children", "prefixMoves": 3, "children": 97, "arrived": 97, "status": "blocked", "transitions": 100 },
+    { "name": "partial budget excess fork retains only first 97 children", "prefixMoves": 3, "children": 98, "arrived": 97, "status": "failed", "transitions": 100 }
+]
