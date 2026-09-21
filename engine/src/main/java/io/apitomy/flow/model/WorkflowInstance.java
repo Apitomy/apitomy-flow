@@ -4,7 +4,6 @@ import com.fasterxml.jackson.annotation.JsonFormat;
 
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -24,25 +23,28 @@ public record WorkflowInstance(
     @JsonFormat(shape = JsonFormat.Shape.STRING) Instant updatedOn
 ) {
     /**
-     * Compact canonical constructor that normalizes nulls from legacy JSON deserialization.
+     * Owns nested JSON data and collections and normalizes nulls from legacy JSON deserialization.
      * When deserializing instances written before the active-branch model, Jackson sets the
      * new fields to null; we coerce them to empty collections so accessors never return null.
      */
     public WorkflowInstance {
-        activeBranches = activeBranches != null ? activeBranches : List.of();
-        joinArrivals = joinArrivals != null ? joinArrivals : Map.of();
+        context = JsonSnapshots.map(context);
+        history = JsonSnapshots.list(history);
+        activeBranches = JsonSnapshots.list(activeBranches != null ? activeBranches : List.of());
+        joinArrivals = JsonSnapshots.map(joinArrivals != null ? joinArrivals : Map.of());
     }
 
     public static Builder builder() {
         return new Builder();
     }
 
+    /** Creates an editable builder that shares owned context until new values are merged. */
     public Builder toBuilder() {
         Map<String, List<String>> copiedArrivals = new LinkedHashMap<>();
         joinArrivals.forEach((k, v) -> copiedArrivals.put(k, new ArrayList<>(v)));
         return new Builder()
             .id(id).workflowId(workflowId).currentNodeId(currentNodeId)
-            .status(status).context(new HashMap<>(context))
+            .status(status).context(context)
             .history(new ArrayList<>(history))
             .activeBranches(new ArrayList<>(activeBranches))
             .joinArrivals(copiedArrivals)
@@ -100,19 +102,16 @@ public record WorkflowInstance(
             return this;
         }
 
+        /** Snapshots new output and merges it without copying unchanged nested context values. */
         public Builder mergeContext(Map<String, Object> output) {
-            if (output != null) this.context.putAll(output);
+            if (output != null) this.context = JsonSnapshots.merge(this.context, output);
             return this;
         }
 
+        /** Builds an owned snapshot without transferring mutable builder collections to the instance. */
         public WorkflowInstance build() {
-            Map<String, List<String>> frozenArrivals = new LinkedHashMap<>();
-            joinArrivals.forEach((k, v) -> frozenArrivals.put(k, List.copyOf(v)));
-            // Map.copyOf rejects null values (e.g. an output mapping expression that legitimately
-            // resolves to null); wrap in an unmodifiable copy instead so such values are preserved.
             return new WorkflowInstance(id, workflowId, currentNodeId, status,
-                Collections.unmodifiableMap(new LinkedHashMap<>(context)), List.copyOf(history),
-                List.copyOf(activeBranches), Map.copyOf(frozenArrivals), failureReason, createdOn, updatedOn);
+                context, history, activeBranches, joinArrivals, failureReason, createdOn, updatedOn);
         }
     }
 }
