@@ -18,7 +18,9 @@ export {
   evaluateCondition,
   resolveExpression,
   isValidExpression,
+  classifyExpression,
   ElEvaluationError,
+  type ExpressionSyntax,
   type ElScope,
 } from './simulation/elEvaluator.ts';
 export {

@@ -1,0 +1,5 @@
+[
+    { "name": "repeated resumes receive fresh budgets", "resumes": 105, "transitionsPerResume": 1, "status": "completed" },
+    { "name": "exact budget is allowed", "resumes": 2, "transitionsPerResume": 100, "status": "completed" },
+    { "name": "one excess transition fails", "resumes": 1, "transitionsPerResume": 101, "status": "failed" }
+]
