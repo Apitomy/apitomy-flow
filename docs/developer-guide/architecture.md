@@ -46,8 +46,10 @@ instance; END terminates sibling work. See [Parallel Fork/Join](../user-guide/pa
 
 An action returning `PENDING` parks like other external-input nodes. Completing one node resumes that
 branch, not unanswered siblings. Read-only info calls require an active parked node in a `WAITING`
-instance. Recovery transitions share the 100-unit driver budget; action execution allows ten retries
-after the initial attempt. These are call-local guards, not a durable backoff policy.
+instance. Each child edge move consumes one unit of the 100-unit driver budget; successful fork selection
+adds no charge. Recovery entries, external action retries, and unsuccessful routing also consume driver
+units. Each local action execution retry loop allows ten retries after its initial attempt. Routing RETRY
+re-evaluates edges without repeating the completed action. These guards are not a durable backoff policy.
 
 See [Engine errors](engine-errors.md) for structured failures and callback ordering, and
 [indexed architecture](indexed-architecture.md) for graph indexes, value resolution, cache ownership,
@@ -84,6 +86,10 @@ host-driven graph replacement requires a React `key` remount. Document commands 
 publish `onChange` once per committed revision. Selection, measurements, and drag frames are presentation
 state. Semantic document identity excludes layout-only revisions, avoiding unnecessary validation and
 parallel-analysis reruns. Import and undo/redo preserve workflow metadata with the graph.
+
+Document history restores panel and canvas selection together, while selection-only actions remain
+presentation state. Host validators receive read-only semantic snapshots with retained coordinates, even
+if a new callback reference causes a run; position-sensitive work uses the current `onChange` document.
 
 Viewer and diff props update live; pass fresh object/array references rather than mutating them in place.
 Neither component edits the host document. Layout can render definitions with absent positions.

@@ -15,7 +15,8 @@ not a current issue status. Use the links below and inspect code at your selecte
 
 ## Reconciliation against the combined branch
 
-Reviewed at integration `3dc7a39`. C1–C14 code is present in this branch, but those issues are pending;
+Reviewed at integration `7da7f64`, including C13 corrections through `24644df`.
+C1–C14 work is present in this branch, but those issues are pending;
 this table describes observed behavior, not release/merge status. Issue links supply their live status.
 
 | Historical entry | Observed code / follow-up |

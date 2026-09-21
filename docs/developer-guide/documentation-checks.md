@@ -28,6 +28,11 @@ The [`conformance` corpus](https://github.com/Apitomy/apitomy-flow/tree/main/con
 and TypeScript, including expression classification, routing, mappings, budgets, topology, and wire schema.
 Select this branch when inspecting pending changes. `conformance/README.md` records intentional differences.
 
+`conformance/fork-budgets.json` covers 100/101 initial child moves and 97/98 child moves after a three-move
+prefix. Successful fork selection has no extra charge; each child edge costs one unit. The Java and
+TypeScript conformance runners exercise this fixture; the browser runner checks both Step and Run. A Step may
+dispatch several children; excess moves fail before entering the extra child and preserve prior progress.
+
 The actual v1 configuration fixture (not a second copy) is included here:
 
 ```json

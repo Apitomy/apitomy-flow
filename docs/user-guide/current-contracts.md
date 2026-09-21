@@ -1,6 +1,7 @@
 # Current branch contracts and compatibility
 
-These guides describe the combined C1–C14 source branch, based on integration revision `3dc7a39`.
+These guides describe the combined C1–C14 source branch audited at integration revision `7da7f64`,
+including final C13 corrections through `24644df`.
 They are not a claim that the changes have merged or shipped. The issues from
 [C1 #124](https://github.com/Apitomy/apitomy-flow/issues/124) through
 [C14 #137](https://github.com/Apitomy/apitomy-flow/issues/137) and

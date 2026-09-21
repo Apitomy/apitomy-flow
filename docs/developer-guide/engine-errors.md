@@ -41,8 +41,9 @@ if input evaluation fails: they cannot update state or apply recovery. Their ine
 is unchanged. `matchesEvent` retains its false-on-evaluation-error policy, and `resolveExpression` retains
 its `ConditionEvaluationException` contract.
 
-Action retries allow ten retries after the initial attempt. Recovery transitions and human input retries
-use the shared 100-unit call-local driver budget alongside ordinary moves and unsuccessful edge selections.
+Each local action execution retry loop allows ten retries after its initial attempt, not ten across all
+actions in a call. Recovery entries, external action retries, and human input retries use the shared
+100-unit call-local driver budget alongside ordinary moves and unsuccessful edge selections.
 Budget failures retain the triggering/last recovery diagnostic when available. Parked sibling branches are
 never selected as runnable just because another branch recovers. These limits are not durable retry policy.
 
@@ -50,6 +51,12 @@ On external ACTION completion, `RETRY` re-executes the action. For non-action co
 output-mapping failures, `RETRY` leaves the instance parked for another delivery. No invalid completion
 output is merged. A completed action must supply each required output as non-null before context-key
 remapping; pending output may be partial.
+
+For `EDGE_CONDITION` and `EDGE_SELECTION`, `RETRY` repeats routing only: it does not re-execute the
+completed action or wait for another delivery. Unsuccessful selections consume the shared driver budget.
+Human-task input retries on entry also use that budget to re-resolve inputs before parking; they differ
+from non-action external completion retries. See
+[phase-specific recovery](../user-guide/error-handling.md#what-retry-repeats).
 
 ## Extension response and registration rules
 

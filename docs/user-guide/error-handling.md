@@ -36,19 +36,31 @@ still invokes `handleNoMatchingEdge`. Override structured handling for a uniform
 | Decision | Behavior |
 |---|---|
 | `ErrorResolution.fail()` | Set FAILED, preserve a diagnostic `failureReason`, notify `onWorkflowFailed` |
-| `ErrorResolution.retry()` | Re-execute an action; input resolution is repeated. Other completion/mapping retries remain parked for a new delivery |
+| `ErrorResolution.retry()` | Retry at the failed boundary; see the phase-specific behavior below |
 | `ErrorResolution.transitionTo("repair")` | Enter an existing non-START node through normal execution/parking behavior |
 
 Recovery affects the failed branch; unanswered parked siblings remain parked. Invalid output is not
 merged. A malformed handler fails once without recursive handler invocation, retaining the handler cause
 and original error. Failure of one branch fails the instance.
 
+### What RETRY repeats
+
+| Failure boundary | RETRY behavior | Guard |
+|---|---|---|
+| Action input resolution, provider lookup, execution, result/required-output validation during execution | Repeat the action attempt from input resolution; executor side effects may repeat if execution is reached | Local action retry loop |
+| Rejected external ACTION completion (result/required-output failure or FAILED result) | Queue action re-execution, resolving inputs again; do not merely await another completion | External retry consumes a driver unit; action re-execution has its own local retry loop |
+| Non-action external completion or external output-mapping failure | Leave the instance parked for another host delivery; do not merge rejected output | No immediate retry loop |
+| Human-task input failure on entry | Repeat input resolution before parking; this is not an external completion retry | Shared driver budget |
+| `EDGE_CONDITION` or `EDGE_SELECTION` | Re-evaluate outgoing routing, without re-executing the completed action or awaiting another delivery | Unsuccessful selection consumes a shared driver unit |
+
 ### Retry limits and durability
 
-Action execution allows **ten retries after the initial attempt** in a call. Recovery transitions and
-human input retries consume the shared **100-unit driver budget**, along with ordinary moves and
-unsuccessful selections. These guards bound in-process loops; they do not schedule backoff or persist an
-attempt policy. A repeated immutable input error will not repair itself through immediate retries.
+Each local action execution retry loop allows **ten retries after its initial attempt**. This is not a
+total allowance across every action in an engine call. Recovery entries, externally requested action
+retries, human input retries, ordinary edge moves, and unsuccessful edge selections use the shared
+**100-unit driver budget**. Successful selection itself adds no charge; a fork charges each child move.
+These guards bound in-process loops; they do not schedule backoff or persist an attempt policy. A repeated
+immutable input error will not repair itself through immediate retries.
 
 For transient action failures a handler can return `retry()` under its own host policy; for bad config or
 data, transition to a repair node or fail. Do not mutate `instance.context()` to increment a retry counter:

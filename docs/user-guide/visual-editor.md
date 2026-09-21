@@ -56,6 +56,9 @@ Node/edge properties, IDs, add/delete/connect/clone, completed drags, tidy, impo
 participate in document history. A typing session in one field coalesces; changing focus/field ends that
 group. Discrete controls form separate edits. Node deletion removes incident edges atomically.
 
+Undo/redo restores panel selection and canvas node/edge selection together with the document snapshot;
+selection-only actions still create no history entry and emit no document change.
+
 Keyboard undo/delete belongs to the focused editor; text controls retain native shortcuts and IME input.
 Simulation blocks document mutations and history commands. Manual canvas lock blocks structural canvas
 edits but still allows property edits, import, and history. Inspection remains available.
@@ -213,8 +216,9 @@ aid; host execution and full Jakarta EL behavior require verification with the J
 
 1. Turn on **Simulate** to open the simulation panel on the right.
 2. Enter a **sample start context** as JSON.
-3. Click **Start**, then **Step** (advance one transition) or **Run** (run to the next block or a
-   terminal state). **Reset** clears the run.
+3. Click **Start**, then **Step** (advance one runnable branch, dispatching all children at a fork) or
+   **Run** (repeat advancement until blocked or terminal). A Step can consume several budget units at a
+   fork; it is not necessarily one transition-budget unit. **Reset** clears the run.
 4. Where a node would block for real work — `action`, `human-task`, or `receive-event` — the
    simulation pauses so you can supply a **mock output** (JSON). The output is merged into the
    context using declared output aliases and receive-event mappings, and the run continues. `wait`
@@ -231,9 +235,13 @@ mappings use the same parser; malformed supported syntax such as `1e` or `1 +` i
 Unquoted Unicode identifiers such as `context.café` also receive the advisory unsupported warning and
 remain importable. Use quoted keys such as `context['café']` for browser evaluation.
 
-**Loop guard:** each advancement allows 100 transitions across runnable branches. Resuming a blocked
-node starts a fresh budget; repeated Step/Run calls do not. Actions always pause in the simulator,
-while real synchronous actions can run uninterrupted, so budget placement can differ from a real run.
+**Loop guard:** each advancement allows 100 edge moves across runnable branches. Successful fork selection
+has no extra charge; each dispatched child edge consumes one unit. Exactly 100 moves can park all children;
+an additional move fails before entering that child, retaining prior branch arrivals, order, context, and
+history. Moves before the fork reduce its remaining budget. Resuming a blocked node starts a fresh budget;
+repeated Step/Run calls do not. Actions always pause in the simulator, while real synchronous actions can
+run uninterrupted, so budget placement can differ from a real run. Shared `conformance/fork-budgets.json`
+fixtures exercise exact/excess initial and partial-budget forks through both Step and Run.
 Simulation does not exercise event correlation, timers, required-output enforcement or error-handler
 retries. Numeric extremes and Java-specific coercions are outside the verified browser contract.
 
@@ -317,6 +325,17 @@ In addition to the editor's built-in validation, a host application can contribu
 validations through the `validate` function on the editor SPI. Problems it returns are merged
 with the built-in problems and drive the same Problems panel, per-node error/warning
 highlighting, and `onValidationChange` callback.
+
+The callback receives a **semantic snapshot**, not necessarily the full current document. A stable
+`spi.validate` runs on semantic revisions; selection, dragging, layout-only edits, and layout-only
+undo/redo do not invoke it again. Its coordinates remain those captured at the last semantic revision;
+the next semantic edit captures current coordinates. Replacing the callback reference can schedule a
+new run, but that run still receives the retained semantic snapshot, not refreshed layout coordinates.
+
+Treat the supplied workflow as read-only and keep validation pure: do not mutate the workflow or editor
+state. Position-sensitive work must use the full current document received through `onChange`. Keep that
+latest document/reference in the host rather than using a saved semantic-validator input as current state.
+Selection-only changes do not alter that document and do not emit `onChange`.
 
 The validator may run synchronously or return a `Promise`, so it can perform server-backed
 checks. The editor debounces calls while the user types and ignores stale (out-of-order)
