@@ -2,6 +2,7 @@ import { applyNodeChanges, applyEdgeChanges, type Connection, type Edge, type Ed
 import type { Workflow, WorkflowNode } from '../types/workflow.ts';
 import { toReactFlowEdges, toReactFlowNodes, type FlowNodeData } from '../utils/conversion.ts';
 import { layoutWorkflow, needsLayout } from '../layout/layoutWorkflow.ts';
+import { jsonEqual } from '../utils/jsonEqual.ts';
 
 interface Selection {
     selectedNodeId: string | null;
@@ -10,6 +11,8 @@ interface Selection {
 
 interface Snapshot extends Selection {
     document: Workflow;
+    /** Stable owned validation input; layout edits retain it and history restores it atomically. */
+    semanticDocument: Workflow;
     nodeKeys: Record<string, string>;
 }
 
@@ -52,7 +55,7 @@ export function createEditorState(workflow: Workflow): EditorState {
     const document = structuredClone(fallback
         ? { ...workflow, nodes: layoutWorkflow(workflow.nodes, workflow.edges) } : workflow);
     return {
-        document, nodes: toReactFlowNodes(document.nodes), edges: toReactFlowEdges(document.edges),
+        document, semanticDocument: document, nodes: toReactFlowNodes(document.nodes), edges: toReactFlowEdges(document.edges),
         nodeKeys: Object.fromEntries(document.nodes.map(node => [node.id, `initial:${node.id}`])),
         selectedNodeId: null, selectedEdgeId: null, past: [], future: [], revision: fallback ? 1 : 0,
         simulating: false, interactive: true, draftReset: 0,
@@ -60,7 +63,7 @@ export function createEditorState(workflow: Workflow): EditorState {
 }
 
 function snapshot(state: EditorState): Snapshot {
-    return { document: state.document, nodeKeys: state.nodeKeys,
+    return { document: state.document, semanticDocument: state.semanticDocument, nodeKeys: state.nodeKeys,
         selectedNodeId: state.selectedNodeId, selectedEdgeId: state.selectedEdgeId };
 }
 
@@ -84,15 +87,25 @@ function present(state: EditorState, document: Workflow, nodeKeys = state.nodeKe
 }
 
 function commit(state: EditorState, document: Workflow, group?: string, selection: Selection = state,
-    keys = state.nodeKeys): EditorState {
+    keys = state.nodeKeys, layoutOnly = false): EditorState {
     if (JSON.stringify(document) === JSON.stringify(state.document)) return state;
     const owned = structuredClone(document);
+    const semanticDocument = layoutOnly || sameSemantics(state.semanticDocument, owned)
+        ? state.semanticDocument : owned;
     const nodeKeys = Object.fromEntries(owned.nodes.map(node => [node.id, keys[node.id] ?? `${state.revision + 1}:${node.id}`]));
     return {
-        ...state, document: owned, nodeKeys, ...present(state, owned, nodeKeys), ...validSelection(owned, selection),
+        ...state, document: owned, semanticDocument, nodeKeys, ...present(state, owned, nodeKeys), ...validSelection(owned, selection),
         past: group && state.group === group ? state.past : [...state.past, snapshot(state)].slice(-50),
         future: [], group, revision: state.revision + 1,
     };
+}
+
+// Ignore only coordinates. Names, metadata and host extension fields may affect host validation.
+function sameSemantics(left: Workflow, right: Workflow): boolean {
+    const withoutLayout = (workflow: Workflow) => ({ ...workflow,
+        nodes: workflow.nodes.map(node => ({ ...node, position: undefined })),
+    });
+    return jsonEqual(withoutLayout(left), withoutLayout(right));
 }
 
 /** Applies one atomic editor command without effects, clocks, IDs, or mutable history refs. */
@@ -215,10 +228,11 @@ export function editorReducer(state: EditorState, command: EditorCommand): Edito
             return commit(state, { ...document, id: command.metadata.id, name: command.metadata.name,
                 description: command.metadata.description, version: command.metadata.version });
         case 'tidy':
-            return commit(state, { ...document, nodes: layoutWorkflow(document.nodes, document.edges) });
+            return commit(state, { ...document, nodes: layoutWorkflow(document.nodes, document.edges) },
+                undefined, state, state.nodeKeys, true);
         case 'positions':
             return commit(state, { ...document, nodes: document.nodes.map(node => command.positions[node.id]
-                ? { ...node, position: command.positions[node.id] } : node) });
+                ? { ...node, position: command.positions[node.id] } : node) }, undefined, state, state.nodeKeys, true);
         case 'commitPositions':
             return editorReducer(state, { type: 'positions', positions: Object.fromEntries(
                 state.nodes.map(node => [node.id, node.position]),

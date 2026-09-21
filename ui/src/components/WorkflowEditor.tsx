@@ -96,6 +96,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
   const { state, dispatch } = useEditorState(workflow, onChange);
   const { nodes, edges, selectedNodeId, selectedEdgeId, simulating: simActive, interactive } = state;
   const currentWorkflow = state.document;
+  const semanticWorkflow = state.semanticDocument;
   const { screenToFlowPosition, fitView, getNodes } = useReactFlow();
   const canUndo = state.past.length > 0 && !simActive;
   const canRedo = state.future.length > 0 && !simActive;
@@ -119,16 +120,16 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
   const selectedEdge = edges.find(e => e.id === selectedEdgeId);
 
   const builtInProblems = useMemo(
-    () => validateWorkflow(currentWorkflow),
-    [currentWorkflow],
+    () => validateWorkflow(semanticWorkflow),
+    [semanticWorkflow],
   );
 
   const parallelAnalysis = useMemo(
-    () => analyzeParallelRegions(currentWorkflow),
-    [currentWorkflow],
+    () => analyzeParallelRegions(semanticWorkflow),
+    [semanticWorkflow],
   );
 
-  const hostProblems = useHostValidation(currentWorkflow, spi?.validate);
+  const hostProblems = useHostValidation(semanticWorkflow, spi?.validate);
 
   const validationProblems = useMemo(
     () => [...builtInProblems, ...hostProblems],
