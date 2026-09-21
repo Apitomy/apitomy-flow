@@ -28,9 +28,12 @@
     "build": "vite build && tsc -p tsconfig.lib.json",
     "build:demo": "vite build --config vite.demo.config.ts",
     "preview": "vite preview",
-    "lint": "eslint src/",
+    "lint": "eslint src/ browser/*.ts browser/*.tsx browser/consumer/main.tsx playwright.config.ts vitest.config.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "typecheck:browser": "tsc -p browser/tsconfig.json --noEmit",
+    "prepare:consumer": "node browser/prepare-consumer.mjs",
+    "test:browser": "npm run prepare:consumer && npm run typecheck:browser && playwright test"
   },
   "peerDependencies": {
     "@patternfly/patternfly": "^6.0.0",
@@ -46,6 +49,8 @@
     "@patternfly/patternfly": "6.6.1",
     "@patternfly/react-core": "6.6.1",
     "@patternfly/react-icons": "6.6.1",
+    "@playwright/test": "1.63.0",
+    "@types/node": "26.6.2",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.1",
