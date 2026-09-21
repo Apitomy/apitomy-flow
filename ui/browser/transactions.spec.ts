@@ -129,17 +129,71 @@ test('late real FileReader completion started before simulation cannot mutate do
     await expect(editor.getByRole('button', { name: 'Undo', exact: true })).toBeDisabled();
 });
 
-test('keyboard-accessible toolbar and native select/textarea controls retain focus and shortcut ownership', async ({ page }) => {
-    await page.goto('/?two');
+test('nested task-description typing is one document undo/redo transaction', async ({ page }) => {
+    await page.goto('/?echo');
     const editor = page.getByTestId('one');
     await ready(editor);
     await editor.locator('.react-flow__node[data-id="h"]').click();
     const description = editor.getByPlaceholder('Instructions for the person completing this task');
     await description.press('End');
-    await description.pressSequentially(' extended');
+    await page.keyboard.type(' extended');
+    await expect(description).toHaveValue('Review request extended');
     await expect(description).toBeFocused();
-    await description.press('Control+z');
-    await expect(editor.locator('.react-flow__node')).toHaveCount(4);
+    expect((await changes(editor)).at(-1)?.nodes[2].config.description).toBe('Review request extended');
+    await description.press('Tab');
+    await editor.getByRole('button', { name: 'Undo', exact: true }).click();
+    await expect(description).toHaveValue('Review request');
+    expect((await changes(editor)).at(-1)?.nodes[2].config.description).toBe('Review request');
+    await expect(editor.getByRole('button', { name: 'Undo', exact: true })).toBeDisabled();
+    await editor.getByRole('button', { name: 'Redo', exact: true }).click();
+    await expect(description).toHaveValue('Review request extended');
+    expect((await changes(editor)).at(-1)?.nodes[2].config.description).toBe('Review request extended');
+});
+
+for (const kind of ['textarea', 'input'] as const) {
+    test(`native ${kind} undo/redo changes text while retaining a newer document operation`, async ({ page }) => {
+        await page.goto('/?two');
+        const editor = page.getByTestId('one');
+        await ready(editor);
+        await editor.locator('.react-flow__node[data-id="h"]').click();
+        const text = kind === 'textarea'
+            ? editor.getByPlaceholder('Instructions for the person completing this task') : field(editor, 'Name');
+        const original = kind === 'textarea' ? 'Review request' : 'Review';
+        await text.press('End');
+        await page.keyboard.insertText(' native edit');
+        await expect(text).toHaveValue(`${original} native edit`);
+        await editor.getByRole('button', { name: '+ Add output', exact: true }).click();
+        const before = await changes(editor);
+        expect(before).toHaveLength(2);
+        expect(before[1].nodes[2].config.outputs).toEqual([{ name: '', type: 'string', required: true }]);
+        await text.click();
+        await page.keyboard.press('Control+z');
+        await expect(text).toBeFocused();
+        await expect(text).toHaveValue(original);
+        await expect(editor.getByTitle('Remove output')).toHaveCount(1);
+        const afterUndo = await changes(editor);
+        expect(afterUndo).toHaveLength(3);
+        const nativeUndo = structuredClone(before[1]);
+        if (kind === 'textarea') nativeUndo.nodes[2].config.description = original;
+        else nativeUndo.nodes[2].name = original;
+        expect(afterUndo[2]).toEqual(nativeUndo);
+        // A native input edit creates a new document transaction, not the document redo branch.
+        await expect(editor.getByRole('button', { name: 'Redo', exact: true })).toBeDisabled();
+        await page.keyboard.press('Control+Shift+z');
+        await expect(text).toBeFocused();
+        await expect(text).toHaveValue(`${original} native edit`);
+        await expect(editor.getByTitle('Remove output')).toHaveCount(1);
+        expect(await changes(editor)).toHaveLength(4);
+        expect((await changes(editor)).at(-1)).toEqual(before[1]);
+        await expect(page.getByTestId('two').getByTestId('changes')).toHaveText('[]');
+    });
+}
+
+test('keyboard-accessible toolbar and native select retain focus and shortcut ownership', async ({ page }) => {
+    await page.goto('/?two');
+    const editor = page.getByTestId('one');
+    await ready(editor);
+    await editor.locator('.react-flow__node[data-id="h"]').click();
     await editor.getByRole('button', { name: '+ Add output', exact: true }).click();
     const type = editor.locator('.properties-panel select');
     await type.selectOption('number');

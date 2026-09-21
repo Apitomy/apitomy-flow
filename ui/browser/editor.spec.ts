@@ -134,11 +134,80 @@ test('context-menu deletion transfers focus before removal and keeps undo availa
     await editor.locator('.react-flow__node[data-id="a"]').click({ button: 'right' });
     await editor.getByRole('button', { name: /Delete/ }).click();
     await expect(editor.locator('[data-workflow-editor]')).toBeFocused();
+    await expect(editor.locator('.react-flow__node')).toHaveCount(3);
+    const deleted = await changes(editor);
+    expect(deleted).toHaveLength(1);
+    expect(deleted[0].nodes.map(node => node.id)).toEqual(['s', 'h', 'e']);
+    expect(deleted[0].edges.map(edge => edge.id)).toEqual(['he']);
     await page.keyboard.press('Control+z');
     await expect(editor.locator('.react-flow__node')).toHaveCount(4);
+    await expect(editor.locator('.react-flow__edge')).toHaveCount(3);
+    expect(await changes(editor)).toHaveLength(2);
+    expect((await changes(editor)).at(-1)).toEqual(workflow());
+    await page.keyboard.press('Control+Shift+z');
+    await expect(editor.locator('.react-flow__node')).toHaveCount(3);
+    await expect(editor.locator('.react-flow__edge')).toHaveCount(1);
+    expect(await changes(editor)).toHaveLength(3);
+    expect((await changes(editor)).at(-1)).toEqual(deleted[0]);
     await expect(page.getByTestId('two').getByTestId('changes')).toHaveText('[]');
     completeGraphs(await changes(editor));
 });
+
+for (const kind of ['node', 'edge'] as const) {
+    test(`Tab-first ${kind} selection and deletion keep scroll and undo ownership in the second editor`, async ({ page }) => {
+        await page.goto('/?two');
+        const one = page.getByTestId('one');
+        const two = page.getByTestId('two');
+        await ready(one);
+        await ready(two);
+        // Walk the actual browser tab sequence from the initial document focus. No click/focus shortcut.
+        const firstNode = one.locator('.react-flow__node[data-id="a"]');
+        for (let tab = 0; tab < 80 && !await firstNode.evaluate(element => element === document.activeElement); tab++) {
+            await page.keyboard.press('Tab');
+        }
+        await expect(firstNode).toBeFocused();
+        await page.keyboard.press('Enter');
+        await expect(firstNode).toHaveClass(/selected/);
+        const target = kind === 'node' ? two.locator('.react-flow__node[data-id="a"]')
+            : two.getByRole('group', { name: 'Edge from a to h', exact: true });
+        for (let tab = 0; tab < 80 && !await target.evaluate(element => element === document.activeElement); tab++) {
+            await page.keyboard.press('Tab');
+        }
+        await expect(target).toBeFocused();
+        await page.keyboard.press('Enter');
+        await expect(target).toHaveClass(/selected/);
+        await expect(firstNode).toHaveClass(/selected/);
+        const scroll = await page.evaluate(() => ({ x: scrollX, y: scrollY }));
+        expect(scroll.y).toBeGreaterThan(0);
+        await page.keyboard.press('Delete');
+        await expect(two.locator('[data-workflow-editor]')).toBeFocused();
+        await expect(two.locator('.react-flow__node')).toHaveCount(kind === 'node' ? 3 : 4);
+        await expect(two.locator('.react-flow__edge')).toHaveCount(kind === 'node' ? 1 : 2);
+        const deleted = await changes(two);
+        expect(deleted).toHaveLength(1);
+        expect(deleted[0].nodes.map(node => node.id)).toEqual(kind === 'node' ? ['s', 'h', 'e'] : ['s', 'a', 'h', 'e']);
+        expect(deleted[0].edges.map(edge => edge.id)).toEqual(kind === 'node' ? ['he'] : ['sa', 'he']);
+        expect(await page.evaluate(() => ({ x: scrollX, y: scrollY }))).toEqual(scroll);
+        await page.keyboard.press('Control+z');
+        await expect(two.locator('.react-flow__node')).toHaveCount(4);
+        await expect(two.locator('.react-flow__edge')).toHaveCount(3);
+        expect(await changes(two)).toHaveLength(2);
+        expect((await changes(two)).at(-1)).toEqual(workflow());
+        await expect(two.locator('[data-workflow-editor]')).toBeFocused();
+        expect(await page.evaluate(() => ({ x: scrollX, y: scrollY }))).toEqual(scroll);
+        await page.keyboard.press('Control+Shift+z');
+        await expect(two.locator('.react-flow__edge')).toHaveCount(kind === 'node' ? 1 : 2);
+        expect(await changes(two)).toHaveLength(3);
+        expect((await changes(two)).at(-1)).toEqual(deleted[0]);
+        await expect(two.locator('[data-workflow-editor]')).toBeFocused();
+        expect(await page.evaluate(() => ({ x: scrollX, y: scrollY }))).toEqual(scroll);
+        await expect(firstNode).toHaveClass(/selected/);
+        await expect(one.locator('.react-flow__node')).toHaveCount(4);
+        await expect(one.locator('.react-flow__edge')).toHaveCount(3);
+        await expect(one.getByTestId('changes')).toHaveText('[]');
+        completeGraphs(await changes(two));
+    });
+}
 
 test('host and property text focus excludes document shortcuts and simulation locks mutations', async ({ page }) => {
     await page.goto('/?two');

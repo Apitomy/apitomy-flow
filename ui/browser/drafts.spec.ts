@@ -1,6 +1,62 @@
 import { test, expect, changes, field, ready } from './test.ts';
 
 for (const id of ['a', 'h']) {
+    test(`${id} value typing preserves DOM identity/caret and coalesces nested config history with empty-key drafts`, async ({ page }) => {
+        await page.goto('/?echo');
+        const editor = page.getByTestId('one');
+        await ready(editor);
+        await editor.locator(`.react-flow__node[data-id="${id}"]`).click();
+        const keys = editor.getByPlaceholder('Label', { exact: true });
+        const values = editor.getByPlaceholder(id === 'a' ? 'e.g. context.loanAmount' : 'e.g. context.creditScore');
+        const originalInputs = { first: 'context.first', count: 3, enabled: false, data: { nested: [1, null] } };
+        const valueElement = await values.first().elementHandle();
+        await values.first().press('End');
+        for (const character of 'Value') {
+            // Global keyboard delivery cannot silently refocus a remounted input between characters.
+            await page.keyboard.type(character);
+            expect(await valueElement!.evaluate(element => element === document.activeElement)).toBe(true);
+        }
+        await expect(values.first()).toHaveValue('context.firstValue');
+        expect(await valueElement!.evaluate(element => ({
+            connected: element.isConnected,
+            start: (element as HTMLInputElement).selectionStart,
+            end: (element as HTMLInputElement).selectionEnd,
+        }))).toEqual({ connected: true, start: 18, end: 18 });
+        const typed = await changes(editor);
+        expect(typed).toHaveLength(5);
+        for (const [index, document] of typed.entries()) {
+            expect(document.nodes.find(node => node.id === id)?.config.inputs).toEqual({
+                ...originalInputs, first: `context.first${'Value'.slice(0, index + 1)}`,
+            });
+        }
+        await values.first().press('Tab');
+        await editor.getByRole('button', { name: 'Undo', exact: true }).click();
+        await expect(values.first()).toHaveValue('context.first');
+        expect((await changes(editor)).at(-1)?.nodes.find(node => node.id === id)?.config.inputs).toEqual(originalInputs);
+        await expect(editor.getByRole('button', { name: 'Undo', exact: true })).toBeDisabled();
+        await editor.getByRole('button', { name: 'Redo', exact: true }).click();
+        await expect(values.first()).toHaveValue('context.firstValue');
+        expect((await changes(editor)).at(-1)?.nodes.find(node => node.id === id)?.config.inputs).toEqual({
+            ...originalInputs, first: 'context.firstValue',
+        });
+        expect(await changes(editor)).toHaveLength(7);
+
+        // Transition an existing populated row to an empty key, then create a colliding empty draft.
+        await keys.first().fill('');
+        await editor.getByRole('button', { name: '+ Add input', exact: true }).click();
+        await values.last().pressSequentially('second empty value');
+        const draftKeys = ['', 'count', 'enabled', 'data', ''];
+        const draftValues = ['context.firstValue', '3', 'false', '{"nested":[1,null]}', 'second empty value'];
+        expect(await keys.evaluateAll(elements => elements.map(element => (element as HTMLInputElement).value))).toEqual(draftKeys);
+        expect(await values.evaluateAll(elements => elements.map(element => (element as HTMLInputElement).value))).toEqual(draftValues);
+        await field(editor, 'Name').fill('Unrelated name');
+        expect(await keys.evaluateAll(elements => elements.map(element => (element as HTMLInputElement).value))).toEqual(draftKeys);
+        expect(await values.evaluateAll(elements => elements.map(element => (element as HTMLInputElement).value))).toEqual(draftValues);
+        expect((await changes(editor)).at(-1)?.nodes.find(node => node.id === id)?.config.inputs).toEqual({
+            '': 'second empty value', count: 3, enabled: false, data: { nested: [1, null] },
+        });
+    });
+
     test(`${id} map rows retain focus/caret, duplicate drafts and JSON literal values across cloned echoes`, async ({ page }) => {
         await page.goto('/?echo');
         const editor = page.getByTestId('one');
