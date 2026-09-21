@@ -69,7 +69,7 @@ export interface SimState {
     blockedOn?: { nodeId: string; kind: NodeType };
     /** Set when `status === 'failed'`. */
     error?: SimError;
-    /** Number of transitions taken across all branches, for the loop guard. */
+    /** Transitions across all branches in this advancement; resets when a parked node is resumed. */
     transitions: number;
 }
 
@@ -85,9 +85,11 @@ export interface SimMock {
 // Lifecycle
 // ---------------------------------------------------------------------------
 
+/** Starts a simulation, rejecting unsupported parallel topology before entering any node. */
 export function startSimulation(workflow: Workflow, context: Record<string, unknown>): SimState {
     const startNode = workflow.nodes.find(n => n.type === 'start');
-    if (!startNode) {
+    const problem = startNode ? analyzeParallelRegions(workflow).problems[0] : undefined;
+    if (!startNode || problem) {
         return {
             status: 'failed',
             activeBranches: [],
@@ -98,7 +100,9 @@ export function startSimulation(workflow: Workflow, context: Record<string, unkn
             visitedNodeIds: [],
             history: [],
             edgeEvaluations: {},
-            error: { message: 'No start node found' },
+            error: problem
+                ? { message: `Invalid parallel structure: ${problem.code}`, nodeId: problem.nodeId }
+                : { message: 'No start node found' },
             transitions: 0,
         };
     }
@@ -225,7 +229,8 @@ export function runSimulation(workflow: Workflow, state: SimState): SimState {
  * Delivers a mock output/event to a parked (blocking) branch, merges any output into context (as a
  * real node would), and marks that branch runnable so the next step routes it onward. When `nodeId`
  * is given the matching parked branch is targeted; otherwise the first parked branch is resumed. A
- * no-op unless the simulation is `blocked`.
+ * no-op unless the simulation is `blocked`. A successful resume begins a fresh transition budget,
+ * matching the engine's advancement call; stepping/running within that advancement never resets it.
  */
 export function resumeSimulation(
     workflow: Workflow,
@@ -254,7 +259,7 @@ export function resumeSimulation(
     const context = { ...state.context, ...output };
     const history = recordOutputOnBranch(state.history, target.branchId, target.nodeId, output);
     const parkedBranchIds = state.parkedBranchIds.filter(id => id !== target.branchId);
-    return derive(workflow, { ...state, status: 'running', context, history, parkedBranchIds });
+    return derive(workflow, { ...state, status: 'running', context, history, parkedBranchIds, transitions: 0 });
 }
 
 /**
@@ -271,9 +276,8 @@ function resolveMergeOutput(
     context: Record<string, unknown>,
     rawOutput: Record<string, unknown>,
 ): Record<string, unknown> {
-    const outputDefs = node?.config?.outputs;
-    if (node?.type === 'receive-event' && Array.isArray(outputDefs) && outputDefs.length > 0) {
-        return applyEventOutputMappings(outputDefs, context, rawOutput);
+    if (node?.type === 'receive-event' && Array.isArray(node.config.outputs) && node.config.outputs.length > 0) {
+        return applyEventOutputMappings(node.config.outputs, context, rawOutput);
     }
     return resolveContextKeys(node, rawOutput);
 }
@@ -287,15 +291,15 @@ function resolveMergeOutput(
  * of being swallowed by the inherited prototype setter.
  */
 function applyEventOutputMappings(
-    outputDefs: unknown[],
+    outputDefs: import('../types/workflow.ts').EventOutputMapping[],
     context: Record<string, unknown>,
     event: Record<string, unknown>,
 ): Record<string, unknown> {
     const mapped: Record<string, unknown> = Object.create(null);
     for (const def of outputDefs) {
         if (typeof def !== 'object' || def === null) continue;
-        const contextKey = (def as Record<string, unknown>).contextKey;
-        const expression = (def as Record<string, unknown>).expression;
+        const contextKey = def.contextKey;
+        const expression = def.expression;
         if (typeof contextKey === 'string' && contextKey.trim() !== '' && typeof expression === 'string' && expression.trim() !== '') {
             mapped[contextKey] = resolveExpression(expression, { context, event });
         }
@@ -313,15 +317,16 @@ function resolveContextKeys(
     node: WorkflowNode | undefined,
     rawOutput: Record<string, unknown>,
 ): Record<string, unknown> {
-    const outputDefs = node?.config?.outputs;
+    if (node?.type !== 'action' && node?.type !== 'human-task') return rawOutput;
+    const outputDefs = node.config.outputs;
     if (!Array.isArray(outputDefs) || outputDefs.length === 0) {
         return rawOutput;
     }
     const renames = new Map<string, string>();
     for (const def of outputDefs) {
         if (typeof def === 'object' && def !== null) {
-            const name = (def as Record<string, unknown>).name;
-            const contextKey = (def as Record<string, unknown>).contextKey;
+            const name = def.name;
+            const contextKey = def.contextKey;
             if (typeof name === 'string' && typeof contextKey === 'string'
                 && contextKey.trim() !== '' && contextKey !== name) {
                 renames.set(name, contextKey);

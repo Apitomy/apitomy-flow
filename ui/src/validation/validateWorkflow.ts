@@ -1,13 +1,19 @@
-import { type Workflow, type WorkflowEdge } from '../types/workflow.ts';
+import { type Workflow, type WorkflowEdge, type HumanTaskOutput, type ActionOutputConfig,
+  type EventOutputMapping } from '../types/workflow.ts';
 import { type ValidationProblem, type ValidationSeverity } from '../types/validation.ts';
 import { analyzeParallelRegions } from '../simulation/parallelRegions.ts';
-import { isValidExpression } from '../simulation/elEvaluator.ts';
+import { classifyExpression } from '../simulation/elEvaluator.ts';
+import { normalizeWorkflow } from './workflowShape.ts';
 
 function problem(severity: ValidationSeverity, code: string, message: string, nodeId?: string, edgeId?: string): ValidationProblem {
   return { severity, code, message, nodeId, edgeId };
 }
 
-export function validateWorkflow(workflow: Workflow): ValidationProblem[] {
+/** Validates unknown wire data before running semantic graph checks. */
+export function validateWorkflow(raw: unknown): ValidationProblem[] {
+  const normalized = normalizeWorkflow(raw);
+  if (!normalized.workflow) return normalized.problems;
+  const workflow = normalized.workflow;
   const problems: ValidationProblem[] = [];
   validateStructure(workflow, problems);
   validateConnectivity(workflow, problems);
@@ -129,9 +135,8 @@ function validateStructure(workflow: Workflow, problems: ValidationProblem[]) {
     } else if (typeof inputsVal !== 'object' || Array.isArray(inputsVal)) {
       problems.push(problem('warning', 'INVALID_INPUTS_TYPE', 'Action node inputs must be a Map', action.id));
     } else {
-      const inputs = inputsVal as Record<string, string>;
-      for (const [name, expr] of Object.entries(inputs)) {
-        if (!expr || expr.trim() === '') {
+      for (const [name, expr] of Object.entries(inputsVal)) {
+        if (expr == null || (typeof expr === 'string' && expr.trim() === '')) {
           problems.push(problem('warning', 'EMPTY_ACTION_INPUT_EXPRESSION',
             `Action node input "${name}" has no EL expression`, action.id));
         }
@@ -262,9 +267,13 @@ function validateEdgeConditions(workflow: Workflow, problems: ValidationProblem[
   // Invalid EL conditions
   for (const edge of workflow.edges) {
     if (edge.condition && edge.condition.trim() !== '') {
-      if (!isValidCondition(edge.condition)) {
+      const syntax = classifyExpression(edge.condition);
+      if (syntax === 'invalid') {
         problems.push(problem('warning', 'INVALID_CONDITION',
           `Edge condition is not valid EL: ${edge.condition}`, undefined, edge.id));
+      } else if (syntax === 'unsupported') {
+        problems.push(problem('warning', 'UNSUPPORTED_EXPRESSION_DIALECT',
+          'Edge condition uses syntax unsupported in the browser; validate with the Java engine', undefined, edge.id));
       }
     }
   }
@@ -300,9 +309,8 @@ function validateSemantics(workflow: Workflow, problems: ValidationProblem[]) {
       problems.push(problem('warning', 'MISSING_TASK_DESCRIPTION', 'Human task node has no description', node.id));
     }
     if (node.config.inputs && typeof node.config.inputs === 'object' && !Array.isArray(node.config.inputs)) {
-      const inputs = node.config.inputs as Record<string, string>;
-      for (const [name, expr] of Object.entries(inputs)) {
-        if (!expr || expr.trim() === '') {
+      for (const [name, expr] of Object.entries(node.config.inputs)) {
+        if (expr == null || (typeof expr === 'string' && expr.trim() === '')) {
           problems.push(problem('warning', 'EMPTY_TASK_INPUT_EXPRESSION',
             `Human task input "${name}" has no EL expression`, node.id));
         }
@@ -340,7 +348,7 @@ function validateSemantics(workflow: Workflow, problems: ValidationProblem[]) {
       const inputNames = new Set<string>();
       for (const input of inputsDef) {
         if (typeof input === 'object' && input !== null) {
-          const nameVal = (input as Record<string, unknown>).name;
+          const nameVal = input.name;
           if (!nameVal || (typeof nameVal === 'string' && nameVal.trim() === '')) {
             problems.push(problem('warning', 'INVALID_INPUT_DEFINITION',
               'Start node input is missing a name', startNode.id));
@@ -365,12 +373,8 @@ function validateSemantics(workflow: Workflow, problems: ValidationProblem[]) {
  * WorkflowValidator; all problems are warnings and the metadata is advisory. Applies only to
  * human-task nodes so action-node outputs are unaffected.
  */
-function validateHumanTaskOutputMetadata(outputDefs: unknown[], nodeId: string, problems: ValidationProblem[]) {
-  for (const defObj of outputDefs) {
-    if (typeof defObj !== 'object' || defObj === null) {
-      continue;
-    }
-    const def = defObj as Record<string, unknown>;
+function validateHumanTaskOutputMetadata(outputDefs: HumanTaskOutput[], nodeId: string, problems: ValidationProblem[]) {
+  for (const def of outputDefs) {
     const name = def.name !== undefined && def.name !== null ? String(def.name) : '(unnamed)';
     const type = typeof def.type === 'string' && def.type.trim() !== '' ? def.type : 'string';
     const widget = typeof def.widget === 'string' && def.widget.trim() !== '' ? def.widget : undefined;
@@ -394,7 +398,7 @@ function validateHumanTaskOutputMetadata(outputDefs: unknown[], nodeId: string, 
     if (Array.isArray(def.options)) {
       for (const optObj of def.options) {
         if (typeof optObj === 'object' && optObj !== null) {
-          const value = (optObj as Record<string, unknown>).value;
+          const value = optObj.value;
           if (value === undefined || value === null || (typeof value === 'string' && value.trim() === '')) {
             problems.push(problem('warning', 'MALFORMED_OUTPUT_OPTION',
               `Output "${name}" has a select option with no value`, nodeId));
@@ -422,14 +426,14 @@ function valueMatchesType(value: unknown, type: string): boolean {
   }
 }
 
-function validateOutputNames(outputDefs: unknown[], nodeId: string, problems: ValidationProblem[]) {
+function validateOutputNames(outputDefs: (ActionOutputConfig | HumanTaskOutput)[], nodeId: string, problems: ValidationProblem[]) {
   const contextKeys = new Set<string>();
   for (const defObj of outputDefs) {
     if (typeof defObj === 'object' && defObj !== null) {
-      const nameVal = (defObj as Record<string, unknown>).name;
+      const nameVal = defObj.name;
       if (nameVal !== undefined && nameVal !== null) {
         const name = String(nameVal);
-        const contextKeyVal = (defObj as Record<string, unknown>).contextKey;
+        const contextKeyVal = defObj.contextKey;
         const contextKey = typeof contextKeyVal === 'string' && contextKeyVal.trim() !== ''
           ? contextKeyVal : name;
         if (contextKeys.has(contextKey)) {
@@ -448,14 +452,12 @@ function validateOutputNames(outputDefs: unknown[], nodeId: string, problems: Va
  * `contextKey`s must be unique within the node. A non-object entry, or a `contextKey`/`expression`
  * of the wrong type, is treated the same as a missing value rather than coerced with `String(...)`
  * — this keeps validation aligned with the simulator's runtime check, which requires actual
- * strings and otherwise skips the entry, and mirrors the Java engine validator/runtime. Syntax
- * validity is checked with {@link isValidExpression} (real EL parsing), not the delimiter-balance
- * heuristic used for the pre-existing (and out-of-scope) edge-condition check.
+ * strings and otherwise skips the entry, and mirrors the Java engine validator/runtime. The same
+ * browser-subset parser checks both mappings and edge conditions; engine-only syntax is advisory.
  */
-function validateEventOutputMappings(outputDefs: unknown[], nodeId: string, problems: ValidationProblem[]) {
+function validateEventOutputMappings(outputDefs: EventOutputMapping[], nodeId: string, problems: ValidationProblem[]) {
   const contextKeys = new Set<string>();
-  for (const defObj of outputDefs) {
-    const def = (typeof defObj === 'object' && defObj !== null ? defObj : {}) as Record<string, unknown>;
+  for (const def of outputDefs) {
     const contextKeyVal = def.contextKey;
     if (typeof contextKeyVal !== 'string' || contextKeyVal.trim() === '') {
       problems.push(problem('warning', 'MISSING_OUTPUT_CONTEXT_KEY',
@@ -472,9 +474,15 @@ function validateEventOutputMappings(outputDefs: unknown[], nodeId: string, prob
     if (typeof expressionVal !== 'string' || expressionVal.trim() === '') {
       problems.push(problem('warning', 'MISSING_OUTPUT_EXPRESSION',
         `Receive-event output mapping "${contextKeyVal}" has no EL expression`, nodeId));
-    } else if (!isValidExpression(expressionVal)) {
-      problems.push(problem('error', 'INVALID_OUTPUT_EXPRESSION',
-        `Receive-event output mapping "${contextKeyVal}" is not valid EL: ${expressionVal}`, nodeId));
+    } else {
+      const syntax = classifyExpression(expressionVal);
+      if (syntax === 'invalid') {
+        problems.push(problem('error', 'INVALID_OUTPUT_EXPRESSION',
+          `Receive-event output mapping "${contextKeyVal}" is not valid EL: ${expressionVal}`, nodeId));
+      } else if (syntax === 'unsupported') {
+        problems.push(problem('warning', 'UNSUPPORTED_EXPRESSION_DIALECT',
+          `Receive-event output mapping "${contextKeyVal}" uses syntax unsupported in the browser; validate with the Java engine`, nodeId));
+      }
     }
   }
 }
@@ -496,45 +504,6 @@ function isValidIsoDuration(value: string): boolean {
   return /^P(?:\d+D)?(?:T(?:\d+H)?(?:\d+M)?(?:\d+(?:\.\d+)?S)?)?$/.test(value)
     && value !== 'P' && value !== 'PT'
     && !/T$/.test(value);
-}
-
-function isValidCondition(expression: string): boolean {
-  let parenDepth = 0;
-  let bracketDepth = 0;
-  let inSingleQuote = false;
-  let inDoubleQuote = false;
-
-  for (let i = 0; i < expression.length; i++) {
-    const ch = expression[i];
-
-    if (inSingleQuote) {
-      if (ch === "'" && !isEscaped(expression, i)) inSingleQuote = false;
-      continue;
-    }
-    if (inDoubleQuote) {
-      if (ch === '"' && !isEscaped(expression, i)) inDoubleQuote = false;
-      continue;
-    }
-
-    switch (ch) {
-      case "'": inSingleQuote = true; break;
-      case '"': inDoubleQuote = true; break;
-      case '(': parenDepth++; break;
-      case ')': parenDepth--; break;
-      case '[': bracketDepth++; break;
-      case ']': bracketDepth--; break;
-    }
-
-    if (parenDepth < 0 || bracketDepth < 0) return false;
-  }
-
-  return !inSingleQuote && !inDoubleQuote && parenDepth === 0 && bracketDepth === 0;
-}
-
-function isEscaped(expression: string, index: number): boolean {
-  let backslashes = 0;
-  for (let j = index - 1; j >= 0 && expression[j] === '\\'; j--) backslashes++;
-  return backslashes % 2 !== 0;
 }
 
 function detectAutomatedCycles(workflow: Workflow, problems: ValidationProblem[]) {
@@ -588,6 +557,13 @@ function messageForParallelProblem(code: string): string {
       return 'Parallel branches from this fork do not re-converge at a single join';
     case 'PARALLEL_BRANCH_REACHES_END':
       return 'A parallel branch can reach an end node without first joining';
+    case 'UNBALANCED_PARALLEL':
+      return 'Each parallel branch must reach its join through one distinct incoming edge; merge '
+        + 'exclusive paths and finish nested regions before the join';
+    case 'CROSSING_PARALLEL_REGIONS':
+      return 'An edge crosses a parallel region boundary (regions must be well-nested)';
+    case 'PARALLEL_REGION_CYCLE':
+      return 'A parallel branch can re-enter its fork before joining; repeat regions only after their join';
     default:
       return 'Invalid parallel structure';
   }

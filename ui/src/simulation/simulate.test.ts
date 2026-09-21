@@ -17,7 +17,8 @@ import {
  */
 
 function node(id: string, type: WorkflowNode['type'], config: Record<string, unknown> = {}): WorkflowNode {
-    return { id, type, name: id, config, position: { x: 0, y: 0 } };
+    // Runtime fixtures intentionally include malformed configs to verify defensive execution.
+    return { id, type, name: id, config, position: { x: 0, y: 0 } } as WorkflowNode;
 }
 
 function edge(id: string, source: string, target: string, extra: Partial<WorkflowEdge> = {}): WorkflowEdge {
@@ -438,7 +439,7 @@ describe('fork / AND-join', () => {
                 node('j', 'wait'), node('dead', 'wait'), node('end', 'end')],
             [edge('s', 'start', 'f'), edge('fa', 'f', 'a'), edge('fb', 'f', 'b'),
                 edge('aj', 'a', 'j'), edge('bd', 'b', 'dead', { condition: 'context.never == true' }),
-                edge('je', 'j', 'end')],
+                edge('dj', 'dead', 'j'), edge('je', 'j', 'end')],
         );
         const state = runSimulation(wf, startSimulation(wf, {}));
         expect(state.status).toBe('failed');

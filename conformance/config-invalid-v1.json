@@ -1,0 +1,17 @@
+[
+    { "type": "action", "config": { "inputs": [] }, "code": "INVALID_INPUTS_TYPE" },
+    { "type": "start", "config": { "inputs": {} }, "code": "INVALID_INPUTS_TYPE" },
+    { "type": "wait", "config": { "duration": 123 }, "code": "INVALID_WAIT_DURATION" },
+    { "type": "receive-event", "config": { "match": [null] }, "code": "INVALID_MATCH_TYPE" },
+    { "type": "human-task", "config": { "outputs": [null] }, "code": "INVALID_OUTPUT_DEFINITION" },
+    { "type": "start", "config": { "inputs": [{ "name": "id", "contextKey": 42 }] }, "code": "INVALID_INPUT_DEFINITION" },
+    { "type": "start", "config": { "inputs": [{ "name": "id", "label": 42 }] }, "code": "INVALID_INPUT_DEFINITION" },
+    { "type": "start", "config": { "inputs": [{ "name": "id", "widget": [] }] }, "code": "INVALID_INPUT_DEFINITION" },
+    { "type": "start", "config": { "inputs": [{ "name": "id", "options": [null] }] }, "code": "MALFORMED_OUTPUT_OPTION" },
+    { "type": "start", "config": { "inputs": [{ "name": "id", "options": [{ "value": 42 }] }] }, "code": "MALFORMED_OUTPUT_OPTION" },
+    { "type": "action", "config": { "outputs": [{ "name": "result", "label": 42 }] }, "code": "INVALID_OUTPUT_DEFINITION" },
+    { "type": "action", "config": { "outputs": [{ "name": "result", "description": { "bad": true } }] }, "code": "INVALID_OUTPUT_DEFINITION" },
+    { "type": "action", "config": { "outputs": [{ "name": "result", "widget": [] }] }, "code": "INVALID_OUTPUT_DEFINITION" },
+    { "type": "action", "config": { "outputs": [{ "name": "result", "options": [null] }] }, "code": "MALFORMED_OUTPUT_OPTION" },
+    { "type": "action", "config": { "outputs": [{ "name": "result", "options": [{ "label": 42 }] }] }, "code": "MALFORMED_OUTPUT_OPTION" }
+]

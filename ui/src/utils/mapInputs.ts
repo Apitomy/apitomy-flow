@@ -1,5 +1,7 @@
+import type { JsonObject, JsonValue } from '../types/workflow.ts';
+
 /**
- * Helpers for editing map-based inputs (a `Record<string, string>`) as an ordered array of
+ * Helpers for editing map-based inputs (expressions or JSON literals) as an ordered array of
  * `{ key, value }` pairs.
  *
  * The workflow serialization stores these inputs as a plain object keyed by the input name, but a
@@ -19,6 +21,8 @@ export interface KeyValuePair {
   id: string;
   key: string;
   value: string;
+  /** Original literal, retained while the displayed text is unchanged. */
+  literal?: JsonValue;
 }
 
 let pairIdCounter = 0;
@@ -40,11 +44,17 @@ export function nextPairId(): string {
  * @param map the serialized map, or `undefined`/`null`
  * @return the entries as pairs, in insertion order
  */
-export function mapToPairs(map: Record<string, string> | null | undefined): KeyValuePair[] {
+export function mapToPairs(map: JsonObject | null | undefined): KeyValuePair[] {
   if (!map) {
     return [];
   }
-  return Object.entries(map).map(([key, value]) => ({ id: nextPairId(), key, value }));
+  return Object.entries(map).map(([key, value]) => ({ id: nextPairId(), key,
+    value: inputValueText(value), ...(typeof value === 'string' ? {} : { literal: value }) }));
+}
+
+/** Displays an expression verbatim or a JSON literal without lossy object/string coercion. */
+export function inputValueText(value: unknown): string {
+  return typeof value === 'string' ? value : JSON.stringify(value) ?? '';
 }
 
 /**
@@ -54,12 +64,9 @@ export function mapToPairs(map: Record<string, string> | null | undefined): KeyV
  * @param pairs the edited pairs
  * @return the pairs as a map keyed by `key`
  */
-export function pairsToMap(pairs: KeyValuePair[]): Record<string, string> {
-  const map: Record<string, string> = {};
-  for (const pair of pairs) {
-    map[pair.key] = pair.value;
-  }
-  return map;
+export function pairsToMap(pairs: KeyValuePair[]): JsonObject {
+  return Object.fromEntries(pairs.map(pair => [pair.key,
+    'literal' in pair && pair.value === inputValueText(pair.literal) ? pair.literal : pair.value]));
 }
 
 /**
@@ -69,7 +76,7 @@ export function pairsToMap(pairs: KeyValuePair[]): Record<string, string> {
  * @param pairs the edited pairs
  * @return the set of colliding non-empty keys
  */
-export function duplicateKeys(pairs: KeyValuePair[]): Set<string> {
+export function duplicateKeys(pairs: readonly { key: string }[]): Set<string> {
   const seen = new Set<string>();
   const duplicates = new Set<string>();
   for (const pair of pairs) {

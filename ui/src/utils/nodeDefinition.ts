@@ -1,4 +1,6 @@
-import { type WorkflowNode } from '../types/workflow.ts';
+import { type WorkflowNode, type ActionConfig, type HumanTaskConfig, type StartConfig,
+  type ReceiveEventConfig, type NodeConfig } from '../types/workflow.ts';
+import { inputValueText } from './mapInputs.ts';
 
 /**
  * A single labeled value in a node's definition view, e.g. `orderId: string` for a start node
@@ -43,40 +45,38 @@ function formatConfigValue(value: unknown): string {
   return String(value);
 }
 
-/** Builds an "Inputs" section from a map-based inputs config (label/name -> context expression), as used by action and human-task nodes. */
-function mapInputsSection(config: Record<string, any>): DefinitionSection | null {
+/** Builds an "Inputs" section from expressions or JSON literals on action and human-task nodes. */
+function mapInputsSection(config: ActionConfig | HumanTaskConfig): DefinitionSection | null {
   const inputs = config.inputs;
   if (!inputs || typeof inputs !== 'object' || Array.isArray(inputs) || Object.keys(inputs).length === 0) return null;
   return {
     label: 'Inputs',
-    fields: Object.entries(inputs as Record<string, string>).map(([key, value]) => ({
+    fields: Object.entries(inputs).map(([key, value]) => ({
       label: key,
-      value: String(value),
+      value: inputValueText(value),
     })),
   };
 }
 
-function startInputsSection(config: Record<string, any>): DefinitionSection | null {
+function startInputsSection(config: StartConfig): DefinitionSection | null {
   const inputs = config.inputs;
   if (!Array.isArray(inputs) || inputs.length === 0) return null;
   return {
     label: 'Inputs',
-    fields: inputs.map((input: { name: string; type: string; required: boolean; description?: string }) => ({
+    fields: inputs.map(input => ({
       label: input.name,
-      badge: `${input.type}${input.required ? '' : '?'}`,
-      value: input.description,
+      badge: `${input.type ?? 'string'}${input.required ? '' : '?'}`,
+      value: input.description ?? undefined,
     })),
   };
 }
 
-function humanTaskOutputsSection(config: Record<string, any>): DefinitionSection | null {
+function humanTaskOutputsSection(config: HumanTaskConfig): DefinitionSection | null {
   const outputs = config.outputs;
   if (!Array.isArray(outputs) || outputs.length === 0) return null;
   return {
     label: 'Outputs',
-    fields: outputs.map((output: {
-      name: string; type?: string; label?: string; description?: string; contextKey?: string;
-    }) => ({
+    fields: outputs.map(output => ({
       label: output.label ?? output.name,
       badge: output.type ?? 'string',
       value: describeOutputValue(output.description, output.contextKey),
@@ -90,13 +90,13 @@ function humanTaskOutputsSection(config: Record<string, any>): DefinitionSection
  * `"stored as context.managerApproved"` when there's no description. Returns `undefined` when
  * neither is present.
  */
-function describeOutputValue(description: string | undefined, contextKey: string | undefined): string | undefined {
+function describeOutputValue(description: string | null | undefined, contextKey: string | null | undefined): string | undefined {
   const storedAs = contextKey ? `stored as context.${contextKey}` : undefined;
   if (description && storedAs) return `${description} — ${storedAs}`;
   return description ?? storedAs;
 }
 
-function actionSections(config: Record<string, any>): DefinitionSection[] {
+function actionSections(config: ActionConfig): DefinitionSection[] {
   const sections: DefinitionSection[] = [];
 
   if (config.actionType !== undefined) {
@@ -113,9 +113,9 @@ function actionSections(config: Record<string, any>): DefinitionSection[] {
   if (Array.isArray(outputs) && outputs.length > 0) {
     sections.push({
       label: 'Outputs',
-      fields: outputs.map((output: { name: string; type: string; required: boolean; contextKey?: string }) => ({
+      fields: outputs.map(output => ({
         label: output.name,
-        badge: output.type,
+        badge: output.type ?? 'string',
         value: describeOutputValue(undefined, output.contextKey),
       })),
     });
@@ -124,15 +124,15 @@ function actionSections(config: Record<string, any>): DefinitionSection[] {
   return sections;
 }
 
-function receiveEventOutputsSection(config: Record<string, any>): DefinitionSection | null {
+function receiveEventOutputsSection(config: ReceiveEventConfig): DefinitionSection | null {
   const outputs = config.outputs;
   if (!Array.isArray(outputs) || outputs.length === 0) return null;
   const fields = outputs
-    .filter((output): output is { contextKey?: string; expression?: string } =>
+    .filter(output =>
       typeof output === 'object' && output !== null)
     .map(output => ({
       label: output.contextKey ?? '(missing contextKey)',
-      value: output.expression,
+      value: output.expression ?? undefined,
     }));
   if (fields.length === 0) return null;
   return {
@@ -141,7 +141,7 @@ function receiveEventOutputsSection(config: Record<string, any>): DefinitionSect
   };
 }
 
-function genericConfigSection(config: Record<string, any>, handledKeys: Set<string>): DefinitionSection | null {
+function genericConfigSection(config: NodeConfig, handledKeys: Set<string>): DefinitionSection | null {
   const entries = Object.entries(config).filter(([key]) => !handledKeys.has(key));
   if (entries.length === 0) return null;
   return {
@@ -164,15 +164,15 @@ export function getNodeDefinition(node: WorkflowNode): NodeDefinitionView {
   let sections: DefinitionSection[];
   let description: string | undefined;
   if (node.type === 'start') {
-    sections = [startInputsSection(config)].filter((s): s is DefinitionSection => s !== null);
+    sections = [startInputsSection(node.config)].filter((s): s is DefinitionSection => s !== null);
   } else if (node.type === 'human-task') {
     description = typeof config.description === 'string' && config.description ? config.description : undefined;
-    sections = [mapInputsSection(config), humanTaskOutputsSection(config)]
+    sections = [mapInputsSection(node.config), humanTaskOutputsSection(node.config)]
       .filter((s): s is DefinitionSection => s !== null);
   } else if (node.type === 'action') {
-    sections = actionSections(config);
+    sections = actionSections(node.config);
   } else if (node.type === 'receive-event') {
-    sections = [receiveEventOutputsSection(config)].filter((s): s is DefinitionSection => s !== null);
+    sections = [receiveEventOutputsSection(node.config)].filter((s): s is DefinitionSection => s !== null);
   } else {
     sections = [];
   }

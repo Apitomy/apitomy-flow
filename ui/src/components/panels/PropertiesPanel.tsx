@@ -1,33 +1,28 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { type Node, type Edge } from '@xyflow/react';
-import {
-  Select,
-  SelectOption,
-  SelectList,
-  MenuToggle,
-  TextInputGroup,
-  TextInputGroupMain,
-  TextInputGroupUtilities,
-  Button,
-} from '@patternfly/react-core';
-import { TimesIcon } from '@patternfly/react-icons';
+import { ActionTypeSelect } from './ActionTypeSelect.tsx';
 import { type FlowNodeData } from '../../utils/conversion.ts';
+import type { WorkflowInput, ReceiveEventConfig } from '../../types/workflow.ts';
 import { type EditorSpi } from '../../types/spi.ts';
 import { type ActionTypeDescriptor } from '../../types/spi.ts';
-import { type HumanTaskOutput, type OutputOption, type OutputWidget, type ActionOutputConfig, type EventOutputMapping } from '../../types/workflow.ts';
+import { type HumanTaskOutput, type OutputWidget, type ActionOutputConfig, type EventOutputMapping } from '../../types/workflow.ts';
 import { type ValidationProblem } from '../../types/validation.ts';
-import { mapToPairs, pairsToMap, duplicateKeys, nextPairId, type KeyValuePair } from '../../utils/mapInputs.ts';
+import { inputValueText } from '../../utils/mapInputs.ts';
+import { MapInputsEditor } from './MapInputsEditor.tsx';
+import { DefaultValueEditor, OptionsEditor } from './HumanTaskOutputFields.tsx';
 import { evaluateCondition, ElEvaluationError } from '../../simulation/elEvaluator.ts';
 import { JsonCodeEditor } from '../common/JsonCodeEditor.tsx';
 import './PropertiesPanel.css';
 
 interface PropertiesPanelProps {
+  /** Stable logical node identity plus explicit history/import/selection reset token. */
+  draftIdentity?: string;
   selectedNode?: Node<FlowNodeData>;
   selectedEdge?: Edge;
   nodeProblems?: ValidationProblem[];
   onNodeChange: (id: string, data: Partial<FlowNodeData>) => void;
   onNodeIdChange: (oldId: string, newId: string) => void;
-  onEdgeChange: (id: string, data: Record<string, any>) => void;
+  onEdgeChange: (id: string, data: Record<string, unknown>) => void;
   spi?: EditorSpi;
   /** A sample context used to seed the inline "Test condition" affordance. */
   sampleContext?: Record<string, unknown>;
@@ -43,12 +38,12 @@ interface PropertiesPanelProps {
  * from a malformed imported definition) is dropped rather than crashing the editor. Missing
  * `contextKey`/`expression` fields on an otherwise-valid entry default to `''` for editing.
  */
-function getOutputMappings(config: Record<string, any>): EventOutputMapping[] {
+function getOutputMappings(config: ReceiveEventConfig): EventOutputMapping[] {
   const outputs = config.outputs;
   if (!Array.isArray(outputs)) return [];
   return outputs
-    .filter((o): o is Partial<EventOutputMapping> => typeof o === 'object' && o !== null)
-    .map(o => ({ contextKey: o.contextKey ?? '', expression: o.expression ?? '' }));
+    .filter(o => typeof o === 'object' && o !== null)
+    .map(o => ({ ...o, contextKey: o.contextKey ?? '', expression: o.expression ?? '' }));
 }
 
 /**
@@ -109,121 +104,6 @@ function useActionTypes(spi?: EditorSpi): { actionTypes: ActionTypeDescriptor[];
 }
 
 const OUTPUT_WIDGETS: OutputWidget[] = ['text', 'textarea', 'select'];
-
-/**
- * Editor for a select widget's `options` list — a repeatable label/value pair editor shown only
- * when a human-task output uses `widget: 'select'`.
- */
-function OptionsEditor({ options, onChange }: {
-  options: OutputOption[];
-  onChange: (options: OutputOption[]) => void;
-}) {
-  return (
-    <div className="properties-panel__output-field">
-      <label>Options</label>
-      <div className="properties-panel__options-list">
-        {options.map((opt, i) => (
-          <div key={i} className="properties-panel__option-row">
-            <input
-              type="text"
-              value={opt.label}
-              placeholder="Label"
-              onChange={(e) => onChange(options.map((o, j) => j === i ? { ...o, label: e.target.value } : o))}
-            />
-            <input
-              type="text"
-              value={opt.value}
-              placeholder="Value"
-              onChange={(e) => onChange(options.map((o, j) => j === i ? { ...o, value: e.target.value } : o))}
-            />
-            <button
-              className="properties-panel__match-remove"
-              title="Remove option"
-              onClick={() => onChange(options.filter((_, j) => j !== i))}
-            >
-              &times;
-            </button>
-          </div>
-        ))}
-        <button
-          className="properties-panel__match-add"
-          onClick={() => onChange([...options, { label: '', value: '' }])}
-        >
-          + Add option
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/**
- * Type-aware editor for a human-task output's `defaultValue`. Renders the control appropriate to the
- * output's semantic type (and to a `select` widget), storing a value that matches the declared type.
- */
-function DefaultValueEditor({ output, onChange }: {
-  output: HumanTaskOutput;
-  onChange: (value: unknown) => void;
-}) {
-  const type = output.type ?? 'string';
-  if (type === 'boolean') {
-    return (
-      <label className="properties-panel__input-required">
-        <input
-          type="checkbox"
-          checked={output.defaultValue === true}
-          onChange={(e) => onChange(e.target.checked ? true : undefined)}
-        />
-        Default checked
-      </label>
-    );
-  }
-  if (type === 'number') {
-    return (
-      <input
-        type="number"
-        value={typeof output.defaultValue === 'number' ? output.defaultValue : ''}
-        onChange={(e) => onChange(e.target.value === '' ? undefined : Number(e.target.value))}
-      />
-    );
-  }
-  if (type === 'string' && output.widget === 'select') {
-    return (
-      <select
-        value={typeof output.defaultValue === 'string' ? output.defaultValue : ''}
-        onChange={(e) => onChange(e.target.value || undefined)}
-      >
-        <option value="">(none)</option>
-        {(output.options ?? []).map((o, i) => (
-          <option key={i} value={o.value}>{o.label || o.value}</option>
-        ))}
-      </select>
-    );
-  }
-  if (type === 'object') {
-    const text = typeof output.defaultValue === 'string'
-      ? output.defaultValue
-      : output.defaultValue != null ? JSON.stringify(output.defaultValue) : '';
-    return (
-      <textarea
-        rows={2}
-        value={text}
-        placeholder='{ "key": "value" }'
-        onChange={(e) => {
-          const raw = e.target.value;
-          if (raw === '') { onChange(undefined); return; }
-          try { onChange(JSON.parse(raw)); } catch { onChange(raw); }
-        }}
-      />
-    );
-  }
-  return (
-    <input
-      type="text"
-      value={typeof output.defaultValue === 'string' ? output.defaultValue : ''}
-      onChange={(e) => onChange(e.target.value || undefined)}
-    />
-  );
-}
 
 /**
  * Editor for a human-task node's `outputs` — the form fields a person fills in to complete the task.
@@ -367,106 +247,8 @@ function HumanTaskOutputsEditor({ outputs, onChange }: {
   );
 }
 
-/**
- * Editor for a map-based input list (a `Record<string, string>` of key → value/EL-expression). The
- * list is edited internally as an ordered array of `{ key, value }` pairs — identified by position,
- * not by key — so that empty-key and duplicate-key entries can coexist without the silent data loss
- * a plain map suffers (an empty "+ Add input" overwriting the previous one, or a rename colliding
- * with an existing key). The map is reconstructed (last-wins) only when persisting via `onChange`,
- * and collisions are surfaced inline so the user can resolve them.
- */
-function MapInputsEditor({ map, onChange, nodeId, keyPlaceholder, valuePlaceholder }: {
-  map: Record<string, string> | undefined;
-  onChange: (map: Record<string, string>) => void;
-  nodeId: string;
-  keyPlaceholder: string;
-  valuePlaceholder: string;
-}) {
-  const [pairs, setPairs] = useState<KeyValuePair[]>(() => mapToPairs(map));
-  const [sync, setSync] = useState<{ nodeId: string; map: Record<string, string> | undefined }>({ nodeId, map });
-  // The exact map object this editor last emitted. The parent stores it verbatim
-  // (see WorkflowEditor.onNodeDataChange), so it comes back by reference — letting
-  // us tell our own echoed output apart from a genuine external change.
-  const [lastEmitted, setLastEmitted] = useState<Record<string, string> | undefined>(undefined);
-
-  // Adjusting state during render (rather than in an effect) is React's recommended pattern for
-  // resetting state on prop change and avoids a cascading re-render.
-  if (sync.nodeId !== nodeId) {
-    // Node switch: always re-initialize from the new node's map. The previous node's in-progress
-    // pairs must never carry over, even when both nodes happen to serialize to an equal map.
-    setSync({ nodeId, map });
-    setPairs(mapToPairs(map));
-  } else if (sync.map !== map && map !== lastEmitted) {
-    // Same node, and the incoming map reference changed to one we did not emit — a genuine external
-    // change (undo/redo, source-view edit). Adopt it. Our own serialized output echoed back by the
-    // parent (map === lastEmitted) is skipped entirely, so it neither resets in-progress
-    // duplicate/empty rows nor schedules an extra render just to re-sync a reference we already know.
-    setSync({ nodeId, map });
-    setPairs(mapToPairs(map));
-  }
-
-  const dupes = duplicateKeys(pairs);
-
-  const commit = (next: KeyValuePair[]) => {
-    const nextMap = pairsToMap(next);
-    setLastEmitted(nextMap);
-    setPairs(next);
-    onChange(nextMap);
-  };
-
-  return (
-    <div className="properties-panel__inputs-list">
-      {pairs.map((pair, i) => {
-        const isDuplicate = dupes.has(pair.key);
-        const isEmpty = pair.key === '';
-        return (
-          <div key={pair.id} className="properties-panel__input-item">
-            <div className="properties-panel__input-row">
-              <input
-                type="text"
-                className={isDuplicate ? 'properties-panel__input-invalid' : undefined}
-                value={pair.key}
-                placeholder={keyPlaceholder}
-                onChange={(e) => commit(pairs.map((p, j) => (j === i ? { ...p, key: e.target.value } : p)))}
-              />
-              <button
-                className="properties-panel__match-remove"
-                title="Remove input"
-                onClick={() => commit(pairs.filter((_, j) => j !== i))}
-              >
-                &times;
-              </button>
-            </div>
-            <input
-              type="text"
-              value={pair.value}
-              placeholder={valuePlaceholder}
-              onChange={(e) => commit(pairs.map((p, j) => (j === i ? { ...p, value: e.target.value } : p)))}
-            />
-            {isDuplicate && (
-              <div className="properties-panel__input-warning">
-                Duplicate key "{pair.key}" — only the last entry will be saved.
-              </div>
-            )}
-            {isEmpty && (
-              <div className="properties-panel__input-warning">
-                Key is empty — enter a name so this entry is saved.
-              </div>
-            )}
-          </div>
-        );
-      })}
-      <button
-        className="properties-panel__match-add"
-        onClick={() => commit([...pairs, { id: nextPairId(), key: '', value: '' }])}
-      >
-        + Add input
-      </button>
-    </div>
-  );
-}
-
-export function PropertiesPanel({ selectedNode, selectedEdge, nodeProblems = [], onNodeChange, onNodeIdChange, onEdgeChange, spi, sampleContext, width, onResizeStart }: PropertiesPanelProps) {
+/** Coordinates selected entity editing; child forms own their local presentation and draft state. */
+export function PropertiesPanel({ selectedNode, selectedEdge, draftIdentity, nodeProblems = [], onNodeChange, onNodeIdChange, onEdgeChange, spi, sampleContext, width, onResizeStart }: PropertiesPanelProps) {
   const { actionTypes, loading: actionTypesLoading } = useActionTypes(spi);
 
   // Wrap every panel state in a common shell that carries the (optionally
@@ -490,6 +272,9 @@ export function PropertiesPanel({ selectedNode, selectedEdge, nodeProblems = [],
   }
 
   if (selectedNode) {
+    // Capture narrowed configs for callbacks; narrowing mutable nested properties is not retained in closures.
+    const startInputs = selectedNode.data.nodeType === 'start' ? selectedNode.data.config.inputs ?? [] : [];
+    const eventConfig = selectedNode.data.nodeType === 'receive-event' ? selectedNode.data.config : {};
     return wrap(
       <>
         <div className="properties-panel__header">
@@ -516,7 +301,7 @@ export function PropertiesPanel({ selectedNode, selectedEdge, nodeProblems = [],
           <div className="properties-panel__field">
             <label>Inputs</label>
             <div className="properties-panel__inputs-list">
-              {((selectedNode.data.config.inputs as { name: string; type: string; required: boolean }[]) || []).map((input, i) => (
+              {startInputs.map((input, i) => (
                 <div key={i} className="properties-panel__input-item">
                   <div className="properties-panel__input-row">
                     <input
@@ -524,7 +309,7 @@ export function PropertiesPanel({ selectedNode, selectedEdge, nodeProblems = [],
                       value={input.name}
                       placeholder="Name"
                       onChange={(e) => {
-                        const inputs = [...((selectedNode.data.config.inputs as any[]) || [])];
+                        const inputs = [...startInputs];
                         inputs[i] = { ...inputs[i], name: e.target.value };
                         onNodeChange(selectedNode.id, {
                           config: { ...selectedNode.data.config, inputs },
@@ -532,10 +317,10 @@ export function PropertiesPanel({ selectedNode, selectedEdge, nodeProblems = [],
                       }}
                     />
                     <select
-                      value={input.type}
+                      value={input.type ?? 'string'}
                       onChange={(e) => {
-                        const inputs = [...((selectedNode.data.config.inputs as any[]) || [])];
-                        inputs[i] = { ...inputs[i], type: e.target.value };
+                        const inputs = [...startInputs];
+                        inputs[i] = { ...inputs[i], type: e.target.value as WorkflowInput['type'] };
                         onNodeChange(selectedNode.id, {
                           config: { ...selectedNode.data.config, inputs },
                         });
@@ -550,7 +335,7 @@ export function PropertiesPanel({ selectedNode, selectedEdge, nodeProblems = [],
                       className="properties-panel__match-remove"
                       title="Remove input"
                       onClick={() => {
-                        const inputs = ((selectedNode.data.config.inputs as any[]) || []).filter((_, j) => j !== i);
+                        const inputs = startInputs.filter((_, j) => j !== i);
                         onNodeChange(selectedNode.id, {
                           config: { ...selectedNode.data.config, inputs },
                         });
@@ -562,9 +347,9 @@ export function PropertiesPanel({ selectedNode, selectedEdge, nodeProblems = [],
                   <label className="properties-panel__input-required">
                     <input
                       type="checkbox"
-                      checked={input.required}
+                      checked={input.required ?? false}
                       onChange={(e) => {
-                        const inputs = [...((selectedNode.data.config.inputs as any[]) || [])];
+                        const inputs = [...startInputs];
                         inputs[i] = { ...inputs[i], required: e.target.checked };
                         onNodeChange(selectedNode.id, {
                           config: { ...selectedNode.data.config, inputs },
@@ -578,7 +363,7 @@ export function PropertiesPanel({ selectedNode, selectedEdge, nodeProblems = [],
               <button
                 className="properties-panel__match-add"
                 onClick={() => {
-                  const inputs = [...((selectedNode.data.config.inputs as any[]) || []), { name: '', type: 'string', required: true }];
+                  const inputs: WorkflowInput[] = [...startInputs, { name: '', type: 'string', required: true }];
                   onNodeChange(selectedNode.id, {
                     config: { ...selectedNode.data.config, inputs },
                   });
@@ -605,8 +390,8 @@ export function PropertiesPanel({ selectedNode, selectedEdge, nodeProblems = [],
             <div className="properties-panel__field">
               <label>Inputs (values to display)</label>
               <MapInputsEditor
-                map={selectedNode.data.config.inputs as Record<string, string> | undefined}
-                nodeId={selectedNode.id}
+                map={selectedNode.data.config.inputs}
+                draftIdentity={draftIdentity ?? selectedNode.id}
                 keyPlaceholder="Label"
                 valuePlaceholder="e.g. context.creditScore"
                 onChange={(inputs) => onNodeChange(selectedNode.id, {
@@ -617,7 +402,7 @@ export function PropertiesPanel({ selectedNode, selectedEdge, nodeProblems = [],
             <div className="properties-panel__field">
               <label>Outputs (form fields for completion)</label>
               <HumanTaskOutputsEditor
-                outputs={(selectedNode.data.config.outputs as HumanTaskOutput[]) || []}
+                outputs={selectedNode.data.config.outputs || []}
                 onChange={(outputs) => onNodeChange(selectedNode.id, {
                   config: { ...selectedNode.data.config, outputs },
                 })}
@@ -640,6 +425,7 @@ export function PropertiesPanel({ selectedNode, selectedEdge, nodeProblems = [],
         )}
         {selectedNode.data.nodeType === 'action' && (
           <ActionNodeFields
+            draftIdentity={draftIdentity}
             node={selectedNode}
             onNodeChange={onNodeChange}
             actionTypes={actionTypes}
@@ -661,14 +447,14 @@ export function PropertiesPanel({ selectedNode, selectedEdge, nodeProblems = [],
             <div className="properties-panel__field">
               <label>Match Expressions (EL)</label>
               <div className="properties-panel__match-list">
-                {((selectedNode.data.config.match as string[]) || []).map((expr, i) => (
+                {(eventConfig.match || []).map((expr, i) => (
                   <div key={i} className="properties-panel__match-item">
                     <input
                       type="text"
                       value={expr}
                       placeholder="e.g. event.repo == context.repo"
                       onChange={(e) => {
-                        const match = [...((selectedNode.data.config.match as string[]) || [])];
+                        const match = [...(eventConfig.match || [])];
                         match[i] = e.target.value;
                         onNodeChange(selectedNode.id, {
                           config: { ...selectedNode.data.config, match },
@@ -679,7 +465,7 @@ export function PropertiesPanel({ selectedNode, selectedEdge, nodeProblems = [],
                       className="properties-panel__match-remove"
                       title="Remove expression"
                       onClick={() => {
-                        const match = ((selectedNode.data.config.match as string[]) || []).filter((_, j) => j !== i);
+                        const match = (eventConfig.match || []).filter((_, j) => j !== i);
                         onNodeChange(selectedNode.id, {
                           config: { ...selectedNode.data.config, match },
                         });
@@ -692,7 +478,7 @@ export function PropertiesPanel({ selectedNode, selectedEdge, nodeProblems = [],
                 <button
                   className="properties-panel__match-add"
                   onClick={() => {
-                    const match = [...((selectedNode.data.config.match as string[]) || []), ''];
+                    const match = [...(eventConfig.match || []), ''];
                     onNodeChange(selectedNode.id, {
                       config: { ...selectedNode.data.config, match },
                     });
@@ -705,15 +491,15 @@ export function PropertiesPanel({ selectedNode, selectedEdge, nodeProblems = [],
             <div className="properties-panel__field">
               <label>Output mappings</label>
               <div className="properties-panel__inputs-list">
-                {getOutputMappings(selectedNode.data.config).map((mapping, i) => (
+                {getOutputMappings(eventConfig).map((mapping, i) => (
                   <div key={i} className="properties-panel__input-item">
                     <div className="properties-panel__input-row">
                       <input
                         type="text"
-                        value={mapping.contextKey}
+                        value={mapping.contextKey ?? ''}
                         placeholder="Context key"
                         onChange={(e) => {
-                          const outputs = getOutputMappings(selectedNode.data.config);
+                          const outputs = getOutputMappings(eventConfig);
                           outputs[i] = { ...outputs[i], contextKey: e.target.value };
                           onNodeChange(selectedNode.id, {
                             config: { ...selectedNode.data.config, outputs },
@@ -722,10 +508,10 @@ export function PropertiesPanel({ selectedNode, selectedEdge, nodeProblems = [],
                       />
                       <input
                         type="text"
-                        value={mapping.expression}
+                        value={mapping.expression ?? ''}
                         placeholder="e.g. event.payload.id"
                         onChange={(e) => {
-                          const outputs = getOutputMappings(selectedNode.data.config);
+                          const outputs = getOutputMappings(eventConfig);
                           outputs[i] = { ...outputs[i], expression: e.target.value };
                           onNodeChange(selectedNode.id, {
                             config: { ...selectedNode.data.config, outputs },
@@ -736,7 +522,7 @@ export function PropertiesPanel({ selectedNode, selectedEdge, nodeProblems = [],
                         className="properties-panel__match-remove"
                         title="Remove output mapping"
                         onClick={() => {
-                          const outputs = getOutputMappings(selectedNode.data.config).filter((_, j) => j !== i);
+                          const outputs = getOutputMappings(eventConfig).filter((_, j) => j !== i);
                           onNodeChange(selectedNode.id, {
                             config: { ...selectedNode.data.config, outputs },
                           });
@@ -751,7 +537,7 @@ export function PropertiesPanel({ selectedNode, selectedEdge, nodeProblems = [],
                   className="properties-panel__match-add"
                   onClick={() => {
                     const outputs = [
-                      ...getOutputMappings(selectedNode.data.config),
+                      ...getOutputMappings(eventConfig),
                       { contextKey: '', expression: '' },
                     ];
                     onNodeChange(selectedNode.id, {
@@ -888,13 +674,16 @@ function ConditionTester({ condition, sampleContext }: {
   );
 }
 
-function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading }: {
+function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading, draftIdentity }: {
+  draftIdentity?: string;
   node: Node<FlowNodeData>;
   onNodeChange: (id: string, data: Partial<FlowNodeData>) => void;
   actionTypes: ActionTypeDescriptor[];
   actionTypesLoading: boolean;
 }) {
-  const currentActionType = (node.data.config.actionType as string) || '';
+  if (node.data.nodeType !== 'action') return null;
+  const config = node.data.config;
+  const currentActionType = config.actionType || '';
   const descriptor = actionTypes.find(at => at.value === currentActionType);
   const hasSpi = actionTypes.length > 0 || actionTypesLoading;
 
@@ -964,7 +753,7 @@ function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading 
               <label>Inputs</label>
               <div className="properties-panel__inputs-list">
                 {descriptor.inputs.map((field) => {
-                  const inputs = (node.data.config.inputs as Record<string, string>) || {};
+                  const inputs = config.inputs || {};
                   return (
                     <div key={field.name} className="properties-panel__input-item">
                       <div className="properties-panel__spi-field-header">
@@ -979,7 +768,7 @@ function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading 
                       )}
                       <input
                         type="text"
-                        value={inputs[field.name] ?? ''}
+                        value={inputValueText(inputs[field.name])}
                         placeholder={`e.g. context.${field.name}`}
                         onChange={(e) => {
                           const updated = { ...inputs, [field.name]: e.target.value };
@@ -999,7 +788,7 @@ function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading 
               <label>Outputs</label>
               <div className="properties-panel__inputs-list">
                 {descriptor.outputs.map((field) => {
-                  const configOutputs = (node.data.config.outputs as ActionOutputConfig[]) || [];
+                  const configOutputs = config.outputs || [];
                   const configOutput = configOutputs.find(o => o.name === field.name);
                   return (
                     <div key={field.name} className="properties-panel__input-item">
@@ -1040,8 +829,8 @@ function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading 
           <div className="properties-panel__field">
             <label>Inputs (values to pass to executor)</label>
             <MapInputsEditor
-              map={node.data.config.inputs as Record<string, string> | undefined}
-              nodeId={node.id}
+              map={config.inputs}
+              draftIdentity={draftIdentity ?? node.id}
               keyPlaceholder="Label"
               valuePlaceholder="e.g. context.loanAmount"
               onChange={(inputs) => onNodeChange(node.id, {
@@ -1052,7 +841,7 @@ function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading 
           <div className="properties-panel__field">
             <label>Outputs (expected results)</label>
             <div className="properties-panel__inputs-list">
-              {((node.data.config.outputs as ActionOutputConfig[]) || []).map((output, i) => (
+              {(config.outputs || []).map((output, i) => (
                 <div key={i} className="properties-panel__input-item">
                   <div className="properties-panel__input-row">
                     <input
@@ -1060,7 +849,7 @@ function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading 
                       value={output.name}
                       placeholder="Name"
                       onChange={(e) => {
-                        const outputs = [...((node.data.config.outputs as any[]) || [])];
+                        const outputs = [...(config.outputs || [])];
                         outputs[i] = { ...outputs[i], name: e.target.value };
                         onNodeChange(node.id, {
                           config: { ...node.data.config, outputs },
@@ -1068,10 +857,10 @@ function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading 
                       }}
                     />
                     <select
-                      value={output.type}
+                      value={output.type ?? 'string'}
                       onChange={(e) => {
-                        const outputs = [...((node.data.config.outputs as any[]) || [])];
-                        outputs[i] = { ...outputs[i], type: e.target.value };
+                        const outputs = [...(config.outputs || [])];
+                        outputs[i] = { ...outputs[i], type: e.target.value as ActionOutputConfig['type'] };
                         onNodeChange(node.id, {
                           config: { ...node.data.config, outputs },
                         });
@@ -1086,7 +875,7 @@ function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading 
                       className="properties-panel__match-remove"
                       title="Remove output"
                       onClick={() => {
-                        const outputs = ((node.data.config.outputs as any[]) || []).filter((_, j) => j !== i);
+                        const outputs = (config.outputs || []).filter((_, j) => j !== i);
                         onNodeChange(node.id, {
                           config: { ...node.data.config, outputs },
                         });
@@ -1098,9 +887,9 @@ function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading 
                   <label className="properties-panel__input-required">
                     <input
                       type="checkbox"
-                      checked={output.required}
+                      checked={output.required ?? false}
                       onChange={(e) => {
-                        const outputs = [...((node.data.config.outputs as any[]) || [])];
+                        const outputs = [...(config.outputs || [])];
                         outputs[i] = { ...outputs[i], required: e.target.checked };
                         onNodeChange(node.id, {
                           config: { ...node.data.config, outputs },
@@ -1116,7 +905,7 @@ function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading 
                       value={output.contextKey ?? ''}
                       placeholder={output.name || 'Defaults to name'}
                       onChange={(e) => {
-                        const outputs = [...((node.data.config.outputs as any[]) || [])];
+                        const outputs = [...(config.outputs || [])];
                         outputs[i] = { ...outputs[i], contextKey: e.target.value || undefined };
                         onNodeChange(node.id, {
                           config: { ...node.data.config, outputs },
@@ -1129,7 +918,7 @@ function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading 
               <button
                 className="properties-panel__match-add"
                 onClick={() => {
-                  const outputs = [...((node.data.config.outputs as any[]) || []), { name: '', type: 'string', required: true }];
+                  const outputs: ActionOutputConfig[] = [...(config.outputs || []), { name: '', type: 'string', required: true }];
                   onNodeChange(node.id, {
                     config: { ...node.data.config, outputs },
                   });
@@ -1144,123 +933,3 @@ function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading 
     </>
   );
 }
-
-function ActionTypeSelect({ value, actionTypes, loading, onSelect, onClear }: {
-  value: string;
-  actionTypes: ActionTypeDescriptor[];
-  loading: boolean;
-  onSelect: (value: string) => void;
-  onClear: () => void;
-}) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [filterText, setFilterText] = useState('');
-  const textInputRef = useRef<HTMLInputElement>(null);
-
-  const displayValue = useMemo(() => {
-    const match = actionTypes.find(at => at.value === value);
-    return match ? match.label : value;
-  }, [value, actionTypes]);
-
-  const inputValue = isOpen ? filterText : displayValue;
-
-  const filteredOptions = useMemo(() => {
-    if (!filterText) return actionTypes;
-    const lower = filterText.toLowerCase();
-    return actionTypes.filter(at =>
-      at.label.toLowerCase().includes(lower) || at.value.toLowerCase().includes(lower),
-    );
-  }, [filterText, actionTypes]);
-
-  const isCustom = isOpen && filterText && !actionTypes.some(at =>
-    at.value === filterText || at.label.toLowerCase() === filterText.toLowerCase(),
-  );
-
-  const onInputChange = (_event: React.FormEvent<HTMLInputElement>, val: string) => {
-    setFilterText(val);
-    if (!isOpen) setIsOpen(true);
-  };
-
-  const onOptionSelect = (_event: React.MouseEvent | undefined, val: string | number | undefined) => {
-    const selected = String(val);
-    if (selected.startsWith('__create__:')) {
-      const custom = selected.slice('__create__:'.length);
-      onSelect(custom);
-    } else {
-      onSelect(selected);
-    }
-    setFilterText('');
-    setIsOpen(false);
-    textInputRef.current?.focus();
-  };
-
-  const handleClear = () => {
-    setFilterText('');
-    onClear();
-    textInputRef.current?.focus();
-  };
-
-  const handleOpenChange = (open: boolean) => {
-    setIsOpen(open);
-    if (open) {
-      setFilterText('');
-    }
-  };
-
-  const toggle = (toggleRef: React.Ref<MenuToggleElement>) => (
-    <MenuToggle
-      ref={toggleRef}
-      variant="typeahead"
-      onClick={() => { handleOpenChange(!isOpen); textInputRef.current?.focus(); }}
-      isExpanded={isOpen}
-      isDisabled={loading}
-      isFullWidth
-    >
-      <TextInputGroup isPlain>
-        <TextInputGroupMain
-          value={inputValue}
-          onClick={() => { if (!isOpen) setIsOpen(true); }}
-          onChange={onInputChange}
-          innerRef={textInputRef}
-          placeholder={loading ? 'Loading...' : 'Select or type an action type'}
-          autoComplete="off"
-        />
-        {(value || inputValue) && (
-          <TextInputGroupUtilities>
-            <Button variant="plain" onClick={handleClear} aria-label="Clear action type">
-              <TimesIcon />
-            </Button>
-          </TextInputGroupUtilities>
-        )}
-      </TextInputGroup>
-    </MenuToggle>
-  );
-
-  return (
-    <Select
-      isOpen={isOpen}
-      selected={value}
-      onSelect={onOptionSelect}
-      onOpenChange={handleOpenChange}
-      toggle={toggle}
-      shouldFocusFirstItemOnOpen={false}
-    >
-      <SelectList>
-        {filteredOptions.map(at => (
-          <SelectOption key={at.value} value={at.value} description={at.description}>
-            {at.label}
-          </SelectOption>
-        ))}
-        {isCustom && (
-          <SelectOption value={`__create__:${inputValue}`}>
-            {`Use custom type "${inputValue}"`}
-          </SelectOption>
-        )}
-        {filteredOptions.length === 0 && !isCustom && (
-          <SelectOption isDisabled>No results found</SelectOption>
-        )}
-      </SelectList>
-    </Select>
-  );
-}
-
-type MenuToggleElement = HTMLButtonElement;

@@ -1,0 +1,10 @@
+[
+    { "name": "duration seconds", "duration": "PT30S", "problems": [] },
+    { "name": "duration fractional seconds", "duration": "P1DT2H3M4.5S", "problems": [] },
+    { "name": "duration zero", "duration": "PT0S", "problems": [] },
+    { "name": "engine signed duration", "duration": "-PT1S", "problems": [], "browserProblems": ["INVALID_WAIT_DURATION:error:wait"] },
+    { "name": "engine lowercase duration", "duration": "pt1s", "problems": [], "browserProblems": ["INVALID_WAIT_DURATION:error:wait"] },
+    { "name": "duration no units", "duration": "PT", "problems": ["INVALID_WAIT_DURATION:error:wait"] },
+    { "name": "duration months unsupported", "duration": "P1M", "problems": ["INVALID_WAIT_DURATION:error:wait"] },
+    { "name": "duration missing", "problems": ["MISSING_WAIT_DURATION:warning:wait"] }
+]

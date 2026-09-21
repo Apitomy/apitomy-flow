@@ -79,10 +79,12 @@ describe('parseWorkflow', () => {
     const result = parseWorkflow(malformed);
     expect(result.error).toBeDefined();
     expect(result.workflow).toBeUndefined();
-    expect(result.problems).toEqual([]);
+    expect(result.problems).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'INVALID_NODE', severity: 'error' }),
+    ]));
   });
 
-  it('rejects an action node missing config with a fatal error instead of throwing', () => {
+  it('normalizes missing config and reports the missing action type', () => {
     const malformed = JSON.stringify({
       id: 'broken',
       name: 'Broken',
@@ -98,9 +100,11 @@ describe('parseWorkflow', () => {
     });
 
     const result = parseWorkflow(malformed);
-    expect(result.error).toBeDefined();
+    expect(result.error).toBeUndefined();
     expect(result.workflow).toBeUndefined();
-    expect(result.problems).toEqual([]);
+    expect(result.problems).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'MISSING_ACTION_TYPE', severity: 'error' }),
+    ]));
   });
 });
 

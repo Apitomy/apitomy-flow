@@ -43,3 +43,6 @@ dist-demo/
 *.tsbuildinfo
 
 .worktrees/
+playwright-report/
+test-results/
+ui/browser/consumer/artifacts/

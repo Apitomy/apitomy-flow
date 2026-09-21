@@ -69,6 +69,7 @@ export function analyzeParallelRegions(workflow: Workflow): ParallelAnalysis {
     for (const forkId of forks) {
         const join = findJoin(workflow, forkId, problems);
         if (join !== null) {
+            validateRegion(workflow, forkId, join, problems);
             forkToJoin.set(forkId, join);
             joins.add(join);
             const incoming = new Set<string>();
@@ -91,6 +92,57 @@ export function analyzeParallelRegions(workflow: Workflow): ParallelAnalysis {
 }
 
 /**
+ * Arrivals are persisted by join/edge, not activated fork obligations. Each branch must own one
+ * distinct join edge, with no outside entries. Exclusive paths may merge before that edge; nested
+ * forks are checked independently and must finish at their own join before the enclosing join.
+ */
+function validateRegion(workflow: Workflow, forkId: string, join: string, problems: ParallelProblem[]): void {
+    const regionNodes = new Set<string>();
+    const arrivalEdges = new Set<string>();
+    let unbalanced = false;
+    let crossing = false;
+    let reentry = false;
+    for (const branch of outgoing(workflow, forkId)) {
+        const branchNodes = new Set<string>();
+        const branchArrivals = new Set<string>();
+        const queue: WorkflowEdge[] = [branch];
+        while (queue.length > 0) {
+            const edge = queue.shift()!;
+            const target = edge.target;
+            if (target === join) {
+                branchArrivals.add(edge.id);
+            } else if (target === forkId) {
+                reentry = true;
+            } else if (!branchNodes.has(target)) {
+                branchNodes.add(target);
+                queue.push(...outgoing(workflow, target));
+            }
+        }
+        unbalanced ||= branchArrivals.size !== 1 || [...branchArrivals].some(id => arrivalEdges.has(id));
+        crossing ||= [...branchNodes].some(id => regionNodes.has(id));
+        branchArrivals.forEach(id => arrivalEdges.add(id));
+        branchNodes.forEach(id => regionNodes.add(id));
+    }
+    for (const edge of workflow.edges) {
+        if (edge.target === join && !arrivalEdges.has(edge.id)) {
+            crossing = true;
+        }
+        if (regionNodes.has(edge.target) && edge.source !== forkId && !regionNodes.has(edge.source)) {
+            crossing = true;
+        }
+    }
+    if (reentry) {
+        problems.push({ code: 'PARALLEL_REGION_CYCLE', nodeId: forkId });
+    }
+    if (unbalanced) {
+        problems.push({ code: 'UNBALANCED_PARALLEL', nodeId: forkId });
+    }
+    if (crossing) {
+        problems.push({ code: 'CROSSING_PARALLEL_REGIONS', nodeId: forkId });
+    }
+}
+
+/**
  * Finds the synchronizing join for a fork: the earliest node where every branch leaving the fork
  * re-converges. Records FORK_WITHOUT_JOIN / PARALLEL_BRANCH_REACHES_END when no single balanced
  * convergence node exists. Mirrors {@code ParallelRegions.findJoin}.
@@ -105,7 +157,8 @@ function findJoin(workflow: Workflow, forkId: string, problems: ParallelProblem[
         const queue: string[] = [branch.target];
         while (queue.length > 0) {
             const current = queue.shift() as string;
-            if (reachable.has(current)) {
+            // Do not confuse nodes in a later activation with this region's convergence point.
+            if (current === forkId || reachable.has(current)) {
                 continue;
             }
             reachable.add(current);

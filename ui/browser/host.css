@@ -1,0 +1,4 @@
+body { margin: 12px; }
+.surface { height: 620px; width: 1400px; margin: 12px 0; }
+nav { display: flex; gap: 8px; flex-wrap: wrap; }
+output { display: block; max-height: 70px; overflow: auto; font: 11px monospace; }

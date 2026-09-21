@@ -12,8 +12,10 @@ public class WorkflowValidator {
 
     private final ConditionEvaluator conditionEvaluator = new ConditionEvaluator();
 
+    /** Returns structural problems before attempting semantic traversal of malformed model data. */
     public List<ValidationProblem> validate(Workflow workflow) {
-        List<ValidationProblem> problems = new ArrayList<>();
+        List<ValidationProblem> problems = WorkflowShape.validate(workflow);
+        if (!problems.isEmpty()) return problems;
         validateStructure(workflow, problems);
         validateConnectivity(workflow, problems);
         validateEdgeConditions(workflow, problems);
@@ -22,6 +24,7 @@ public class WorkflowValidator {
         return problems;
     }
 
+    /** Returns whether validation found any error-severity problems. */
     public boolean hasErrors(List<ValidationProblem> problems) {
         return problems.stream().anyMatch(p -> p.severity() == ValidationSeverity.ERROR);
     }
@@ -149,25 +152,22 @@ public class WorkflowValidator {
 
         // Action node config validation
         nodes.stream().filter(n -> n.type() == NodeType.ACTION).forEach(action -> {
-            Object actionTypeVal = action.config().get("actionType");
+            NodeConfig.Action config = (NodeConfig.Action) action.typedConfig();
+            String actionTypeVal = config.actionType();
             if (actionTypeVal == null) {
                 problems.add(ValidationProblem.error("MISSING_ACTION_TYPE",
                     "Action node missing actionType in config", action.id()));
-            } else if (!(actionTypeVal instanceof String s) || s.isBlank()) {
+            } else if (actionTypeVal.isBlank()) {
                 problems.add(ValidationProblem.error("INVALID_ACTION_TYPE_VALUE",
                     "Action node actionType must be a non-blank string", action.id()));
             }
 
-            Object inputsVal = action.config().get("inputs");
-            if (inputsVal == null) {
+            if (config.wire().get("inputs") == null) {
                 problems.add(ValidationProblem.warning("MISSING_ACTION_INPUTS",
                     "Action node has no inputs defined", action.id()));
-            } else if (!(inputsVal instanceof Map<?, ?> inputs)) {
-                problems.add(ValidationProblem.warning("INVALID_INPUTS_TYPE",
-                    "Action node inputs must be a Map", action.id()));
             } else {
-                for (Map.Entry<?, ?> entry : inputs.entrySet()) {
-                    String name = String.valueOf(entry.getKey());
+                for (Map.Entry<String, Object> entry : config.inputs().entrySet()) {
+                    String name = entry.getKey();
                     Object expr = entry.getValue();
                     if (expr == null || (expr instanceof String es && es.isBlank())) {
                         problems.add(ValidationProblem.warning("EMPTY_ACTION_INPUT_EXPRESSION",
@@ -176,15 +176,11 @@ public class WorkflowValidator {
                 }
             }
 
-            Object outputsVal = action.config().get("outputs");
-            if (outputsVal == null) {
+            if (config.wire().get("outputs") == null) {
                 problems.add(ValidationProblem.warning("MISSING_ACTION_OUTPUTS",
                     "Action node has no outputs defined", action.id()));
-            } else if (!(outputsVal instanceof List<?> outputs)) {
-                problems.add(ValidationProblem.warning("INVALID_OUTPUTS_TYPE",
-                    "Action node outputs must be a List", action.id()));
             } else {
-                validateOutputNames(outputs, action.id(), problems);
+                validateOutputNames(config.outputs(), action.id(), problems);
             }
         });
     }
@@ -328,17 +324,16 @@ public class WorkflowValidator {
         workflow.nodes().stream()
             .filter(n -> n.type() == NodeType.RECEIVE_EVENT)
             .forEach(node -> {
-                Object eventTypeVal = node.config().get("eventType");
+                NodeConfig.ReceiveEvent config = (NodeConfig.ReceiveEvent) node.typedConfig();
+                String eventTypeVal = config.eventType();
                 if (eventTypeVal == null) {
                     problems.add(ValidationProblem.warning("MISSING_EVENT_TYPE",
                         "Receive-event node has no eventType configured", node.id()));
-                } else if (!(eventTypeVal instanceof String s) || s.isBlank()) {
+                } else if (eventTypeVal.isBlank()) {
                     problems.add(ValidationProblem.warning("INVALID_EVENT_TYPE_VALUE",
                         "Receive-event node eventType must be a non-blank string", node.id()));
                 }
-                if (node.config().get("outputs") instanceof List<?> outputs && !outputs.isEmpty()) {
-                    validateEventOutputMappings(outputs, node.id(), problems);
-                }
+                validateEventOutputMappings(config.outputs(), node.id(), problems);
             });
 
         // Duplicate event receivers
@@ -360,27 +355,25 @@ public class WorkflowValidator {
         workflow.nodes().stream()
             .filter(n -> n.type() == NodeType.HUMAN_TASK)
             .forEach(node -> {
+                NodeConfig.HumanTask config = (NodeConfig.HumanTask) node.typedConfig();
                 if (!node.config().containsKey("description")) {
                     problems.add(ValidationProblem.warning("MISSING_TASK_DESCRIPTION",
                         "Human task node has no description", node.id()));
                 }
-                if (node.config().get("inputs") instanceof Map<?, ?> inputs) {
-                    for (Map.Entry<?, ?> entry : inputs.entrySet()) {
-                        String name = String.valueOf(entry.getKey());
-                        Object expr = entry.getValue();
-                        if (expr == null || (expr instanceof String es && es.isBlank())) {
-                            problems.add(ValidationProblem.warning("EMPTY_TASK_INPUT_EXPRESSION",
-                                "Human task input \"" + name + "\" has no EL expression", node.id()));
-                        }
+                for (Map.Entry<String, Object> entry : config.inputs().entrySet()) {
+                    String name = entry.getKey();
+                    Object expr = entry.getValue();
+                    if (expr == null || (expr instanceof String es && es.isBlank())) {
+                        problems.add(ValidationProblem.warning("EMPTY_TASK_INPUT_EXPRESSION",
+                            "Human task input \"" + name + "\" has no EL expression", node.id()));
                     }
                 }
-                Object outputsVal = node.config().get("outputs");
-                if (outputsVal == null) {
+                if (config.wire().get("outputs") == null) {
                     problems.add(ValidationProblem.warning("MISSING_TASK_OUTPUTS",
                         "Human task node has no outputs defined", node.id()));
-                } else if (outputsVal instanceof List<?> outputs) {
-                    validateOutputNames(outputs, node.id(), problems);
-                    validateHumanTaskOutputMetadata(outputs, node.id(), problems);
+                } else {
+                    validateOutputNames(config.outputs(), node.id(), problems);
+                    validateHumanTaskOutputMetadata(config.outputs(), node.id(), problems);
                 }
             });
 
@@ -388,16 +381,16 @@ public class WorkflowValidator {
         workflow.nodes().stream()
             .filter(n -> n.type() == NodeType.WAIT)
             .forEach(node -> {
-                Object durationVal = node.config().get("duration");
-                if (durationVal == null) {
+                String duration = ((NodeConfig.Wait) node.typedConfig()).duration();
+                if (duration == null) {
                     problems.add(ValidationProblem.warning("MISSING_WAIT_DURATION",
                         "Wait node has no duration configured", node.id()));
-                } else if (durationVal instanceof String d) {
+                } else {
                     try {
-                        Duration.parse(d);
+                        Duration.parse(duration);
                     } catch (Exception e) {
                         problems.add(ValidationProblem.error("INVALID_WAIT_DURATION",
-                            "Wait node duration is not valid ISO 8601: " + d, node.id()));
+                            "Wait node duration is not valid ISO 8601: " + duration, node.id()));
                     }
                 }
             });
@@ -405,25 +398,20 @@ public class WorkflowValidator {
         // Start node input validation
         WorkflowNode start = workflow.findStartNode().orElse(null);
         if (start != null) {
-            Object inputsDef = start.config().get("inputs");
-            if (inputsDef == null) {
+            NodeConfig.Start config = (NodeConfig.Start) start.typedConfig();
+            if (config.wire().get("inputs") == null) {
                 problems.add(ValidationProblem.warning("MISSING_START_INPUTS",
                     "Start node has no inputs defined", start.id()));
-            } else if (inputsDef instanceof List<?> inputs) {
+            } else {
                 Set<String> inputNames = new HashSet<>();
-                for (Object inputObj : inputs) {
-                    if (inputObj instanceof Map<?, ?> input) {
-                        Object nameVal = input.get("name");
-                        if (nameVal == null || (nameVal instanceof String s && s.isBlank())) {
-                            problems.add(ValidationProblem.warning("INVALID_INPUT_DEFINITION",
-                                "Start node input is missing a name", start.id()));
-                        } else {
-                            String name = String.valueOf(nameVal);
-                            if (!inputNames.add(name)) {
-                                problems.add(ValidationProblem.warning("DUPLICATE_INPUT_NAME",
-                                    "Start node has duplicate input name: " + name, start.id()));
-                            }
-                        }
+                for (NodeConfig.Field input : config.inputs()) {
+                    String name = input.name();
+                    if (name == null || name.isBlank()) {
+                        problems.add(ValidationProblem.warning("INVALID_INPUT_DEFINITION",
+                            "Start node input is missing a name", start.id()));
+                    } else if (!inputNames.add(name)) {
+                        problems.add(ValidationProblem.warning("DUPLICATE_INPUT_NAME",
+                            "Start node has duplicate input name: " + name, start.id()));
                     }
                 }
             }
@@ -433,20 +421,15 @@ public class WorkflowValidator {
         detectAutomatedCycles(workflow, problems);
     }
 
-    private void validateOutputNames(List<?> outputDefs, String nodeId,
+    private void validateOutputNames(List<NodeConfig.Field> outputDefs, String nodeId,
                                       List<ValidationProblem> problems) {
         Set<String> contextKeys = new HashSet<>();
-        for (Object defObj : outputDefs) {
-            if (defObj instanceof Map<?, ?> def) {
-                Object nameVal = def.get("name");
-                if (nameVal != null) {
-                    String name = String.valueOf(nameVal);
-                    String contextKey = def.get("contextKey") instanceof String ck && !ck.isBlank()
-                        ? ck : name;
-                    if (!contextKeys.add(contextKey)) {
-                        problems.add(ValidationProblem.warning("DUPLICATE_OUTPUT_NAME",
-                            "Duplicate output context key: " + contextKey, nodeId));
-                    }
+        for (NodeConfig.Field def : outputDefs) {
+            if (def.name() != null) {
+                String contextKey = def.effectiveContextKey();
+                if (!contextKeys.add(contextKey)) {
+                    problems.add(ValidationProblem.warning("DUPLICATE_OUTPUT_NAME",
+                        "Duplicate output context key: " + contextKey, nodeId));
                 }
             }
         }
@@ -457,24 +440,19 @@ public class WorkflowValidator {
      * non-blank string {@code contextKey} and a non-blank string, syntactically valid EL
      * {@code expression}, and {@code contextKey}s must be unique within the node (mirroring
      * {@link #validateOutputNames}'s duplicate-key check, but driven directly by {@code contextKey}
-     * since there's no separate {@code name} field for these mappings). A non-object entry, or a
-     * {@code contextKey}/{@code expression} of the wrong type, is treated the same as a missing
-     * value rather than coerced via {@code String.valueOf} — this keeps validation aligned with the
-     * runtime, which requires actual strings and otherwise skips the entry (see
-     * {@link WorkflowEngine#applyEventOutputMappings}) and with the UI simulator's equivalent
-     * runtime check.
+     * since there's no separate {@code name} field for these mappings). Structural preflight rejects
+     * non-object entries and incorrectly typed fields before these typed semantic checks run.
      *
-     * @param outputDefs the raw {@code config.outputs} list
+     * @param outputDefs the typed {@code config.outputs} list
      * @param nodeId     the receive-event node's id
      * @param problems   the problems list to append to
      */
-    private void validateEventOutputMappings(List<?> outputDefs, String nodeId,
+    private void validateEventOutputMappings(List<NodeConfig.Mapping> outputDefs, String nodeId,
                                               List<ValidationProblem> problems) {
         Set<String> contextKeys = new HashSet<>();
-        for (Object defObj : outputDefs) {
-            Map<?, ?> def = defObj instanceof Map<?, ?> m ? m : Map.of();
-            Object contextKeyVal = def.get("contextKey");
-            if (!(contextKeyVal instanceof String contextKey) || contextKey.isBlank()) {
+        for (NodeConfig.Mapping def : outputDefs) {
+            String contextKey = def.contextKey();
+            if (contextKey == null || contextKey.isBlank()) {
                 problems.add(ValidationProblem.warning("MISSING_OUTPUT_CONTEXT_KEY",
                     "Receive-event output mapping has no contextKey", nodeId));
                 continue;
@@ -484,8 +462,8 @@ public class WorkflowValidator {
                     "Duplicate output context key: " + contextKey, nodeId));
             }
 
-            Object expressionVal = def.get("expression");
-            if (!(expressionVal instanceof String expression) || expression.isBlank()) {
+            String expression = def.expression();
+            if (expression == null || expression.isBlank()) {
                 problems.add(ValidationProblem.warning("MISSING_OUTPUT_EXPRESSION",
                     "Receive-event output mapping \"" + contextKey + "\" has no EL expression", nodeId));
             } else if (!conditionEvaluator.isValid(expression)) {
@@ -501,19 +479,16 @@ public class WorkflowValidator {
      * warnings; the metadata is advisory and never blocks execution. Applies only to human-task
      * nodes so action-node outputs are unaffected.
      *
-     * @param outputDefs the raw {@code config.outputs} list
+     * @param outputDefs the typed {@code config.outputs} list
      * @param nodeId     the human-task node id
      * @param problems   the accumulating problem list
      */
-    private void validateHumanTaskOutputMetadata(List<?> outputDefs, String nodeId,
+    private void validateHumanTaskOutputMetadata(List<NodeConfig.Field> outputDefs, String nodeId,
                                                   List<ValidationProblem> problems) {
-        for (Object defObj : outputDefs) {
-            if (!(defObj instanceof Map<?, ?> def)) {
-                continue;
-            }
-            String name = def.get("name") != null ? String.valueOf(def.get("name")) : "(unnamed)";
-            String type = def.get("type") instanceof String t && !t.isBlank() ? t : "string";
-            String widget = def.get("widget") instanceof String w && !w.isBlank() ? w : null;
+        for (NodeConfig.Field def : outputDefs) {
+            String name = def.name() != null ? def.name() : "(unnamed)";
+            String type = !def.type().isBlank() ? def.type() : "string";
+            String widget = def.widget() != null && !def.widget().isBlank() ? def.widget() : null;
 
             // widget only meaningfully applies to string-typed outputs
             if (widget != null && !"string".equals(type)) {
@@ -524,27 +499,22 @@ public class WorkflowValidator {
 
             // select widgets need options
             if ("select".equals(widget)) {
-                Object optionsVal = def.get("options");
-                if (!(optionsVal instanceof List<?> options) || options.isEmpty()) {
+                if (def.options().isEmpty()) {
                     problems.add(ValidationProblem.warning("SELECT_MISSING_OPTIONS",
                         "Output \"" + name + "\" uses widget \"select\" but declares no options", nodeId));
                 }
             }
 
             // options entries must carry a value
-            if (def.get("options") instanceof List<?> options) {
-                for (Object optObj : options) {
-                    if (optObj instanceof Map<?, ?> opt
-                        && (opt.get("value") == null
-                            || (opt.get("value") instanceof String vs && vs.isBlank()))) {
-                        problems.add(ValidationProblem.warning("MALFORMED_OUTPUT_OPTION",
-                            "Output \"" + name + "\" has a select option with no value", nodeId));
-                    }
+            for (NodeConfig.Option opt : def.options()) {
+                if (opt.value() == null || opt.value().isBlank()) {
+                    problems.add(ValidationProblem.warning("MALFORMED_OUTPUT_OPTION",
+                        "Output \"" + name + "\" has a select option with no value", nodeId));
                 }
             }
 
             // defaultValue should match the declared semantic type
-            Object defaultValue = def.get("defaultValue");
+            Object defaultValue = def.defaultValue();
             if (defaultValue != null && !valueMatchesType(defaultValue, type)) {
                 problems.add(ValidationProblem.warning("DEFAULT_VALUE_TYPE_MISMATCH",
                     "Output \"" + name + "\" default value does not match declared type \"" + type + "\"", nodeId));
@@ -699,13 +669,14 @@ public class WorkflowValidator {
             case "FORK_WITHOUT_JOIN" ->
                 "Parallel branches from this fork do not re-converge at a single join";
             case "UNBALANCED_PARALLEL" ->
-                "Parallel branches from this fork converge at different points (unbalanced)";
+                "Each parallel branch must reach its join through one distinct incoming edge; merge "
+                    + "exclusive paths and finish nested regions before the join";
             case "CROSSING_PARALLEL_REGIONS" ->
                 "An edge crosses a parallel region boundary (regions must be well-nested)";
             case "PARALLEL_BRANCH_REACHES_END" ->
                 "A parallel branch can reach an end node without first joining";
             case "PARALLEL_REGION_CYCLE" ->
-                "A cycle exists inside a parallel region";
+                "A parallel branch can re-enter its fork before joining; repeat regions only after their join";
             default -> "Invalid parallel structure";
         };
     }

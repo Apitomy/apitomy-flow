@@ -12,6 +12,12 @@
 
 ### WorkflowEngine
 
+See [Engine errors and host extension contracts](engine-errors.md) for structured diagnostics,
+input-failure recovery, callback ordering, nullability, compatibility, and host durability responsibilities.
+
+See [Indexed execution and semantic editor revisions](indexed-architecture.md) for helper ownership,
+cache invalidation, extracted property forms, and repeatable graph/history benchmark evidence.
+
 The central class. Three categories of methods:
 
 | Category | Methods |

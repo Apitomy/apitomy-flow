@@ -13,7 +13,7 @@ export interface HistoryEntry {
   edgeCondition?: string;
   enteredOn: string;
   completedOn?: string;
-  output?: Record<string, any>;
+  output?: Record<string, unknown>;
   /**
    * The branch this visit belongs to. The root (non-parallel) branch uses `"root"`; a missing value
    * also denotes the root, preserving back-compat for existing linear histories.
@@ -34,7 +34,7 @@ export interface WorkflowInstance {
   /** Per-join arrival record: incoming edge ids that have received a branch token, awaiting the rest. */
   joinArrivals: Record<string, string[]>;
   status: InstanceStatus;
-  context: Record<string, any>;
+  context: Record<string, unknown>;
   history: HistoryEntry[];
   failureReason?: string;
   createdOn: string;

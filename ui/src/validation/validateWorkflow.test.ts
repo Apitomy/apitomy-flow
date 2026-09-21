@@ -2,8 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { validateWorkflow } from './validateWorkflow.ts';
 import { type Workflow, type WorkflowNode, type WorkflowEdge } from '../types/workflow.ts';
 
-function node(id: string, type: WorkflowNode['type'], config: Record<string, any> = {}): WorkflowNode {
-  return { id, type, name: id, config, position: { x: 0, y: 0 } };
+function node(id: string, type: WorkflowNode['type'], config: Record<string, unknown> = {}): WorkflowNode {
+  // Intentionally malformed configs exercise validation rather than TypeScript assignability.
+  return { id, type, name: id, config, position: { x: 0, y: 0 } } as WorkflowNode;
 }
 
 function edge(id: string, source: string, target: string, opts: Partial<WorkflowEdge> = {}): WorkflowEdge {
@@ -275,7 +276,7 @@ describe('validateWorkflow', () => {
       expect(hasProblem(validateWorkflow(w), 'MISSING_TASK_DESCRIPTION')).toBe(true);
     });
 
-    it('DUPLICATE_EVENT_RECEIVER with different key order in match config', () => {
+    it('rejects object match configs before checking duplicate receivers', () => {
       const w = workflow(
         [
           node('start', 'start'),
@@ -285,7 +286,10 @@ describe('validateWorkflow', () => {
         ],
         [edge('e1', 'start', 'r1'), edge('e2', 'r1', 'end'), edge('e3', 'start', 'r2'), edge('e4', 'r2', 'end')],
       );
-      expect(hasProblem(validateWorkflow(w), 'DUPLICATE_EVENT_RECEIVER')).toBe(true);
+      expect(validateWorkflow(w)).toEqual(expect.arrayContaining([
+        expect.objectContaining({ code: 'INVALID_MATCH_TYPE', severity: 'error', nodeId: 'r1' }),
+        expect.objectContaining({ code: 'INVALID_MATCH_TYPE', severity: 'error', nodeId: 'r2' }),
+      ]));
     });
   });
 
@@ -722,7 +726,7 @@ describe('validateWorkflow', () => {
   });
 
   describe('human-task output metadata', () => {
-    function humanTask(outputs: any[]): Workflow {
+    function humanTask(outputs: unknown[]): Workflow {
       return workflow(
         [
           node('start', 'start', { inputs: [{ name: 'x', type: 'string', required: true }] }),

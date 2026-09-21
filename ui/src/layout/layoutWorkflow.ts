@@ -43,12 +43,13 @@ function sizeOf(node: WorkflowNode, options?: LayoutOptions): { width: number; h
  * @param edges the workflow edges connecting the nodes
  * @param options layout direction, spacing, and optional node sizing
  * @returns a new node array with computed positions
+ * @throws when the layout engine fails or returns nonfinite coordinates
  */
 export function layoutWorkflow(
   nodes: WorkflowNode[],
   edges: WorkflowEdge[],
   options?: LayoutOptions,
-): WorkflowNode[] {
+): (WorkflowNode & { position: { x: number; y: number } })[] {
   if (nodes.length === 0) return [];
 
   const g = new dagre.graphlib.Graph();
@@ -61,31 +62,35 @@ export function layoutWorkflow(
   });
 
   const dims = new Map<string, { width: number; height: number }>();
+  // Dagre uses object-keyed internals. Never expose wire IDs such as __proto__ or constructor to it.
+  const layoutIds = new Map(nodes.map((node, index) => [node.id, `layout-${index}`]));
   for (const node of nodes) {
     const size = sizeOf(node, options);
     dims.set(node.id, size);
-    g.setNode(node.id, { width: size.width, height: size.height });
+    g.setNode(layoutIds.get(node.id)!, { width: size.width, height: size.height });
   }
 
-  const nodeIds = new Set(nodes.map(n => n.id));
   for (const edge of edges) {
-    if (nodeIds.has(edge.source) && nodeIds.has(edge.target)) {
-      g.setEdge(edge.source, edge.target);
+    const source = layoutIds.get(edge.source);
+    const target = layoutIds.get(edge.target);
+    if (source !== undefined && target !== undefined) {
+      g.setEdge(source, target);
     }
   }
 
   dagre.layout(g);
 
   return nodes.map(node => {
-    const laidOut = g.node(node.id);
+    const laidOut = g.node(layoutIds.get(node.id)!);
     const size = dims.get(node.id) ?? DEFAULT_NODE_DIMENSION;
     // dagre returns node centers; React Flow positions are top-left.
+    const position = { x: laidOut?.x - size.width / 2, y: laidOut?.y - size.height / 2 };
+    if (!Number.isFinite(position.x) || !Number.isFinite(position.y)) {
+      throw new Error(`Layout did not produce finite coordinates for node ${node.id}`);
+    }
     return {
       ...node,
-      position: {
-        x: laidOut.x - size.width / 2,
-        y: laidOut.y - size.height / 2,
-      },
+      position,
     };
   });
 }
@@ -115,8 +120,8 @@ export function needsLayout(nodes: WorkflowNode[]): boolean {
   // so a lone node with a real position is respected rather than re-laid-out.
   if (nodes.length < 2) return false;
 
-  const first = nodes[0].position;
+  const first = nodes[0].position!; // All positions were checked above.
   const allSame = nodes.every(n =>
-    Math.abs(n.position.x - first.x) < 1 && Math.abs(n.position.y - first.y) < 1);
+    Math.abs(n.position!.x - first.x) < 1 && Math.abs(n.position!.y - first.y) < 1);
   return allSame;
 }

@@ -1,13 +1,10 @@
-import { useCallback, useMemo, useState, useEffect, useRef, type DragEvent } from 'react';
+import { useCallback, useMemo, useState, useEffect, useRef, useId, type DragEvent } from 'react';
 import {
   ReactFlow,
   Background,
   Controls,
   ControlButton,
   Panel,
-  useNodesState,
-  useEdgesState,
-  addEdge,
   type Connection,
   type Node,
   type Edge,
@@ -21,14 +18,13 @@ import { UndoIcon, RedoIcon, LockIcon, LockOpenIcon, UploadIcon, DownloadIcon, I
 import { type Workflow } from '../types/workflow.ts';
 import { type ValidationProblem } from '../types/validation.ts';
 import { type EditorSpi } from '../types/spi.ts';
-import { type FlowNodeData, toReactFlowNodes, toReactFlowEdges, toWorkflow, toWorkflowNodes, toWorkflowEdges } from '../utils/conversion.ts';
+import { type FlowNodeData } from '../utils/conversion.ts';
 import { generateNodeId, generateEdgeId } from '../utils/id.ts';
 import { parseWorkflow, downloadWorkflowJson, workflowFileName } from '../utils/workflowIo.ts';
 import { exportCanvasImage } from '../utils/exportImage.ts';
 import { simNodeClass, activeNodeIds, parallelRole } from '../utils/parallelView.ts';
 import { validateWorkflow } from '../validation/validateWorkflow.ts';
 import { analyzeParallelRegions } from '../simulation/parallelRegions.ts';
-import { layoutWorkflow, needsLayout } from '../layout/layoutWorkflow.ts';
 import { useHostValidation } from '../hooks/useHostValidation.ts';
 import { nodeTypes } from './nodes/nodeTypes.ts';
 import { edgeTypes } from './edges/edgeTypes.ts';
@@ -37,7 +33,9 @@ import { PropertiesPanel } from './panels/PropertiesPanel.tsx';
 import { ProblemsPanel } from './panels/ProblemsPanel.tsx';
 import { SimulationPanel } from './panels/SimulationPanel.tsx';
 import { NodeContextMenu } from './NodeContextMenu.tsx';
-import { useUndoRedo } from '../hooks/useUndoRedo.ts';
+import { useEditorState } from '../hooks/useEditorState.ts';
+import { editorShortcut } from '../hooks/editorShortcuts.ts';
+import { deleteWithEditorFocus } from '../hooks/editorDeletion.ts';
 import {
   startSimulation,
   stepSimulation,
@@ -51,22 +49,8 @@ import './WorkflowEditor.css';
 
 export type FlowTheme = 'light' | 'dark';
 
-type WorkflowBase = Pick<Workflow, 'id' | 'name' | 'description' | 'version'>;
-
-interface PendingImportBase {
-  previous: WorkflowBase;
-  imported: WorkflowBase;
-}
-
-function sameWorkflowBase(left: WorkflowBase, right: WorkflowBase): boolean {
-  return left.id === right.id
-    && left.name === right.name
-    && left.description === right.description
-    && left.version === right.version;
-}
-
 /** A plausible sample value for a declared start-node input, based on its type (and name hints). */
-function sampleValueForInput(input: { name: string; type?: string }): unknown {
+function sampleValueForInput(input: { name: string; type?: string | null }): unknown {
   switch (input.type) {
     case 'number': return 0;
     case 'boolean': return true;
@@ -109,111 +93,43 @@ export interface WorkflowEditorProps {
 }
 
 function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = 'light', spi }: WorkflowEditorProps) {
-  const initialNodes = useMemo(() => {
-    const source = needsLayout(workflow.nodes)
-      ? layoutWorkflow(workflow.nodes, workflow.edges)
-      : workflow.nodes;
-    return toReactFlowNodes(source);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- convert once on mount
-  }, []);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const initialEdges = useMemo(() => toReactFlowEdges(workflow.edges), []);
-
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  const { state, dispatch } = useEditorState(workflow, onChange);
+  const { nodes, edges, selectedNodeId, selectedEdgeId, simulating: simActive, interactive } = state;
+  const currentWorkflow = state.document;
+  const semanticWorkflow = state.semanticDocument;
   const { screenToFlowPosition, fitView, getNodes } = useReactFlow();
-  const { takeSnapshot, undo, redo, canUndo, canRedo } = useUndoRedo<FlowNodeData>();
-  const isRestoringRef = useRef(false);
+  const canUndo = state.past.length > 0 && !simActive;
+  const canRedo = state.future.length > 0 && !simActive;
+  const simulateSwitchId = useId();
+  const typingSession = useRef(0);
 
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editorRootRef = useRef<HTMLDivElement>(null);
-  const [pendingImportBase, setPendingImportBase] = useState<PendingImportBase | null>(null);
   const [contextMenu, setContextMenu] = useState<{ node: Node<FlowNodeData>; position: { x: number; y: number } } | null>(null);
   const [panelWidth, setPanelWidth] = useState(340);
-  const [simActive, setSimActive] = useState(false);
   const [simState, setSimState] = useState<SimState | null>(null);
   const [simContextText, setSimContextText] = useState('{\n  \n}');
 
   // Canvas interactivity (drag/connect/select). Locked automatically while simulating so the graph
   // can't be edited mid-run; otherwise controlled by the lower-left lock button.
-  const [interactive, setInteractive] = useState(true);
   const interactivityEnabled = interactive && !simActive;
   const isResizing = useRef(false);
-  const snapshotNeededRef = useRef(false);
-  const changeNeededRef = useRef(false);
-  const mountedRef = useRef(false);
-  const fallbackAppliedRef = useRef(needsLayout(workflow.nodes));
-
-  const effectiveWorkflowBase = useMemo<WorkflowBase>(() => {
-    if (!pendingImportBase) return workflow;
-    return sameWorkflowBase(workflow, pendingImportBase.previous)
-      ? pendingImportBase.imported
-      : workflow;
-  }, [workflow, pendingImportBase]);
-
-  // Suppress onChange during initial render — ReactFlow fires onNodesChange
-  // (dimension measurements, fitView) before the user has interacted.
-  useEffect(() => {
-    const id = setTimeout(() => { mountedRef.current = true; }, 0);
-    return () => clearTimeout(id);
-  }, []);
-
-  // Capture initial state as the first snapshot
-  const initializedRef = useRef(false);
-  useEffect(() => {
-    if (!initializedRef.current) {
-      initializedRef.current = true;
-      takeSnapshot(initialNodes, initialEdges);
-    }
-  }, [initialNodes, initialEdges, takeSnapshot]);
-
-  // Persist fallback layout on mount
-  useEffect(() => {
-    if (fallbackAppliedRef.current) {
-      fallbackAppliedRef.current = false;
-      onChange(toWorkflow(effectiveWorkflowBase, initialNodes, initialEdges));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once for fallback persistence
-  }, []);
-
-  // Commit pending snapshots and emit deferred onChange after render.
-  // Using an effect (not setTimeout) ensures we always read the latest
-  // nodes/edges state, eliminating stale-closure issues when ReactFlow
-  // fires multiple handlers in the same event (e.g. keyboard delete).
-  useEffect(() => {
-    if (snapshotNeededRef.current) {
-      snapshotNeededRef.current = false;
-      takeSnapshot(nodes, edges);
-    }
-    if (changeNeededRef.current && mountedRef.current) {
-      changeNeededRef.current = false;
-      onChange(toWorkflow(effectiveWorkflowBase, nodes, edges));
-    }
-    isRestoringRef.current = false;
-  });
 
   const selectedNode = nodes.find(n => n.id === selectedNodeId);
   const selectedEdge = edges.find(e => e.id === selectedEdgeId);
 
-  const currentWorkflow = useMemo(
-    () => toWorkflow(effectiveWorkflowBase, nodes, edges),
-    [effectiveWorkflowBase, nodes, edges],
-  );
-
   const builtInProblems = useMemo(
-    () => validateWorkflow(currentWorkflow),
-    [currentWorkflow],
+    () => validateWorkflow(semanticWorkflow),
+    [semanticWorkflow],
   );
 
   const parallelAnalysis = useMemo(
-    () => analyzeParallelRegions(currentWorkflow),
-    [currentWorkflow],
+    () => analyzeParallelRegions(semanticWorkflow),
+    [semanticWorkflow],
   );
 
-  const hostProblems = useHostValidation(currentWorkflow, spi?.validate);
+  const hostProblems = useHostValidation(semanticWorkflow, spi?.validate);
 
   const validationProblems = useMemo(
     () => [...builtInProblems, ...hostProblems],
@@ -246,33 +162,16 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
   );
 
   const handleNodesChange = useCallback((changes: NodeChange<Node<FlowNodeData>>[]) => {
-    if (!isRestoringRef.current && changes.some(c => c.type === 'remove')) {
-      snapshotNeededRef.current = true;
-    }
-    onNodesChange(changes);
-    changeNeededRef.current = true;
-  }, [onNodesChange]);
+    dispatch({ type: 'nodesChange', changes });
+  }, [dispatch]);
 
   const handleEdgesChange = useCallback((changes: EdgeChange[]) => {
-    if (!isRestoringRef.current && changes.some(c => c.type === 'remove')) {
-      snapshotNeededRef.current = true;
-    }
-    onEdgesChange(changes);
-    changeNeededRef.current = true;
-  }, [onEdgesChange]);
+    dispatch({ type: 'edgesChange', changes });
+  }, [dispatch]);
 
   const onConnect = useCallback((connection: Connection) => {
-    const edgeId = generateEdgeId(connection.source!, connection.target!);
-    const newEdge: Edge = {
-      ...connection,
-      id: edgeId,
-      type: 'conditional',
-      data: { condition: undefined, priority: 0, isDefault: false },
-    };
-    snapshotNeededRef.current = true;
-    setEdges(eds => addEdge(newEdge, eds));
-    changeNeededRef.current = true;
-  }, [setEdges]);
+    dispatch({ type: 'connect', connection, id: generateEdgeId(connection.source, connection.target) });
+  }, [dispatch]);
 
   const onDrop = useCallback((event: DragEvent) => {
     event.preventDefault();
@@ -280,111 +179,63 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
     if (!nodeType) return;
 
     const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
-    const newNode: Node<FlowNodeData> = {
+    dispatch({ type: 'addNode', node: {
       id: generateNodeId(nodeType),
-      type: nodeType,
+      type: nodeType as FlowNodeData['nodeType'],
       position,
-      data: {
-        name: nodeType.charAt(0).toUpperCase() + nodeType.slice(1).replace(/-/g, ' '),
-        nodeType: nodeType as FlowNodeData['nodeType'],
-        config: nodeType === 'action' ? { actionType: '' } : nodeType === 'wait' ? { duration: '' } : {},
-      },
-    };
-
-    snapshotNeededRef.current = true;
-    setNodes(nds => [...nds, newNode]);
-    changeNeededRef.current = true;
-    setSelectedNodeId(newNode.id);
-    setSelectedEdgeId(null);
-  }, [screenToFlowPosition, setNodes]);
+      name: nodeType.charAt(0).toUpperCase() + nodeType.slice(1).replace(/-/g, ' '),
+      config: nodeType === 'action' ? { actionType: '' } : nodeType === 'wait' ? { duration: '' } : {},
+    } });
+  }, [screenToFlowPosition, dispatch]);
 
   const onDragOver = useCallback((event: DragEvent) => {
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
   }, []);
 
-  const onNodeClick = useCallback((_: any, node: Node) => {
-    setSelectedNodeId(node.id);
-    setSelectedEdgeId(null);
-  }, []);
+  const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
+    dispatch({ type: 'select', nodeId: node.id });
+  }, [dispatch]);
 
-  const onEdgeClick = useCallback((_: any, edge: Edge) => {
-    setSelectedEdgeId(edge.id);
-    setSelectedNodeId(null);
-  }, []);
+  const onEdgeClick = useCallback((_: React.MouseEvent, edge: Edge) => {
+    dispatch({ type: 'select', edgeId: edge.id });
+  }, [dispatch]);
 
   const onPaneClick = useCallback(() => {
-    setSelectedNodeId(null);
-    setSelectedEdgeId(null);
+    dispatch({ type: 'select' });
     setContextMenu(null);
-  }, []);
+  }, [dispatch]);
 
   const onNodeContextMenu = useCallback((event: React.MouseEvent, node: Node<FlowNodeData>) => {
     event.preventDefault();
+    if (!interactivityEnabled) return;
     setContextMenu({ node: node as Node<FlowNodeData>, position: { x: event.clientX, y: event.clientY } });
-  }, []);
+  }, [interactivityEnabled]);
 
   const onCloneNode = useCallback((node: Node<FlowNodeData>) => {
-    const newNode: Node<FlowNodeData> = {
-      id: generateNodeId(node.data.nodeType),
-      type: node.type,
-      position: { x: node.position.x + 40, y: node.position.y + 40 },
-      data: { ...node.data, name: `${node.data.name} (copy)`, config: { ...node.data.config } },
-    };
-    snapshotNeededRef.current = true;
-    setNodes(nds => [...nds, newNode]);
-    changeNeededRef.current = true;
-  }, [setNodes]);
+    dispatch({ type: 'cloneNode', id: node.id, newId: generateNodeId(node.data.nodeType) });
+  }, [dispatch]);
 
   const onDeleteNode = useCallback((nodeId: string) => {
-    snapshotNeededRef.current = true;
-    setNodes(nds => {
-      setEdges(eds => eds.filter(e => e.source !== nodeId && e.target !== nodeId));
-      if (selectedNodeId === nodeId) setSelectedNodeId(null);
-      return nds.filter(n => n.id !== nodeId);
-    });
-    changeNeededRef.current = true;
-  }, [setNodes, setEdges, selectedNodeId]);
+    deleteWithEditorFocus(state, { type: 'delete', nodeIds: [nodeId] }, editorRootRef.current, dispatch);
+  }, [state, dispatch]);
 
   const onNodeDragStop = useCallback(() => {
-    snapshotNeededRef.current = true;
-    changeNeededRef.current = true;
-  }, []);
+    dispatch({ type: 'commitPositions' });
+  }, [dispatch]);
 
   const handleTidyUp = useCallback(() => {
-    takeSnapshot(nodes, edges);
-    const workflowNodes = toWorkflowNodes(nodes);
-    const laidOut = layoutWorkflow(workflowNodes, toWorkflowEdges(edges));
-    const positionById = new Map(laidOut.map(n => [n.id, n.position]));
-    setNodes(nds => nds.map(n => {
-      const pos = positionById.get(n.id);
-      return pos ? { ...n, position: pos } : n;
-    }));
-    changeNeededRef.current = true;
+    dispatch({ type: 'tidy' });
     window.requestAnimationFrame(() => fitView({ duration: 300 }));
-  }, [nodes, edges, takeSnapshot, setNodes, fitView]);
+  }, [dispatch, fitView]);
 
   // --- Import / export ----------------------------------------------------
   // Replaces the canvas with an imported definition. Applies fallback layout when
   // node positions are missing and reframes the view so the whole graph is shown.
   const applyImportedWorkflow = useCallback((imported: Workflow) => {
-    const source = needsLayout(imported.nodes)
-      ? layoutWorkflow(imported.nodes, imported.edges)
-      : imported.nodes;
-    const rfNodes = toReactFlowNodes(source);
-    const rfEdges = toReactFlowEdges(imported.edges);
-    isRestoringRef.current = true;
-    setNodes(rfNodes);
-    setEdges(rfEdges);
-    takeSnapshot(rfNodes, rfEdges);
-    setSelectedNodeId(null);
-    setSelectedEdgeId(null);
-    setPendingImportBase({ previous: workflow, imported });
-    // Emit onChange with the imported base (id/name/description/version) so the
-    // host state adopts the new definition, not just its graph.
-    onChange(toWorkflow(imported, rfNodes, rfEdges));
+    dispatch({ type: 'import', workflow: imported });
     window.requestAnimationFrame(() => fitView({ duration: 300 }));
-  }, [setNodes, setEdges, takeSnapshot, onChange, fitView, workflow]);
+  }, [dispatch, fitView]);
 
   const onImportFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -410,8 +261,9 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
   }, [applyImportedWorkflow]);
 
   const handleImportClick = useCallback(() => {
+    if (simActive) return;
     fileInputRef.current?.click();
-  }, []);
+  }, [simActive]);
 
   const handleExportJson = useCallback(() => {
     downloadWorkflowJson(currentWorkflow);
@@ -422,62 +274,58 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
     void exportCanvasImage(getNodes(), `${workflowFileName(currentWorkflow)}.png`, background, editorRootRef.current);
   }, [getNodes, currentWorkflow, theme]);
 
+  // Only text-like controls coalesce. Repeated add/remove buttons, checkboxes, and selects are
+  // separate operations even when focus stays on the same control. Blur ends a typing session.
+  const typingGroup = useCallback((field: string): string | undefined => {
+    const active = document.activeElement;
+    const textControl = active instanceof HTMLTextAreaElement
+      || (active instanceof HTMLInputElement && !['checkbox', 'radio', 'file', 'button'].includes(active.type))
+      || (active instanceof HTMLElement && active.isContentEditable);
+    return textControl && editorRootRef.current?.contains(active)
+      ? `${field}:${typingSession.current}` : undefined;
+  }, []);
+
   const onNodeDataChange = useCallback((id: string, dataUpdate: Partial<FlowNodeData>) => {
-    setNodes(nds => nds.map(n => n.id === id ? { ...n, data: { ...n.data, ...dataUpdate } } : n));
-    changeNeededRef.current = true;
-  }, [setNodes]);
+    dispatch({ type: 'nodeData', id, data: dataUpdate,
+      group: typingGroup(`node:${id}:${Object.keys(dataUpdate).join(',')}`) });
+  }, [dispatch, typingGroup]);
 
   const onNodeIdChange = useCallback((oldId: string, newId: string) => {
-    setNodes(nds => {
-      if (nds.some(n => n.id === newId)) return nds;
-      setEdges(eds => eds.map(e => ({
-        ...e,
-        source: e.source === oldId ? newId : e.source,
-        target: e.target === oldId ? newId : e.target,
-      })));
-      if (selectedNodeId === oldId) setSelectedNodeId(newId);
-      return nds.map(n => n.id === oldId ? { ...n, id: newId } : n);
-    });
-    changeNeededRef.current = true;
-  }, [setNodes, setEdges, selectedNodeId]);
+    dispatch({ type: 'renameNode', id: oldId, newId, group: typingGroup('nodeId') });
+  }, [dispatch, typingGroup]);
 
-  const onEdgeDataChange = useCallback((id: string, dataUpdate: Record<string, any>) => {
-    setEdges(eds => eds.map(e => e.id === id ? { ...e, data: { ...e.data, ...dataUpdate } } : e));
-    changeNeededRef.current = true;
-  }, [setEdges]);
+  const onEdgeDataChange = useCallback((id: string, dataUpdate: Record<string, unknown>) => {
+    dispatch({ type: 'edgeData', id, data: dataUpdate,
+      group: typingGroup(`edge:${id}:${Object.keys(dataUpdate).join(',')}`) });
+  }, [dispatch, typingGroup]);
 
   const handleUndo = useCallback(() => {
-    const snapshot = undo();
-    if (!snapshot) return;
-    isRestoringRef.current = true;
-    setNodes(snapshot.nodes);
-    setEdges(snapshot.edges);
-    changeNeededRef.current = true;
-  }, [undo, setNodes, setEdges]);
+    dispatch({ type: 'undo' });
+  }, [dispatch]);
 
   const handleRedo = useCallback(() => {
-    const snapshot = redo();
-    if (!snapshot) return;
-    isRestoringRef.current = true;
-    setNodes(snapshot.nodes);
-    setEdges(snapshot.edges);
-    changeNeededRef.current = true;
-  }, [redo, setNodes, setEdges]);
+    dispatch({ type: 'redo' });
+  }, [dispatch]);
 
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
-        e.preventDefault();
-        handleUndo();
-      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
-        e.preventDefault();
-        handleRedo();
-      }
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [handleUndo, handleRedo]);
+  const onKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    const target = event.target instanceof Element ? event.target : null;
+    const owned = target?.closest('[data-workflow-editor]') === event.currentTarget;
+    const textEditing = !!target?.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], .monaco-editor');
+    const shortcut = editorShortcut({ key: event.key, ctrlKey: event.ctrlKey, metaKey: event.metaKey,
+      shiftKey: event.shiftKey, altKey: event.altKey, defaultPrevented: event.defaultPrevented,
+      isComposing: event.nativeEvent.isComposing }, owned, textEditing, simActive);
+    if (!shortcut || (shortcut === 'delete' && !interactivityEnabled)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (shortcut === 'delete') {
+      deleteWithEditorFocus(state, { type: 'delete',
+        nodeIds: nodes.filter(node => node.selected).map(node => node.id),
+        edgeIds: edges.filter(edge => edge.selected).map(edge => edge.id),
+      }, editorRootRef.current, dispatch);
+    } else {
+      dispatch({ type: shortcut });
+    }
+  }, [dispatch, nodes, edges, simActive, interactivityEnabled, state]);
 
   const onResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -503,30 +351,26 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
 
   const onProblemClick = useCallback((problem: ValidationProblem) => {
     if (problem.nodeId) {
-      setSelectedNodeId(problem.nodeId);
-      setSelectedEdgeId(null);
+      dispatch({ type: 'select', nodeId: problem.nodeId });
       const node = nodes.find(n => n.id === problem.nodeId);
       if (node) {
         fitView({ nodes: [node], duration: 300 });
       }
     } else if (problem.edgeId) {
-      setSelectedEdgeId(problem.edgeId);
-      setSelectedNodeId(null);
+      dispatch({ type: 'select', edgeId: problem.edgeId });
     }
-  }, [nodes, fitView]);
+  }, [nodes, fitView, dispatch]);
 
   // --- Simulation ---------------------------------------------------------
   const focusNode = useCallback((nodeId: string) => {
-    setSelectedNodeId(nodeId);
-    setSelectedEdgeId(null);
+    dispatch({ type: 'select', nodeId });
     const node = nodes.find(n => n.id === nodeId);
     if (node) fitView({ nodes: [node], duration: 300 });
-  }, [nodes, fitView]);
+  }, [nodes, fitView, dispatch]);
 
   const focusEdge = useCallback((edgeId: string) => {
-    setSelectedEdgeId(edgeId);
-    setSelectedNodeId(null);
-  }, []);
+    dispatch({ type: 'select', edgeId });
+  }, [dispatch]);
 
   const beginSim = useCallback((context: Record<string, unknown>) => {
     setSimState(startSimulation(currentWorkflow, context));
@@ -547,28 +391,25 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
   const resetSim = useCallback(() => setSimState(null), []);
 
   const toggleSim = useCallback(() => {
-    setSimActive(prev => {
-      const next = !prev;
-      if (!next) {
-        setSimState(null); // leaving sim mode clears the run and its overlays
-      } else {
-        // Entering sim mode: auto-generate a sample start context, unless the author has already
-        // supplied one (i.e. the context has at least one key). Invalid JSON is left untouched so
-        // an in-progress edit is not discarded.
-        setSimContextText(current => {
-          try {
-            const parsed = JSON.parse(current || '{}');
-            const hasKeys = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-              && Object.keys(parsed).length > 0;
-            return hasKeys ? current : generateSampleContext(currentWorkflow);
-          } catch {
-            return current;
-          }
-        });
-      }
-      return next;
-    });
-  }, [currentWorkflow]);
+    dispatch({ type: 'mode', simulating: !simActive });
+    setContextMenu(null);
+    if (simActive) {
+      setSimState(null);
+    } else {
+      // Entering sim mode: auto-generate a sample start context, unless the author has already
+      // supplied one. Invalid JSON is left untouched so an in-progress edit is not discarded.
+      setSimContextText(current => {
+        try {
+          const parsed = JSON.parse(current || '{}');
+          const hasKeys = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+            && Object.keys(parsed).length > 0;
+          return hasKeys ? current : generateSampleContext(currentWorkflow);
+        } catch {
+          return current;
+        }
+      });
+    }
+  }, [currentWorkflow, simActive, dispatch]);
 
   // A best-effort parse of the sample context, shared with the inline condition tester.
   const sampleContext = useMemo<Record<string, unknown>>(() => {
@@ -605,7 +446,18 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
   }, [edges, simActive, simState]);
 
   return (
-    <div ref={editorRootRef} className="workflow-editor" data-flow-theme={theme}>
+    <div ref={editorRootRef} className="workflow-editor" data-flow-theme={theme}
+      data-workflow-editor tabIndex={-1} onKeyDown={onKeyDown}
+      onPointerDownCapture={(event) => {
+        const target = event.target instanceof Element ? event.target : null;
+        const focusable = target?.closest('input, textarea, select, button, a, [tabindex], [contenteditable]');
+        if (target?.closest('[data-workflow-editor]') === event.currentTarget
+          && (!focusable || focusable === event.currentTarget || target?.classList.contains('react-flow__pane'))) {
+          event.currentTarget.focus({ preventScroll: true });
+        }
+      }}
+      onBlurCapture={() => { typingSession.current += 1; dispatch({ type: 'endGroup' }); }}
+    >
       <NodePalette />
       <div className="workflow-editor__body">
         <div className={`workflow-editor__canvas${simActive ? ' workflow-editor__canvas--simulating' : ''}`}>
@@ -625,7 +477,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             defaultEdgeOptions={{ type: 'conditional' }}
-            deleteKeyCode={['Backspace', 'Delete']}
+            deleteKeyCode={null}
             nodesDraggable={interactivityEnabled}
             nodesConnectable={interactivityEnabled}
             elementsSelectable={interactivityEnabled}
@@ -638,7 +490,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
                 title="Toggle Interactivity"
                 aria-label="Toggle Interactivity"
                 disabled={simActive}
-                onClick={() => setInteractive(v => !v)}
+                onClick={() => dispatch({ type: 'mode', interactive: !interactive })}
               >
                 {interactivityEnabled ? <LockOpenIcon /> : <LockIcon />}
               </ControlButton>
@@ -651,7 +503,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
                 <button title="Redo (Ctrl+Y)" disabled={!canRedo} onClick={handleRedo}>
                   <RedoIcon /> Redo
                 </button>
-                <button title="Tidy up (auto-layout)" onClick={handleTidyUp}>
+                <button title="Tidy up (auto-layout)" disabled={!interactivityEnabled} onClick={handleTidyUp}>
                   Tidy up
                 </button>
                 <button title="Import workflow from a JSON file" disabled={simActive} onClick={handleImportClick}>
@@ -671,7 +523,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
                   onChange={onImportFileChange}
                 />
                 <Switch
-                  id="workflow-editor-simulate-switch"
+                  id={simulateSwitchId}
                   className="workflow-editor__sim-switch"
                   label="Simulate"
                   aria-label="Simulate routing against a sample context"
@@ -695,7 +547,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
               </Panel>
             )}
           </ReactFlow>
-          {contextMenu && (
+          {contextMenu && interactivityEnabled && (
             <NodeContextMenu
               node={contextMenu.node}
               position={contextMenu.position}
@@ -724,6 +576,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
           />
         ) : (
           <PropertiesPanel
+            draftIdentity={`${selectedNodeId ? state.nodeKeys[selectedNodeId] : ''}:${state.draftReset}`}
             selectedNode={selectedNode}
             selectedEdge={selectedEdge}
             nodeProblems={selectedNodeProblems}
@@ -742,6 +595,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
   );
 }
 
+/** Embeds an isolated workflow authoring canvas and its property/simulation panels. */
 export function WorkflowEditor(props: WorkflowEditorProps) {
   return (
     <ReactFlowProvider>

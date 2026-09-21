@@ -1,0 +1,41 @@
+{
+    "contractVersion": 1,
+    "workflow": {
+        "id": "config-contract", "name": "All built-in configs", "version": 3,
+        "nodes": [
+            { "id": "start", "type": "start", "name": "Start", "config": {
+                "inputs": [{ "name": "id", "type": null, "required": null, "x-field": [null, 1],
+                    "contextKey": null, "label": null, "description": null, "widget": "host-widget",
+                    "options": [{ "label": null, "value": "yes", "x-option": [null, true] }],
+                    "defaultValue": { "nested": [null, 1] } }]
+            } },
+            { "id": "action", "type": "action", "name": "Action", "position": null, "config": {
+                "actionType": "host", "inputs": { "literal": [null, true, 42, { "nested": "value" }] },
+                "outputs": [{ "name": "result", "contextKey": "renamed", "x-output": { "flag": true },
+                    "label": null, "description": null, "widget": "host-widget",
+                    "options": [{ "label": null, "value": "yes", "x-option": [null, true] }],
+                    "defaultValue": { "nested": [null, 1] } }],
+                "x-host": { "nested": [null, { "enabled": true }] }
+            } },
+            { "id": "human", "type": "human-task", "name": "Human", "config": {
+                "description": null, "inputs": null,
+                "outputs": [{ "name": "answer", "type": "string", "required": false,
+                    "label": null, "description": null, "widget": "select", "defaultValue": null,
+                    "options": [{ "label": "Yes", "value": "yes", "x-option": 1 }], "contextKey": null }]
+            } },
+            { "id": "event", "type": "receive-event", "name": "Event", "config": {
+                "eventType": "done", "match": ["event.id == context.id"],
+                "outputs": [{ "contextKey": "received", "expression": "event.value", "x-mapping": [1, null] }]
+            } },
+            { "id": "wait", "type": "wait", "name": "Wait", "config": { "duration": "PT1S" } },
+            { "id": "end", "type": "end", "name": "End", "config": { "outcome": "done", "x-host": null } }
+        ],
+        "edges": [
+            { "id": "sa", "source": "start", "target": "action" },
+            { "id": "ah", "source": "action", "target": "human" },
+            { "id": "he", "source": "human", "target": "event" },
+            { "id": "ew", "source": "event", "target": "wait" },
+            { "id": "we", "source": "wait", "target": "end" }
+        ]
+    }
+}

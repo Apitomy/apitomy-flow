@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { getNodeDefinition } from './nodeDefinition.ts';
 import { type WorkflowNode } from '../types/workflow.ts';
+import { parseWorkflow } from './workflowIo.ts';
 
-function node(overrides: Partial<WorkflowNode>): WorkflowNode {
+// Deliberately accepts malformed config to exercise defensive display of legacy host data.
+function node(overrides: Omit<Partial<WorkflowNode>, 'config'> & { config?: unknown }): WorkflowNode {
   return {
     id: 'n1',
     type: 'action',
@@ -10,10 +12,34 @@ function node(overrides: Partial<WorkflowNode>): WorkflowNode {
     config: {},
     position: { x: 0, y: 0 },
     ...overrides,
-  };
+  } as WorkflowNode;
 }
 
 describe('getNodeDefinition', () => {
+    it.each(['action', 'human-task'])('formats imported %s literals safely for the Viewer', type => {
+        const result = parseWorkflow(JSON.stringify({
+            id: 'w', name: 'Workflow',
+            nodes: [
+                { id: 's', type: 'start' },
+                { id: 'a', type, config: { actionType: 'noop', inputs: {
+                    special: { toString: null, nested: [1] }, object: { count: 3 },
+                    array: [{ toString: null }, false], expression: 'context.value', empty: null,
+                } } },
+                { id: 'e', type: 'end' },
+            ],
+            edges: [{ id: 'sa', source: 's', target: 'a' }, { id: 'ae', source: 'a', target: 'e' }],
+        }));
+        expect(result.workflow).toBeDefined();
+        const definition = getNodeDefinition(result.workflow!.nodes[1]);
+        expect(definition.sections.find(section => section.label === 'Inputs')?.fields).toEqual([
+            { label: 'special', value: '{"toString":null,"nested":[1]}' },
+            { label: 'object', value: '{"count":3}' },
+            { label: 'array', value: '[{"toString":null},false]' },
+            { label: 'expression', value: 'context.value' },
+            { label: 'empty', value: 'null' },
+        ]);
+    });
+
   it('includes the node id, type and name regardless of node type', () => {
     const def = getNodeDefinition(node({ id: 'abc', type: 'wait', name: 'Wait a bit' }));
     expect(def.id).toBe('abc');
