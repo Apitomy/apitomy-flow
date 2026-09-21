@@ -9,6 +9,7 @@ test('selection, layout and layout history do not reschedule semantic host valid
     await expect(editor.getByTestId('validation-count')).toHaveText('1');
     await editor.locator('.react-flow__node[data-id="a"]').click();
     await editor.getByRole('button', { name: 'Tidy up' }).click();
+    const laidOut = (await changes(editor)).at(-1)!;
     await editor.getByRole('button', { name: 'Undo', exact: true }).click();
     await editor.getByRole('button', { name: 'Redo', exact: true }).click();
     await page.clock.fastForward(1000);
@@ -16,6 +17,12 @@ test('selection, layout and layout history do not reschedule semantic host valid
     await field(editor, 'Name').fill('Semantic change');
     await page.clock.fastForward(1000);
     await expect(editor.getByTestId('validation-count')).toHaveText('2');
+    const validated = JSON.parse((await editor.getByTestId('validation-documents').textContent())!);
+    expect(validated[1].nodes.map((node: { position: unknown }) => node.position))
+        .toEqual(laidOut.nodes.map(node => node.position));
+    expect(validated[1].nodes.find((node: { id: string }) => node.id === 'a').name).toBe('Semantic change');
+    expect(validated[0].nodes.map((node: { position: unknown }) => node.position))
+        .not.toEqual(laidOut.nodes.map(node => node.position));
 });
 
 test('human output forms preserve typed defaults and select options through undo', async ({ page }) => {

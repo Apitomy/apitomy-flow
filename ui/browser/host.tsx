@@ -17,14 +17,15 @@ function EditorHost({ id }: { id: string }) {
     const [validationCount, setValidationCount] = useState(0);
     const [pending] = useState(() => ({
         actions: [] as { generation: number; resolve: (value: ActionTypeDescriptor[]) => void; reject: () => void }[],
-        validations: [] as { resolve: (value: ValidationProblem[]) => void; reject: () => void }[],
+        validations: [] as { workflow: Workflow; resolve: (value: ValidationProblem[]) => void; reject: () => void }[],
     }));
     const spi = useMemo<EditorSpi | undefined>(() => params.has('async') ? {
         actionTypes: () => new Promise((resolve, reject) => {
             pending.actions.push({ generation: provider, resolve, reject: () => reject(new Error('Host unavailable')) });
         }),
-        validate: () => new Promise((resolve, reject) => {
-            pending.validations.push({ resolve, reject: () => reject(new Error('Host unavailable')) });
+        validate: workflow => new Promise((resolve, reject) => {
+            pending.validations.push({ workflow: structuredClone(workflow), resolve,
+                reject: () => reject(new Error('Host unavailable')) });
             setValidationCount(pending.validations.length);
         }),
     } : undefined, [pending, provider]);
@@ -55,6 +56,7 @@ function EditorHost({ id }: { id: string }) {
         }} /></div>
         <output data-testid="changes">{JSON.stringify(changes)}</output>
         <output data-testid="validation-count">{validationCount}</output>
+        <output data-testid="validation-documents">{JSON.stringify(pending.validations.map(item => item.workflow))}</output>
     </section>;
 }
 
