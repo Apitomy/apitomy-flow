@@ -69,7 +69,7 @@ export interface SimState {
     blockedOn?: { nodeId: string; kind: NodeType };
     /** Set when `status === 'failed'`. */
     error?: SimError;
-    /** Number of transitions taken across all branches, for the loop guard. */
+    /** Transitions across all branches in this advancement; resets when a parked node is resumed. */
     transitions: number;
 }
 
@@ -229,7 +229,8 @@ export function runSimulation(workflow: Workflow, state: SimState): SimState {
  * Delivers a mock output/event to a parked (blocking) branch, merges any output into context (as a
  * real node would), and marks that branch runnable so the next step routes it onward. When `nodeId`
  * is given the matching parked branch is targeted; otherwise the first parked branch is resumed. A
- * no-op unless the simulation is `blocked`.
+ * no-op unless the simulation is `blocked`. A successful resume begins a fresh transition budget,
+ * matching the engine's advancement call; stepping/running within that advancement never resets it.
  */
 export function resumeSimulation(
     workflow: Workflow,
@@ -258,7 +259,7 @@ export function resumeSimulation(
     const context = { ...state.context, ...output };
     const history = recordOutputOnBranch(state.history, target.branchId, target.nodeId, output);
     const parkedBranchIds = state.parkedBranchIds.filter(id => id !== target.branchId);
-    return derive(workflow, { ...state, status: 'running', context, history, parkedBranchIds });
+    return derive(workflow, { ...state, status: 'running', context, history, parkedBranchIds, transitions: 0 });
 }
 
 /**
