@@ -1,8 +1,24 @@
 # Validation
 
 The engine provides a `WorkflowValidator` that checks workflow definitions for structural and
-semantic problems before execution. The same rules are implemented in TypeScript for real-time
-validation in the visual editor.
+semantic problems before execution. TypeScript implements corresponding browser checks with intentional
+expression/duration differences. Neither a manual rule count nor schema validity proves executability.
+
+## Authoritative sources
+
+Inspect these paths at the same revision as the artifacts you run:
+
+- Java: `engine/src/main/java/io/apitomy/flow/validation/WorkflowShape.java`, `WorkflowValidator.java`,
+  and `engine/src/main/java/io/apitomy/flow/engine/ParallelRegions.java`.
+- Browser: `ui/src/validation/workflowShape.ts`, `validateWorkflow.ts`, and
+  `ui/src/simulation/parallelRegions.ts`.
+- Executable shared expectations: `conformance/validation.json`, `config-invalid-v1.json`,
+  `parallel-topology.json`, and `expressions.json`.
+
+The [repository](https://github.com/Apitomy/apitomy-flow) is the source authority; select the relevant
+branch/tag when browsing it. [Documentation checks](../developer-guide/documentation-checks.md) execute
+the fixtures. We intentionally do not maintain a numeric total: codes can be reused by shape/semantic
+checks, some have multiple severities, and full-EL/browser boundaries are not identical.
 
 ## Usage
 
@@ -18,23 +34,48 @@ boolean hasErrors = validator.hasErrors(problems);
 ### TypeScript
 
 ```typescript
-import { validateWorkflow } from '@apitomy/flow-ui';
+import { parseWorkflow } from '@apitomy/flow-ui';
 
-const problems = validateWorkflow(workflow);
+const { workflow, problems, error } = parseWorkflow(jsonText);
 const hasErrors = problems.some(p => p.severity === 'error');
+if (workflow && !error && !hasErrors) {
+    // Accepted and normalized for browser use; Java start still validates before execution.
+}
 ```
+
+`jsonText` is the JSON string supplied by your host. `parseWorkflow` is a package-root export;
+`validateWorkflow` is currently internal. For a mounted editor, receive merged built-in/host results
+through `onValidationChange`. The `WorkflowValidator` TypeScript export is an SPI function **type**, not
+the Java class or a callable built-in validator.
 
 ## Severity Levels
 
 | Severity | Meaning |
 |----------|---------|
-| **ERROR** | The workflow cannot execute. Must be fixed. |
-| **WARNING** | The workflow can execute but the definition is likely wrong. |
+| **ERROR** | Definition rejected at this validation boundary; fix before importing/starting |
+| **WARNING** | Advisory; may still fail at runtime or require Java validation |
 
 `startWorkflow` automatically validates the definition and rejects workflows with ERROR-level
 problems.
 
 ## Validation Rules
+
+The tables below summarize diagnostic families; the sources above define exact conditions and severity.
+
+### Shape preflight (ERROR)
+
+Preflight runs before semantic traversal. It checks workflow/node/edge objects, node kinds, IDs and edge
+endpoints, finite positions, built-in config field types, declaration lists/entries, metadata/options,
+and receive-event match/mapping structures. Null optional config fields retain their documented defaults.
+Browser import also checks outer JSON types that Java's record/Jackson binding handles before validation.
+If preflight finds errors, semantic checks do not run on the malformed data.
+
+Examples include `INVALID_WORKFLOW`, `INVALID_NODE`, `INVALID_EDGE`, `INVALID_NODE_TYPE`,
+`INVALID_NODE_POSITION`, `INVALID_INPUTS_TYPE`, `INVALID_OUTPUTS_TYPE`, `INVALID_INPUT_DEFINITION`,
+`INVALID_OUTPUT_DEFINITION`, `INVALID_TASK_DESCRIPTION`, and `INVALID_MATCH_TYPE`. Browser outer-field
+checks additionally include `INVALID_NODES`, `INVALID_EDGES`, `INVALID_NODE_CONFIG`, `INVALID_NODE_NAME`,
+`INVALID_WORKFLOW_DESCRIPTION`, `INVALID_WORKFLOW_VERSION`, and edge field-type diagnostics.
+Some codes in later tables can therefore be errors for malformed types and warnings for missing values.
 
 ### Structural (ERROR)
 
@@ -50,8 +91,8 @@ problems.
 | `NO_END_NODE` | At least one end node is required |
 | `INVALID_EDGE_SOURCE` | Edge references a source node ID that doesn't exist |
 | `INVALID_EDGE_TARGET` | Edge references a target node ID that doesn't exist |
-| `MISSING_EDGE_SOURCE` | Edge has no source node ID (null or blank) — _engine only_ |
-| `MISSING_EDGE_TARGET` | Edge has no target node ID (null or blank) — _engine only_ |
+| `MISSING_EDGE_SOURCE` | Edge has no source node ID (null or blank); checked in both runtimes |
+| `MISSING_EDGE_TARGET` | Edge has no target node ID (null or blank); checked in both runtimes |
 | `DUPLICATE_NODE_ID` | Two or more nodes share the same ID |
 | `DUPLICATE_EDGE_ID` | Two or more edges share the same ID |
 | `START_HAS_INCOMING` | Start node must not have incoming edges |
@@ -101,9 +142,7 @@ problems.
 | `INVALID_INPUT_DEFINITION` | Start node input entry is missing a name |
 | `DUPLICATE_INPUT_NAME` | Start node has multiple inputs with the same name |
 | `MISSING_ACTION_INPUTS` | Action node has no inputs defined |
-| `INVALID_INPUTS_TYPE` | Action node `inputs` is present but not a Map |
 | `MISSING_ACTION_OUTPUTS` | Action node has no outputs defined |
-| `INVALID_OUTPUTS_TYPE` | Action node `outputs` is present but not a List |
 | `DUPLICATE_OUTPUT_NAME` | Action or human-task node has duplicate output names |
 | `EMPTY_ACTION_INPUT_EXPRESSION` | Action node input has an empty or blank EL expression |
 | `MISSING_TASK_DESCRIPTION` | Human task node has no description |
@@ -116,6 +155,16 @@ problems.
 | `MALFORMED_OUTPUT_OPTION` | Human-task output has a `select` option with no value |
 | `DEFAULT_VALUE_TYPE_MISMATCH` | Human-task output `defaultValue` does not match the declared `type` |
 
+### Receive-event output mappings
+
+| Code | Severity | Rule |
+|---|---|---|
+| `MISSING_OUTPUT_CONTEXT_KEY` | WARNING / shape ERROR | Missing/blank target key, or malformed key/entry type |
+| `MISSING_OUTPUT_EXPRESSION` | WARNING / shape ERROR | Missing/blank expression, or malformed expression type |
+| `INVALID_OUTPUT_EXPRESSION` | ERROR | Invalid expression syntax (browser subset or Java EL respectively) |
+| `DUPLICATE_OUTPUT_NAME` | WARNING | Repeated target context key |
+| `UNSUPPORTED_EXPRESSION_DIALECT` | WARNING | Browser cannot validate this syntax; consult Java |
+
 ### Parallel Structure (ERROR)
 
 | Code | Description |
@@ -123,6 +172,9 @@ problems.
 | `MIXED_FORK_EDGES` | Node mixes unconditional (fork) edges with conditional/default edges; make all outgoing edges unconditional to fork, or add conditions/a default for exclusive choice |
 | `FORK_WITHOUT_JOIN` | Parallel branches from a fork do not re-converge at a single join |
 | `PARALLEL_BRANCH_REACHES_END` | A parallel branch can reach an end node without first joining |
+| `UNBALANCED_PARALLEL` | Each branch must reach its join through one distinct incoming edge |
+| `CROSSING_PARALLEL_REGIONS` | An edge crosses a region boundary, including outside entry |
+| `PARALLEL_REGION_CYCLE` | A branch re-enters its fork before joining |
 
 ## ValidationProblem
 
@@ -136,10 +188,16 @@ public record ValidationProblem(
 ) {}
 ```
 
+Java uses uppercase enum constants; JSON and TypeScript severities are lowercase `error` / `warning`.
+
 ## Rule Coverage
 
 Both validators check structure and semantics; shared JSON conformance fixtures pin selected problem
 codes, severities and affected node/edge IDs. The Java validator remains authoritative for full EL.
+
+Diagnostic multiplicity can differ: Java reports cyclic action strongly connected components; the
+browser stops after its first detected automated cycle. Duration checks also differ for signed and
+case-insensitive forms. Do not require the complete problem lists to be identical across runtimes.
 
 The browser uses one subset parser for edge conditions and event-output mappings. Malformed supported
 syntax produces `INVALID_CONDITION` (warning) or `INVALID_OUTPUT_EXPRESSION` (error). Valid common

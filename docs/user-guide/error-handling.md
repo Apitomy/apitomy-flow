@@ -1,96 +1,77 @@
 # Error Handling
 
-The engine delegates error handling to a `WorkflowErrorHandler` provided by the consuming application. This gives the consumer full control over retry, recovery, and failure policies.
+The host supplies a `WorkflowErrorHandler` to choose failure, retry, or recovery transitions. The default
+handler fails. The combined branch adds structured diagnostics while retaining legacy methods and wire
+fields; see [current contracts](current-contracts.md) for delivery status.
 
-## WorkflowErrorHandler Interface
+## Structured and legacy callbacks
 
-```java
-public interface WorkflowErrorHandler {
-    ErrorResolution handleNodeError(WorkflowInstance instance, WorkflowNode node,
-                                     NodeResult result, Exception error);
-    ErrorResolution handleNoMatchingEdge(WorkflowInstance instance, WorkflowNode node);
-}
-```
-
-### handleNodeError
-
-Called when an action node fails. Receives the instance, the failing node, and one of:
-
-| Scenario | `result` | `error` |
-|----------|----------|---------|
-| Executor returned `FAILED` | The failed `NodeResult` (with output) | `null` |
-| Executor threw an exception | `null` | The thrown exception |
-
-### handleNoMatchingEdge
-
-Called when no outgoing edge matches after a node completes (no condition returned true and no default edge exists).
-
-## ErrorResolution
+`handleError(instance, node, result, WorkflowError error)` is an additive default method. Override it to
+inspect `phase()`, `nodeId()`, `edgeId()`, `expression()`, `field()`, message, and cause. IDs/fields that do
+not apply are null. Existing handlers can continue implementing:
 
 ```java
-public record ErrorResolution(ErrorAction action, String targetNodeId) {}
-
-public enum ErrorAction { FAIL, RETRY, TRANSITION }
+ErrorResolution handleNodeError(WorkflowInstance instance, WorkflowNode node,
+                                NodeResult result, Exception error);
+ErrorResolution handleNoMatchingEdge(WorkflowInstance instance, WorkflowNode node);
 ```
 
-| Action | Behavior |
-|--------|----------|
-| `FAIL` | Fail the workflow. Sets status to `FAILED` with a descriptive `failureReason`. |
-| `RETRY` | Re-execute the current node immediately. |
-| `TRANSITION` | Jump to a specific node (e.g. an error-handling branch). |
+The default adapter preserves legacy dispatch. Explicit FAILED results supply the result and a null
+exception. Executor exceptions preserve their original identity; newly diagnosed input/output/result
+failures supply `WorkflowError`. Edge-condition exceptions carry the expression via
+`ConditionEvaluationException` rather than being reduced to “no matching edge.” Missing-edge selection
+still invokes `handleNoMatchingEdge`. Override structured handling for a uniform view across phases.
 
-Convenience factory methods: `ErrorResolution.fail()`, `ErrorResolution.retry()`, `ErrorResolution.transitionTo("node-id")`.
+| Phase | Examples |
+|---|---|
+| `INPUT_RESOLUTION` | Action/human-task input expression threw before work or parking |
+| `EXECUTOR_LOOKUP`, `EXECUTION` | Missing/throwing provider, thrown executor, explicit failed result |
+| `RESULT_VALIDATION`, `OUTPUT_VALIDATION` | Null result/status, malformed output keys, missing required action output |
+| `OUTPUT_MAPPING` | Receive-event mapping failed before merging |
+| `EDGE_CONDITION`, `EDGE_SELECTION` | Condition exception or no matching edge |
+| `ERROR_HANDLER` | Handler threw or returned an invalid resolution |
 
-## Default Behavior
+## Recovery decisions
 
-If no error handler is provided, the engine uses a default handler that always returns `FAIL`.
+| Decision | Behavior |
+|---|---|
+| `ErrorResolution.fail()` | Set FAILED, preserve a diagnostic `failureReason`, notify `onWorkflowFailed` |
+| `ErrorResolution.retry()` | Re-execute an action; input resolution is repeated. Other completion/mapping retries remain parked for a new delivery |
+| `ErrorResolution.transitionTo("repair")` | Enter an existing non-START node through normal execution/parking behavior |
 
-## Example: Retry with Limit
+Recovery affects the failed branch; unanswered parked siblings remain parked. Invalid output is not
+merged. A malformed handler fails once without recursive handler invocation, retaining the handler cause
+and original error. Failure of one branch fails the instance.
 
-The engine does not enforce retry counts — the error handler decides when to stop. Track retries in the workflow context:
+### Retry limits and durability
 
-```java
-public class RetryErrorHandler implements WorkflowErrorHandler {
+Action execution allows **ten retries after the initial attempt** in a call. Recovery transitions and
+human input retries consume the shared **100-unit driver budget**, along with ordinary moves and
+unsuccessful selections. These guards bound in-process loops; they do not schedule backoff or persist an
+attempt policy. A repeated immutable input error will not repair itself through immediate retries.
 
-    @Override
-    public ErrorResolution handleNodeError(WorkflowInstance instance, WorkflowNode node,
-                                            NodeResult result, Exception error) {
-        int retries = (int) instance.context().getOrDefault("retryCount", 0);
-        if (retries < 3) {
-            // Note: the engine's per-call safety limit (100 transitions)
-            // provides a hard backstop against infinite retries
-            return ErrorResolution.retry();
-        }
-        return ErrorResolution.transitionTo("error-handler-node");
-    }
+For transient action failures a handler can return `retry()` under its own host policy; for bad config or
+data, transition to a repair node or fail. Do not mutate `instance.context()` to increment a retry counter:
+it is an owned snapshot. Persist durable attempt counts and scheduling in the host. Declarative retry and
+backoff remain proposed in [#86](https://github.com/Apitomy/apitomy-flow/issues/86).
 
-    @Override
-    public ErrorResolution handleNoMatchingEdge(WorkflowInstance instance, WorkflowNode node) {
-        return ErrorResolution.fail();
-    }
-}
-```
+## Errors outside recovery
 
-!!! note
-    The `RETRY` action re-executes the node within the same engine call. The engine's per-call transition safety limit (default: 100) prevents infinite retry loops.
+- Invalid definitions fail start with `WorkflowValidationException`; required start input checks throw
+  before execution. Inspect validation problems rather than treating this as an executor retry.
+- Completing a non-WAITING instance or a node that is not parked throws `IllegalStateException`.
+- Read-only action/human info calls throw `WorkflowError` on input-resolution failure: no state can change.
+- `resolveExpression` throws `ConditionEvaluationException`; event matching returns false on evaluation
+  failure. Correlation does not complete the node.
+- Host JVM `Error`s propagate. Listener `Exception`s are logged/swallowed, and later listeners still run.
 
-## Example: Error Branch
+## Host integration
 
-Use `TRANSITION` to route to an error-handling branch in the workflow graph:
+`failureReason` remains a string for wire compatibility, not a stable machine-readable format.
+`onWorkflowFailed` receives the structured error. Error recovery does not roll back external side effects;
+use idempotency and durable host transactions/outboxes. Listeners are synchronous observations without
+exactly-once delivery, replay, veto, or persistence guarantees.
 
-```java
-return ErrorResolution.transitionTo("error-end");
-```
-
-If the target node ID doesn't exist in the workflow, the engine fails the workflow with a descriptive `failureReason`.
-
-## Error Scenarios
-
-| Scenario | Handler Method | Result |
-|----------|---------------|--------|
-| Executor returns `NodeResult(FAILED, ...)` | `handleNodeError(instance, node, result, null)` | Handler decides |
-| Executor throws exception | `handleNodeError(instance, node, null, error)` | Handler decides |
-| No outgoing edge matches | `handleNoMatchingEdge(instance, node)` | Handler decides |
-| Condition evaluation fails (bad EL) | `handleNoMatchingEdge(instance, node)` | Handler decides |
-| Error handler itself throws | — | Engine fails the workflow |
-| `TRANSITION` to nonexistent node | — | Engine fails the workflow |
+See [Engine errors and host extension contracts](../developer-guide/engine-errors.md) for registration
+validation, nullability, callback ordering, legacy adapter details, and migration guidance. The
+[executable examples](../developer-guide/documentation-checks.md) exercise these paths.

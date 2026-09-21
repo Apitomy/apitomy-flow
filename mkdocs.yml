@@ -7,6 +7,11 @@ repo_name: Apitomy/apitomy-flow
 repo_url: https://github.com/Apitomy/apitomy-flow
 use_directory_urls: false
 
+validation:
+  links:
+    not_found: warn
+    anchors: warn
+
 theme:
   name: material
   custom_dir: docs/theme
@@ -30,7 +35,8 @@ markdown_extensions:
       line_spans: __span
       pygments_lang_class: true
   - pymdownx.inlinehilite
-  - pymdownx.snippets
+  - pymdownx.snippets:
+      check_paths: true
   - pymdownx.superfences
   - admonition
   - pymdownx.details
@@ -45,7 +51,9 @@ nav:
     - Installation: getting-started/installation.md
     - Quick Start: getting-started/quick-start.md
   - User Guide:
+    - Current Contracts: user-guide/current-contracts.md
     - Workflow Model: user-guide/workflow-model.md
+    - Typed Configuration: user-guide/typed-configuration.md
     - Engine Usage: user-guide/engine-usage.md
     - Node Executors: user-guide/node-executors.md
     - Event Correlation: user-guide/event-correlation.md
@@ -53,10 +61,14 @@ nav:
     - Validation: user-guide/validation.md
     - Visual Editor: user-guide/visual-editor.md
     - Workflow Viewer: user-guide/workflow-viewer.md
+    - Workflow Diff Viewer: user-guide/workflow-diff.md
     - Parallel Fork/Join: user-guide/parallel-fork-join.md
   - Developer Guide:
     - Building: developer-guide/building.md
     - Architecture: developer-guide/architecture.md
+    - Engine Errors: developer-guide/engine-errors.md
+    - Indexed Architecture: developer-guide/indexed-architecture.md
+    - Documentation Checks: developer-guide/documentation-checks.md
     - Contributing: developer-guide/contributing.md
 
 docs_dir: ./docs

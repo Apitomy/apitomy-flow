@@ -62,8 +62,9 @@ remapping; pending output may be partial.
 | Listener registration | Null list means no listeners; otherwise the engine copies registrations in order and rejects null elements. |
 
 `NodeResult` and `ErrorResolution` constructors remain permissive for compatibility; validation happens
-at the engine boundary. Output values remain host-defined; this change does not introduce recursive JSON
-schema validation or promise deep immutability. Callers/extensions must not mutate supplied data.
+at the engine boundary. [JSON ownership](../user-guide/engine-usage.md#immutability) recursively protects
+maps/lists and detaches Jackson trees, but does not freeze opaque host objects or recursively validate
+every extension value against a JSON schema. Hosts must keep opaque values immutable.
 Host `Exception`s are handled according to these contracts; JVM `Error`s propagate.
 
 ## Ordering and durability

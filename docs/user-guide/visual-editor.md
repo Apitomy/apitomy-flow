@@ -6,22 +6,16 @@ The `WorkflowEditor` component provides a drag-and-drop workflow builder with re
 
 ```tsx
 import { WorkflowEditor } from '@apitomy/flow-ui';
-import type { Workflow, ValidationProblem } from '@apitomy/flow-ui';
+import { useState } from 'react';
+import type { Workflow } from '@apitomy/flow-ui';
 
-function MyWorkflowEditor() {
-  const [workflow, setWorkflow] = useState<Workflow>(initialWorkflow);
-
-  return (
-    <WorkflowEditor
-      workflow={workflow}
-      onChange={setWorkflow}
-      theme="light"
-      onValidationChange={(problems) => {
-        const hasErrors = problems.some(p => p.severity === 'error');
-        setSaveDisabled(hasErrors);
-      }}
-    />
-  );
+function MyWorkflowEditor({ initialWorkflow }: { initialWorkflow: Workflow }) {
+    const [workflow, setWorkflow] = useState<Workflow>(initialWorkflow);
+    return (
+        <div style={{ height: 700 }}>
+            <WorkflowEditor workflow={workflow} onChange={setWorkflow} theme="light" />
+        </div>
+    );
 }
 ```
 
@@ -29,13 +23,46 @@ function MyWorkflowEditor() {
 
 | Prop | Type | Required | Description |
 |------|------|----------|-------------|
-| `workflow` | `Workflow` | Yes | The workflow definition to edit |
-| `onChange` | `(workflow: Workflow) => void` | Yes | Called on every change with the updated definition |
+| `workflow` | `Workflow` | Yes | Mount-time graph and live host metadata; see synchronization below |
+| `onChange` | `(workflow: Workflow) => void` | Yes | Publishes committed document revisions, including undo/redo and import |
 | `theme` | `FlowTheme` | No | `'light'` or `'dark'` (default: `'light'`). Controls the color scheme of the editor and React Flow canvas |
 | `onValidationChange` | `(problems: ValidationProblem[]) => void` | No | Called when validation results change (e.g. to disable a Save button when errors exist). Receives the merged built-in and host problems |
 | `spi` | `EditorSpi` | No | Host extension object. Supplies action-type descriptors (`actionTypes`) and/or a custom `validate` function. See [Host Extension (SPI)](#host-extension-spi) |
 
 ## Features
+
+### Document ownership and synchronization
+
+The graph is **mount-initialized**, not a controlled value. Parent `id`, `name`, `description`, and
+`version` changes apply to the current graph as document edits. Replacing prop nodes/edges does not
+replace an in-progress canvas. To open a different document or accept a remote full replacement, remount:
+
+```tsx
+<WorkflowEditor key={documentSessionId} workflow={workflow} onChange={setWorkflow} />
+```
+
+`documentSessionId` is a host-managed replacement key, not a counter incremented on each local edit.
+Remounting resets local history, selection, drafts, and simulation. Stable `onChange` echoes are supported;
+the API does not reconcile remote edits or distinguish asynchronous replay of old metadata. Broader host
+synchronization is tracked in [#121](https://github.com/Apitomy/apitomy-flow/issues/121).
+
+A positioned mount emits no `onChange`. Fallback layout emits its computed positions once and establishes
+the initial history baseline. Selection, measurements, and in-progress drag frames do not publish edits.
+Imports commit metadata and graph together and are undoable. Pass new immutable values from the host.
+
+### Undo, drafts, and interaction modes
+
+Node/edge properties, IDs, add/delete/connect/clone, completed drags, tidy, imports, and metadata edits
+participate in document history. A typing session in one field coalesces; changing focus/field ends that
+group. Discrete controls form separate edits. Node deletion removes incident edges atomically.
+
+Keyboard undo/delete belongs to the focused editor; text controls retain native shortcuts and IME input.
+Simulation blocks document mutations and history commands. Manual canvas lock blocks structural canvas
+edits but still allows property edits, import, and history. Inspection remains available.
+
+Input-map rows retain stable identities and unsaved empty/duplicate-key drafts. Empty keys are not saved;
+duplicate keys show a warning and serialize the last entry. Untouched JSON literals retain their types;
+editing a value field makes it an expression string. Drafts reset on selection, import, or history travel.
 
 ### Node Palette
 
@@ -43,7 +70,7 @@ A toolbar at the top lists all six node types. Drag a node type from the palette
 
 The toolbar also has a **Tidy up** button that runs auto-layout (see [Auto-Layout](#auto-layout)
 below), **Import** / **Export** / **Image** buttons for moving definitions in and out of the editor
-(see [Import and Export](#import-and-export) below), and a **Simulate** button that opens interactive
+(see [Import and Export](#import-and-export) below), and a **Simulate** switch that opens interactive
 routing simulation (see [Simulation and Condition Testing](#simulation-and-condition-testing) below).
 
 ### Canvas
@@ -94,7 +121,8 @@ A panel on the right side shows configuration fields for the selected node or ed
   the host renders. See [Engine Usage](engine-usage.md#output-field-metadata) for the full field
   reference.
 - Duration (ISO 8601 string) (wait nodes)
-- Node ID (read-only)
+- Node ID (editable). Nonblank unique IDs update connected edge endpoints and selection atomically;
+  blank/duplicate IDs are not committed. Renaming does not rewrite arbitrary host metadata or expressions.
 
 **Edge properties:**
 
@@ -109,13 +137,15 @@ Click the canvas background to deselect and hide the properties panel.
 
 ### Live Validation
 
-The editor runs the TypeScript workflow validator on every change. Validation feedback is displayed in two ways:
+The editor validates semantic document revisions. Selection and layout-only edits reuse the prior semantic
+revision; built-in and host validation do not rerun just to move a node. Feedback is displayed in two ways:
 
 **Inline indicators:** Nodes with errors show a red border. Nodes with warnings show an amber border.
 Each affected node also shows a small corner badge in the top-right — red for errors, amber for
 warnings — carrying the highest-severity problem for that node, with the message available on hover.
 
-**Problems panel:** A collapsible panel at the bottom lists all validation problems grouped by severity (errors first). Click a problem to select and center the affected node or edge on the canvas.
+**Problems panel:** A collapsible panel groups problems by severity, errors first. Click a problem to
+select and center its affected node or edge.
 
 ### Fork/Join Hint
 
@@ -172,7 +202,7 @@ if (result.workflow) {
 
 ### Simulation and Condition Testing
 
-The **Simulate** button in the toolbar opens an interactive simulation of the workflow's routing
+The **Simulate** switch in the toolbar opens an interactive simulation of the workflow's routing
 logic against a sample context — without deploying or running a real instance. It answers "which
 branch does this input take?" and "does my condition evaluate the way I think?" entirely at
 authoring time. Shared Java/TypeScript fixtures verify priority-ordered edge selection, `isDefault`
@@ -181,7 +211,7 @@ aid; host execution and full Jakarta EL behavior require verification with the J
 
 **Running a simulation:**
 
-1. Click **Simulate** to open the simulation panel on the right.
+1. Turn on **Simulate** to open the simulation panel on the right.
 2. Enter a **sample start context** as JSON.
 3. Click **Start**, then **Step** (advance one transition) or **Run** (run to the next block or a
    terminal state). **Reset** clears the run.
@@ -323,3 +353,9 @@ import '@apitomy/flow-ui/style.css';
 ```
 
 The editor fills its container — ensure the parent element has explicit dimensions (e.g. `height: 100%`).
+
+## Verification
+
+[Browser verification](../developer-guide/documentation-checks.md#browser-verification) exercises actual
+ReactFlow interactions, focus-owned shortcuts, delayed imports, async SPI responses, and the built npm
+package. These checks cover Chromium; they are not a full accessibility or cross-browser certification.
