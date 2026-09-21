@@ -3,10 +3,18 @@ package io.apitomy.flow.engine;
 import io.apitomy.flow.model.*;
 import io.apitomy.flow.spi.*;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
+import java.util.stream.Stream;
 
 import static io.apitomy.flow.TestWorkflows.*;
 import static org.junit.jupiter.api.Assertions.*;
@@ -128,6 +136,207 @@ class WorkflowEngineParallelTest {
             new NodeResult(NodeResultStatus.COMPLETED, Map.of("b", 2)));
         assertEquals(InstanceStatus.COMPLETED, done.status());
         assertEquals(true, done.context().get("joined"));
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = NodeType.class, names = {"HUMAN_TASK", "RECEIVE_EVENT", "WAIT", "ACTION"})
+    void successfulAsyncRetryLeavesSiblingParked(NodeType siblingType) {
+        AtomicInteger attempts = new AtomicInteger();
+        NodeExecutor left = executor("left", () -> new NodeResult(
+            attempts.incrementAndGet() == 1 ? NodeResultStatus.PENDING : NodeResultStatus.COMPLETED,
+            Map.of("leftResult", true)));
+        WorkflowEngine engine = recoveryEngine(left, ErrorResolution.retry());
+        Workflow workflow = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), actionNode("left", "left"), parkedNode("sibling", siblingType),
+                actionNode("join", "join"), endNode("end")),
+            List.of(edge("start-left", "start", "left"), edge("start-sibling", "start", "sibling"),
+                edge("left-join", "left", "join"), edge("sibling-join", "sibling", "join"),
+                edge("join-end", "join", "end")));
+        WorkflowInstance waiting = engine.startWorkflow(workflow, Map.of());
+        assertEquals(InstanceStatus.WAITING, waiting.status());
+        assertEquals(2, waiting.activeBranches().size());
+        HistoryEntry siblingEntry = latestHistory(waiting, "sibling");
+
+        WorkflowInstance recovered = engine.completeNode(workflow, waiting, "left",
+            new NodeResult(NodeResultStatus.FAILED, Map.of()));
+
+        assertSiblingParked(recovered, siblingEntry);
+        assertEquals(2, attempts.get());
+        assertEquals("sibling", recovered.currentNodeId());
+        assertEquals(List.of("left-join"), recovered.joinArrivals().get("join"));
+        assertNotNull(latestHistory(recovered, "left").completedOn());
+        assertCompletesAfterSibling(engine, workflow, recovered);
+    }
+
+    @ParameterizedTest(name = "{0}, blocking recovery={1}, sibling={2}")
+    @MethodSource("recoveryCases")
+    void recoveryQueuesPreserveParkedBranches(String recoveryPath, boolean blockingRecovery,
+                                             NodeType siblingType) {
+        AtomicInteger attempts = new AtomicInteger();
+        NodeExecutor left = executor("left", () -> new NodeResult(
+            attempts.incrementAndGet() == 1 ? NodeResultStatus.PENDING : NodeResultStatus.FAILED, Map.of()));
+        AtomicInteger errors = new AtomicInteger();
+        WorkflowErrorHandler handler = new WorkflowErrorHandler() {
+            /** Selects retry or transition for the failing branch. */
+            public ErrorResolution handleNodeError(WorkflowInstance i, WorkflowNode n,
+                                                    NodeResult r, Exception e) {
+                if (recoveryPath.equals("retry-transition") && errors.incrementAndGet() == 1) {
+                    return ErrorResolution.retry();
+                }
+                return ErrorResolution.transitionTo("recovery");
+            }
+            /** Recovers a branch whose condition did not match. */
+            public ErrorResolution handleNoMatchingEdge(WorkflowInstance i, WorkflowNode n) {
+                return ErrorResolution.transitionTo("recovery");
+            }
+        };
+        WorkflowEngine engine = new WorkflowEngine(NodeExecutorProvider.fromList(left,
+            executor("pending", () -> new NodeResult(NodeResultStatus.PENDING, Map.of())),
+            echo("recover", "recovered", true), echo("join", "joined", true)), List.of(), handler);
+        String condition = switch (recoveryPath) {
+            case "edge-error" -> "1 +";
+            case "no-matching-edge" -> "false";
+            default -> null;
+        };
+        Workflow workflow = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), actionNode("left", "left"), parkedNode("sibling", siblingType),
+                blockingRecovery ? humanTaskNode("recovery") : actionNode("recovery", "recover"),
+                actionNode("join", "join"), endNode("end")),
+            List.of(edge("start-left", "start", "left"), edge("start-sibling", "start", "sibling"),
+                edge("left-recovery", "left", "recovery", condition, 0),
+                edge("recovery-join", "recovery", "join"), edge("sibling-join", "sibling", "join"),
+                edge("join-end", "join", "end")));
+        WorkflowInstance waiting = engine.startWorkflow(workflow, Map.of());
+        assertEquals(InstanceStatus.WAITING, waiting.status());
+        assertEquals(2, waiting.activeBranches().size());
+        HistoryEntry siblingEntry = latestHistory(waiting, "sibling");
+        boolean edgeRecovery = recoveryPath.equals("edge-error") || recoveryPath.equals("no-matching-edge");
+
+        WorkflowInstance recovered = engine.completeNode(workflow, waiting, "left",
+            new NodeResult(edgeRecovery ? NodeResultStatus.COMPLETED : NodeResultStatus.FAILED, Map.of()));
+
+        assertSiblingParked(recovered, siblingEntry);
+        assertNotNull(latestHistory(recovered, "left").completedOn());
+        assertEquals(latestHistory(recovered, "left").branchId(),
+            latestHistory(recovered, "recovery").branchId());
+        if (blockingRecovery) {
+            assertEquals(2, recovered.activeBranches().size());
+            assertNull(recovered.currentNodeId());
+            assertNull(latestHistory(recovered, "recovery").completedOn());
+            assertTrue(recovered.joinArrivals().isEmpty());
+            recovered = engine.completeNode(workflow, recovered, "recovery",
+                new NodeResult(NodeResultStatus.COMPLETED, Map.of("recovered", true)));
+            assertSiblingParked(recovered, siblingEntry);
+        }
+        assertEquals("sibling", recovered.currentNodeId());
+        assertEquals(List.of("recovery-join"), recovered.joinArrivals().get("join"));
+        assertEquals(true, recovered.context().get("recovered"));
+        assertCompletesAfterSibling(engine, workflow, recovered);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"1 +", "false"})
+    void edgeRecoveryKeepsAlreadyRunnableSiblings(String condition) {
+        WorkflowErrorHandler handler = new WorkflowErrorHandler() {
+            /** Recovers the branch whose edge expression failed. */
+            public ErrorResolution handleNodeError(WorkflowInstance i, WorkflowNode n,
+                                                    NodeResult r, Exception e) {
+                return ErrorResolution.transitionTo("recovery");
+            }
+            /** Recovers the branch whose edge did not match. */
+            public ErrorResolution handleNoMatchingEdge(WorkflowInstance i, WorkflowNode n) {
+                return ErrorResolution.transitionTo("recovery");
+            }
+        };
+        WorkflowEngine engine = new WorkflowEngine(NodeExecutorProvider.fromList(
+            echo("left", "leftResult", true), echo("right", "rightResult", true),
+            echo("recover", "recovered", true), echo("join", "joined", true)), List.of(), handler);
+        Workflow workflow = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), actionNode("left", "left"), actionNode("right", "right"),
+                humanTaskNode("sibling"), actionNode("recovery", "recover"),
+                actionNode("join", "join"), endNode("end")),
+            List.of(edge("start-left", "start", "left"), edge("start-right", "start", "right"),
+                edge("start-sibling", "start", "sibling"),
+                edge("left-recovery", "left", "recovery", condition, 0),
+                edge("right-join", "right", "join"), edge("recovery-join", "recovery", "join"),
+                edge("sibling-join", "sibling", "join"), edge("join-end", "join", "end")));
+
+        WorkflowInstance waiting = engine.startWorkflow(workflow, Map.of());
+
+        assertSiblingParked(waiting, latestHistory(waiting, "sibling"));
+        assertEquals("sibling", waiting.currentNodeId());
+        assertEquals(Set.of("right-join", "recovery-join"), Set.copyOf(waiting.joinArrivals().get("join")));
+        assertCompletesAfterSibling(engine, workflow, waiting);
+    }
+
+    private static Stream<Arguments> recoveryCases() {
+        return Stream.of("transition", "retry-transition", "edge-error", "no-matching-edge")
+            .flatMap(path -> Stream.of(false, true)
+                .flatMap(blocking -> Stream.of(NodeType.HUMAN_TASK, NodeType.RECEIVE_EVENT,
+                        NodeType.WAIT, NodeType.ACTION)
+                    .map(sibling -> Arguments.of(path, blocking, sibling))));
+    }
+
+    private WorkflowNode parkedNode(String id, NodeType type) {
+        return switch (type) {
+            case HUMAN_TASK -> humanTaskNode(id);
+            case RECEIVE_EVENT -> receiveEventNode(id, "approved");
+            case WAIT -> waitNode(id, "PT1H");
+            case ACTION -> actionNode(id, "pending");
+            default -> throw new IllegalArgumentException("Not a parked node type: " + type);
+        };
+    }
+
+    private NodeExecutor executor(String actionType, Supplier<NodeResult> result) {
+        return new NodeExecutor() {
+            /** Identifies the test action. */
+            public String actionType() { return actionType; }
+            /** Supplies the next result of the test action. */
+            public NodeResult execute(NodeExecutionContext ctx) { return result.get(); }
+        };
+    }
+
+    private WorkflowEngine recoveryEngine(NodeExecutor left, ErrorResolution resolution) {
+        WorkflowErrorHandler handler = new WorkflowErrorHandler() {
+            /** Returns the configured recovery for a failed action. */
+            public ErrorResolution handleNodeError(WorkflowInstance i, WorkflowNode n,
+                                                    NodeResult r, Exception e) {
+                return resolution;
+            }
+            /** Fails unexpected routing errors. */
+            public ErrorResolution handleNoMatchingEdge(WorkflowInstance i, WorkflowNode n) {
+                return ErrorResolution.fail();
+            }
+        };
+        return new WorkflowEngine(NodeExecutorProvider.fromList(left,
+            executor("pending", () -> new NodeResult(NodeResultStatus.PENDING, Map.of())),
+            echo("join", "joined", true)), List.of(), handler);
+    }
+
+    private HistoryEntry latestHistory(WorkflowInstance instance, String nodeId) {
+        return instance.history().stream().filter(entry -> entry.nodeId().equals(nodeId))
+            .reduce((first, second) -> second).orElseThrow();
+    }
+
+    private void assertSiblingParked(WorkflowInstance instance, HistoryEntry originalEntry) {
+        assertAll(
+            () -> assertEquals(InstanceStatus.WAITING, instance.status()),
+            () -> assertTrue(instance.activeBranches().contains(
+                new ActiveBranch(originalEntry.branchId(), "sibling"))),
+            () -> assertEquals(originalEntry, latestHistory(instance, "sibling")),
+            () -> assertNull(latestHistory(instance, "sibling").completedOn()),
+            () -> assertFalse(instance.context().containsKey("joined")));
+    }
+
+    private void assertCompletesAfterSibling(WorkflowEngine engine, Workflow workflow,
+                                             WorkflowInstance waiting) {
+        WorkflowInstance done = engine.completeNode(workflow, waiting, "sibling",
+            new NodeResult(NodeResultStatus.COMPLETED, Map.of("approved", true)));
+        assertEquals(InstanceStatus.COMPLETED, done.status());
+        assertEquals(true, done.context().get("joined"));
+        assertEquals(true, done.context().get("approved"));
+        assertNotNull(latestHistory(done, "sibling").completedOn());
+        assertEquals(1, done.history().stream().filter(entry -> entry.nodeId().equals("join")).count());
     }
 
     // --- FIX 1: TRANSITION recovery targets the ACTUAL failing branch inside a parallel region ---

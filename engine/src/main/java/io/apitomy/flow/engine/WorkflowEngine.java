@@ -205,17 +205,8 @@ public class WorkflowEngine {
             if (executed.status() == InstanceStatus.FAILED) {
                 return executed;
             }
-            String continueNodeId = executed.activeBranches().stream()
-                .filter(b -> b.branchId().equals(branchId))
-                .map(ActiveBranch::nodeId)
-                .findFirst()
-                .orElse(actionNode.id());
-            if (isBranchOpen(executed, branchId, continueNodeId)) {
-                // Re-parked (PENDING again, or a TRANSITION recovery landed on a blocking node) —
-                // don't advance() past it; the derived WAITING status is set directly here since
-                // there's no surrounding advanceBranches loop/quiesce() call on this path.
-                return executed.toBuilder().status(InstanceStatus.WAITING).updatedOn(Instant.now()).build();
-            }
+            // advance() only queues completed activations; quiesce() also derives the current
+            // node correctly if the retry re-parks or transitions to a blocking recovery target.
             return advance(workflow, executed);
         }
 
@@ -601,8 +592,23 @@ public class WorkflowEngine {
      */
     private WorkflowInstance advance(Workflow workflow, WorkflowInstance instance) {
         ParallelRegions regions = ParallelRegions.analyze(workflow);
-        Deque<ActiveBranch> work = new ArrayDeque<>(instance.activeBranches());
+        Deque<ActiveBranch> work = runnableBranches(instance);
         return advanceBranches(workflow, instance, work, regions);
+    }
+
+    /**
+     * Rebuilds the continuation queue from completed activations only. Active branches also include
+     * parked nodes awaiting external completion, whose latest history entry must remain open. Keep
+     * every completed sibling in active-branch order so recovery neither wakes parked work nor loses
+     * work that was already runnable.
+     *
+     * @param instance the instance after node execution or recovery
+     * @return the branches ready to resolve their outgoing edges
+     */
+    private Deque<ActiveBranch> runnableBranches(WorkflowInstance instance) {
+        return new ArrayDeque<>(instance.activeBranches().stream()
+            .filter(branch -> !isBranchOpen(instance, branch.branchId(), branch.nodeId()))
+            .toList());
     }
 
     /**
@@ -641,14 +647,15 @@ public class WorkflowEngine {
                 } catch (ConditionEvaluationException e) {
                     instance = resolveEdgeError(workflow, instance, branch.branchId(), node, null, e);
                     if (instance.status() != InstanceStatus.RUNNING) return instance;
-                    // re-run from the resolution target as a fresh single-branch continue
-                    work = new ArrayDeque<>(instance.activeBranches());
+                    // Resume completed recovery targets and runnable siblings, leaving open
+                    // activations (including blocking recovery targets) parked.
+                    work = runnableBranches(instance);
                     continue;
                 }
                 if (selected == null) {
                     instance = resolveNoEdge(workflow, instance, branch.branchId(), node);
                     if (instance.status() != InstanceStatus.RUNNING) return instance;
-                    work = new ArrayDeque<>(instance.activeBranches());
+                    work = runnableBranches(instance);
                     continue;
                 }
                 targets = List.of(selected);
