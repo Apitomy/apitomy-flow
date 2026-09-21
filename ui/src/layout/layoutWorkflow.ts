@@ -49,7 +49,7 @@ export function layoutWorkflow(
   nodes: WorkflowNode[],
   edges: WorkflowEdge[],
   options?: LayoutOptions,
-): WorkflowNode[] {
+): (WorkflowNode & { position: { x: number; y: number } })[] {
   if (nodes.length === 0) return [];
 
   const g = new dagre.graphlib.Graph();
@@ -120,8 +120,8 @@ export function needsLayout(nodes: WorkflowNode[]): boolean {
   // so a lone node with a real position is respected rather than re-laid-out.
   if (nodes.length < 2) return false;
 
-  const first = nodes[0].position;
+  const first = nodes[0].position!; // All positions were checked above.
   const allSame = nodes.every(n =>
-    Math.abs(n.position.x - first.x) < 1 && Math.abs(n.position.y - first.y) < 1);
+    Math.abs(n.position!.x - first.x) < 1 && Math.abs(n.position!.y - first.y) < 1);
   return allSame;
 }

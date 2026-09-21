@@ -1,4 +1,5 @@
-import { type Workflow, type WorkflowEdge } from '../types/workflow.ts';
+import { type Workflow, type WorkflowEdge, type HumanTaskOutput, type ActionOutputConfig,
+  type EventOutputMapping } from '../types/workflow.ts';
 import { type ValidationProblem, type ValidationSeverity } from '../types/validation.ts';
 import { analyzeParallelRegions } from '../simulation/parallelRegions.ts';
 import { classifyExpression } from '../simulation/elEvaluator.ts';
@@ -134,8 +135,7 @@ function validateStructure(workflow: Workflow, problems: ValidationProblem[]) {
     } else if (typeof inputsVal !== 'object' || Array.isArray(inputsVal)) {
       problems.push(problem('warning', 'INVALID_INPUTS_TYPE', 'Action node inputs must be a Map', action.id));
     } else {
-      const inputs = inputsVal as Record<string, unknown>;
-      for (const [name, expr] of Object.entries(inputs)) {
+      for (const [name, expr] of Object.entries(inputsVal)) {
         if (expr == null || (typeof expr === 'string' && expr.trim() === '')) {
           problems.push(problem('warning', 'EMPTY_ACTION_INPUT_EXPRESSION',
             `Action node input "${name}" has no EL expression`, action.id));
@@ -309,8 +309,7 @@ function validateSemantics(workflow: Workflow, problems: ValidationProblem[]) {
       problems.push(problem('warning', 'MISSING_TASK_DESCRIPTION', 'Human task node has no description', node.id));
     }
     if (node.config.inputs && typeof node.config.inputs === 'object' && !Array.isArray(node.config.inputs)) {
-      const inputs = node.config.inputs as Record<string, unknown>;
-      for (const [name, expr] of Object.entries(inputs)) {
+      for (const [name, expr] of Object.entries(node.config.inputs)) {
         if (expr == null || (typeof expr === 'string' && expr.trim() === '')) {
           problems.push(problem('warning', 'EMPTY_TASK_INPUT_EXPRESSION',
             `Human task input "${name}" has no EL expression`, node.id));
@@ -349,7 +348,7 @@ function validateSemantics(workflow: Workflow, problems: ValidationProblem[]) {
       const inputNames = new Set<string>();
       for (const input of inputsDef) {
         if (typeof input === 'object' && input !== null) {
-          const nameVal = (input as Record<string, unknown>).name;
+          const nameVal = input.name;
           if (!nameVal || (typeof nameVal === 'string' && nameVal.trim() === '')) {
             problems.push(problem('warning', 'INVALID_INPUT_DEFINITION',
               'Start node input is missing a name', startNode.id));
@@ -374,12 +373,8 @@ function validateSemantics(workflow: Workflow, problems: ValidationProblem[]) {
  * WorkflowValidator; all problems are warnings and the metadata is advisory. Applies only to
  * human-task nodes so action-node outputs are unaffected.
  */
-function validateHumanTaskOutputMetadata(outputDefs: unknown[], nodeId: string, problems: ValidationProblem[]) {
-  for (const defObj of outputDefs) {
-    if (typeof defObj !== 'object' || defObj === null) {
-      continue;
-    }
-    const def = defObj as Record<string, unknown>;
+function validateHumanTaskOutputMetadata(outputDefs: HumanTaskOutput[], nodeId: string, problems: ValidationProblem[]) {
+  for (const def of outputDefs) {
     const name = def.name !== undefined && def.name !== null ? String(def.name) : '(unnamed)';
     const type = typeof def.type === 'string' && def.type.trim() !== '' ? def.type : 'string';
     const widget = typeof def.widget === 'string' && def.widget.trim() !== '' ? def.widget : undefined;
@@ -403,7 +398,7 @@ function validateHumanTaskOutputMetadata(outputDefs: unknown[], nodeId: string, 
     if (Array.isArray(def.options)) {
       for (const optObj of def.options) {
         if (typeof optObj === 'object' && optObj !== null) {
-          const value = (optObj as Record<string, unknown>).value;
+          const value = optObj.value;
           if (value === undefined || value === null || (typeof value === 'string' && value.trim() === '')) {
             problems.push(problem('warning', 'MALFORMED_OUTPUT_OPTION',
               `Output "${name}" has a select option with no value`, nodeId));
@@ -431,14 +426,14 @@ function valueMatchesType(value: unknown, type: string): boolean {
   }
 }
 
-function validateOutputNames(outputDefs: unknown[], nodeId: string, problems: ValidationProblem[]) {
+function validateOutputNames(outputDefs: (ActionOutputConfig | HumanTaskOutput)[], nodeId: string, problems: ValidationProblem[]) {
   const contextKeys = new Set<string>();
   for (const defObj of outputDefs) {
     if (typeof defObj === 'object' && defObj !== null) {
-      const nameVal = (defObj as Record<string, unknown>).name;
+      const nameVal = defObj.name;
       if (nameVal !== undefined && nameVal !== null) {
         const name = String(nameVal);
-        const contextKeyVal = (defObj as Record<string, unknown>).contextKey;
+        const contextKeyVal = defObj.contextKey;
         const contextKey = typeof contextKeyVal === 'string' && contextKeyVal.trim() !== ''
           ? contextKeyVal : name;
         if (contextKeys.has(contextKey)) {
@@ -460,10 +455,9 @@ function validateOutputNames(outputDefs: unknown[], nodeId: string, problems: Va
  * strings and otherwise skips the entry, and mirrors the Java engine validator/runtime. The same
  * browser-subset parser checks both mappings and edge conditions; engine-only syntax is advisory.
  */
-function validateEventOutputMappings(outputDefs: unknown[], nodeId: string, problems: ValidationProblem[]) {
+function validateEventOutputMappings(outputDefs: EventOutputMapping[], nodeId: string, problems: ValidationProblem[]) {
   const contextKeys = new Set<string>();
-  for (const defObj of outputDefs) {
-    const def = (typeof defObj === 'object' && defObj !== null ? defObj : {}) as Record<string, unknown>;
+  for (const def of outputDefs) {
     const contextKeyVal = def.contextKey;
     if (typeof contextKeyVal !== 'string' || contextKeyVal.trim() === '') {
       problems.push(problem('warning', 'MISSING_OUTPUT_CONTEXT_KEY',

@@ -1,4 +1,8 @@
-export type { Workflow, WorkflowNode, WorkflowEdge, NodeType, WorkflowInput, HumanTaskOutput, OutputOption, OutputWidget } from './types/workflow.ts';
+export type {
+    Workflow, WorkflowNode, WorkflowEdge, NodeType, WorkflowInput, HumanTaskOutput, OutputOption, OutputWidget,
+    ActionOutputConfig, EventOutputMapping, JsonValue, JsonObject, ConfigExtensions, NodeConfig, NodeConfigMap,
+    StartConfig, EndConfig, ActionConfig, HumanTaskConfig, ReceiveEventConfig, WaitConfig,
+} from './types/workflow.ts';
 export type { WorkflowInstance, InstanceStatus, HistoryEntry, ActiveBranch } from './types/instance.ts';
 export type { ValidationProblem, ValidationSeverity } from './types/validation.ts';
 export type { EditorSpi, ActionTypeDescriptor, ActionTypeField, ActionTypeProvider, WorkflowValidator } from './types/spi.ts';

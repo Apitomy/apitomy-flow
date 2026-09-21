@@ -3,7 +3,8 @@ import { getNodeDefinition } from './nodeDefinition.ts';
 import { type WorkflowNode } from '../types/workflow.ts';
 import { parseWorkflow } from './workflowIo.ts';
 
-function node(overrides: Partial<WorkflowNode>): WorkflowNode {
+// Deliberately accepts malformed config to exercise defensive display of legacy host data.
+function node(overrides: Omit<Partial<WorkflowNode>, 'config'> & { config?: unknown }): WorkflowNode {
   return {
     id: 'n1',
     type: 'action',
@@ -11,7 +12,7 @@ function node(overrides: Partial<WorkflowNode>): WorkflowNode {
     config: {},
     position: { x: 0, y: 0 },
     ...overrides,
-  };
+  } as WorkflowNode;
 }
 
 describe('getNodeDefinition', () => {

@@ -276,9 +276,8 @@ function resolveMergeOutput(
     context: Record<string, unknown>,
     rawOutput: Record<string, unknown>,
 ): Record<string, unknown> {
-    const outputDefs = node?.config?.outputs;
-    if (node?.type === 'receive-event' && Array.isArray(outputDefs) && outputDefs.length > 0) {
-        return applyEventOutputMappings(outputDefs, context, rawOutput);
+    if (node?.type === 'receive-event' && Array.isArray(node.config.outputs) && node.config.outputs.length > 0) {
+        return applyEventOutputMappings(node.config.outputs, context, rawOutput);
     }
     return resolveContextKeys(node, rawOutput);
 }
@@ -292,15 +291,15 @@ function resolveMergeOutput(
  * of being swallowed by the inherited prototype setter.
  */
 function applyEventOutputMappings(
-    outputDefs: unknown[],
+    outputDefs: import('../types/workflow.ts').EventOutputMapping[],
     context: Record<string, unknown>,
     event: Record<string, unknown>,
 ): Record<string, unknown> {
     const mapped: Record<string, unknown> = Object.create(null);
     for (const def of outputDefs) {
         if (typeof def !== 'object' || def === null) continue;
-        const contextKey = (def as Record<string, unknown>).contextKey;
-        const expression = (def as Record<string, unknown>).expression;
+        const contextKey = def.contextKey;
+        const expression = def.expression;
         if (typeof contextKey === 'string' && contextKey.trim() !== '' && typeof expression === 'string' && expression.trim() !== '') {
             mapped[contextKey] = resolveExpression(expression, { context, event });
         }
@@ -318,15 +317,16 @@ function resolveContextKeys(
     node: WorkflowNode | undefined,
     rawOutput: Record<string, unknown>,
 ): Record<string, unknown> {
-    const outputDefs = node?.config?.outputs;
+    if (node?.type !== 'action' && node?.type !== 'human-task') return rawOutput;
+    const outputDefs = node.config.outputs;
     if (!Array.isArray(outputDefs) || outputDefs.length === 0) {
         return rawOutput;
     }
     const renames = new Map<string, string>();
     for (const def of outputDefs) {
         if (typeof def === 'object' && def !== null) {
-            const name = (def as Record<string, unknown>).name;
-            const contextKey = (def as Record<string, unknown>).contextKey;
+            const name = def.name;
+            const contextKey = def.contextKey;
             if (typeof name === 'string' && typeof contextKey === 'string'
                 && contextKey.trim() !== '' && contextKey !== name) {
                 renames.set(name, contextKey);

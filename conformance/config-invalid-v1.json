@@ -1,0 +1,7 @@
+[
+    { "type": "action", "config": { "inputs": [] }, "code": "INVALID_INPUTS_TYPE" },
+    { "type": "start", "config": { "inputs": {} }, "code": "INVALID_INPUTS_TYPE" },
+    { "type": "wait", "config": { "duration": 123 }, "code": "INVALID_WAIT_DURATION" },
+    { "type": "receive-event", "config": { "match": [null] }, "code": "INVALID_MATCH_TYPE" },
+    { "type": "human-task", "config": { "outputs": [null] }, "code": "INVALID_OUTPUT_DEFINITION" }
+]

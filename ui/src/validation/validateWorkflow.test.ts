@@ -2,8 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { validateWorkflow } from './validateWorkflow.ts';
 import { type Workflow, type WorkflowNode, type WorkflowEdge } from '../types/workflow.ts';
 
-function node(id: string, type: WorkflowNode['type'], config: Record<string, any> = {}): WorkflowNode {
-  return { id, type, name: id, config, position: { x: 0, y: 0 } };
+function node(id: string, type: WorkflowNode['type'], config: Record<string, unknown> = {}): WorkflowNode {
+  // Intentionally malformed configs exercise validation rather than TypeScript assignability.
+  return { id, type, name: id, config, position: { x: 0, y: 0 } } as WorkflowNode;
 }
 
 function edge(id: string, source: string, target: string, opts: Partial<WorkflowEdge> = {}): WorkflowEdge {
@@ -725,7 +726,7 @@ describe('validateWorkflow', () => {
   });
 
   describe('human-task output metadata', () => {
-    function humanTask(outputs: any[]): Workflow {
+    function humanTask(outputs: unknown[]): Workflow {
       return workflow(
         [
           node('start', 'start', { inputs: [{ name: 'x', type: 'string', required: true }] }),

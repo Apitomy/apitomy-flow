@@ -13,4 +13,9 @@ public record WorkflowNode(
     public WorkflowNode {
         config = JsonSnapshots.map(config == null ? Map.of() : config);
     }
+
+    /** Returns a typed config view; the stored map and Jackson wire representation remain unchanged. */
+    public NodeConfig typedConfig() {
+        return NodeConfig.from(this);
+    }
 }

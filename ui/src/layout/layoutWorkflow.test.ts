@@ -65,7 +65,7 @@ describe('layoutWorkflow', () => {
     const edges = [edge('s', 'a')];
     const wide = layoutWorkflow(nodes, edges, { nodeSize: () => ({ width: 400, height: 50 }) });
     const narrow = layoutWorkflow(nodes, edges, { nodeSize: () => ({ width: 40, height: 50 }) });
-    const gap = (laid: WorkflowNode[]) => {
+    const gap = (laid: ReturnType<typeof layoutWorkflow>) => {
       const byId = Object.fromEntries(laid.map(n => [n.id, n.position]));
       return byId.a.x - byId.s.x;
     };
@@ -78,7 +78,7 @@ describe('layoutWorkflow', () => {
     const edges = [edge('s', 'a')];
     const tight = layoutWorkflow(nodes, edges, { rankSpacing: 20 });
     const loose = layoutWorkflow(nodes, edges, { rankSpacing: 300 });
-    const gap = (laid: WorkflowNode[]) => {
+    const gap = (laid: ReturnType<typeof layoutWorkflow>) => {
       const byId = Object.fromEntries(laid.map(n => [n.id, n.position]));
       return byId.a.x - byId.s.x;
     };
