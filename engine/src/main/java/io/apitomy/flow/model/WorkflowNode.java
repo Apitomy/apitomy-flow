@@ -9,7 +9,8 @@ public record WorkflowNode(
     Map<String, Object> config,
     Position position
 ) {
+    /** Owns nested configuration according to {@link JsonSnapshots}' JSON/opaque value policy. */
     public WorkflowNode {
-        if (config == null) config = Map.of();
+        config = JsonSnapshots.map(config == null ? Map.of() : config);
     }
 }
