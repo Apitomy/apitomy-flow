@@ -11,11 +11,33 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 
+/**
+ * Stateless, synchronous workflow driver. Definitions and instances must be non-null and callers must not
+ * mutate supplied data during a call. Persist returned instances and coordinate concurrent deliveries in the
+ * host; callbacks are observations, not transaction or durability boundaries. Host Exceptions enter recovery;
+ * JVM Errors propagate. Instances do not retain Throwable objects on the wire.
+ */
 public class WorkflowEngine {
 
     private static final Logger log = LoggerFactory.getLogger(WorkflowEngine.class);
     private static final int MAX_TRANSITIONS = 100;
     private static final int MAX_RETRIES = 10;
+
+    private enum WorkKind { CONTINUE, MOVE, ENTER, RETRY }
+
+    /** Call-local work; recovery entry must never execute recursively inside an error handler. */
+    private record BranchWork(ActiveBranch branch, WorkKind kind, WorkflowEdge edge, WorkflowError error) {
+        private BranchWork(ActiveBranch branch, WorkKind kind) {
+            this(branch, kind, null, null);
+        }
+        private BranchWork(ActiveBranch branch, WorkKind kind, WorkflowEdge edge) {
+            this(branch, kind, edge, null);
+        }
+    }
+
+    private record Recovery(ErrorResolution resolution, WorkflowError error) {
+        private ErrorAction action() { return resolution.action(); }
+    }
 
     private final NodeExecutorProvider executorProvider;
     private final List<WorkflowEventListener> listeners;
@@ -23,19 +45,29 @@ public class WorkflowEngine {
     private final WorkflowValidator validator;
     private final ConditionEvaluator conditionEvaluator;
 
+    /**
+     * Creates an engine. Null provider means no executors; null handler selects fail-by-default recovery.
+     * Null listeners means none; otherwise registrations are copied in order and null entries rejected.
+     */
     public WorkflowEngine(NodeExecutorProvider executorProvider, List<WorkflowEventListener> listeners,
                           WorkflowErrorHandler errorHandler) {
         this.executorProvider = executorProvider != null ? executorProvider : actionType -> null;
-        this.listeners = listeners != null ? listeners : List.of();
+        this.listeners = listeners != null ? List.copyOf(listeners) : List.of();
         this.errorHandler = errorHandler != null ? errorHandler : new DefaultErrorHandler();
         this.validator = new WorkflowValidator();
         this.conditionEvaluator = new ConditionEvaluator();
     }
 
+    /** Starts a validated workflow with a generated id; null initialContext means empty context. */
     public WorkflowInstance startWorkflow(Workflow workflow, Map<String, Object> initialContext) {
         return startWorkflow(workflow, initialContext, UUID.randomUUID().toString());
     }
 
+    /**
+     * Starts with a caller-supplied instance id and optional initial context. Definition/required-start-input
+     * errors throw before execution. Runtime failures use recovery and normally return a FAILED instance.
+     * Action/human input evaluation failures are recoverable errors, never silently substituted with null.
+     */
     public WorkflowInstance startWorkflow(Workflow workflow, Map<String, Object> initialContext,
                                           String instanceId) {
         if (initialContext == null) {
@@ -88,7 +120,8 @@ public class WorkflowEngine {
      * @param workflow the workflow definition
      * @param instance the WAITING instance
      * @param nodeId   the id of the parked node/branch to complete
-     * @param result   the node result delivering the branch's output
+     * @param result   the node result delivering the branch's output; null/malformed results enter recovery;
+     *                 null output means no values, and PENDING output may be partial
      * @return the advanced instance
      */
     public WorkflowInstance completeNode(Workflow workflow, WorkflowInstance instance, String nodeId,
@@ -105,8 +138,9 @@ public class WorkflowEngine {
         WorkflowNode node = workflow.findNodeById(nodeId)
             .orElseThrow(() -> new IllegalStateException("Node not found: " + nodeId));
 
-        if (result.status() == NodeResultStatus.FAILED) {
-            return handleFailedCompletion(workflow, instance, branch.branchId(), node, result);
+        WorkflowError resultError = validateResult(node, result);
+        if (resultError != null) {
+            return handleFailedCompletion(workflow, instance, branch.branchId(), node, result, resultError);
         }
         if (result.status() == NodeResultStatus.PENDING) {
             WorkflowInstance reparked = instance;
@@ -120,6 +154,13 @@ public class WorkflowEngine {
                 reparked = reparked.toBuilder().mergeContext(resolvedOutput).build();
             }
             return reparked.toBuilder().status(InstanceStatus.WAITING).updatedOn(Instant.now()).build();
+        }
+
+        // COMPLETED actions use the synchronous contract, before remapping or merging output.
+        // PENDING payloads above are intentionally partial and do not require all declared outputs.
+        WorkflowError outputError = node.type() == NodeType.ACTION ? validateNodeOutputs(node, result.output()) : null;
+        if (outputError != null) {
+            return handleFailedCompletion(workflow, instance, branch.branchId(), node, result, outputError);
         }
 
         // COMPLETED — record output on the branch's history entry, merge context, then continue this branch.
@@ -139,11 +180,15 @@ public class WorkflowEngine {
         WorkflowInstance completedInstance = updated;
         fireEvent(l -> l.onNodeCompleted(completedInstance, node, result));
 
-        Deque<ActiveBranch> work = new ArrayDeque<>();
-        work.add(branch); // continue only the resumed branch
+        Deque<BranchWork> work = new ArrayDeque<>();
+        work.add(new BranchWork(branch, WorkKind.CONTINUE)); // continue only the resumed branch
         return advanceBranches(workflow, updated, work, ParallelRegions.analyze(workflow));
     }
 
+    /**
+     * Completes the sole parked node using {@link #completeNode}; throws for non-WAITING or multi-branch
+     * instances. Result nullability and recovery follow completeNode.
+     */
     public WorkflowInstance completeCurrentNode(Workflow workflow, WorkflowInstance instance,
                                                  NodeResult result) {
         if (instance.status() != InstanceStatus.WAITING) {
@@ -175,62 +220,47 @@ public class WorkflowEngine {
      */
     private WorkflowInstance resolveMergeOutputError(Workflow workflow, WorkflowInstance instance, String branchId,
                                                       WorkflowNode node, NodeResult result, Exception e) {
-        ErrorResolution resolution;
-        try {
-            resolution = errorHandler.handleNodeError(instance, node, result, e);
-        } catch (Exception handlerError) {
-            return failWorkflow(instance, "Error handler threw: " + handlerError.getMessage(), handlerError);
+        Recovery resolution = recover(workflow, instance, node, result,
+            contextualError(WorkflowError.Phase.OUTPUT_MAPPING, node, e));
+        if (resolution.action() == ErrorAction.RETRY) {
+            return instance; // Keep the failed delivery parked for another external completion.
         }
-        return applyResolution(workflow, instance, branchId, node, resolution);
+        return resumeResolution(workflow, instance, branchId, node, resolution);
     }
 
     private WorkflowInstance handleFailedCompletion(Workflow workflow, WorkflowInstance instance,
                                                     String branchId, WorkflowNode actionNode,
-                                                    NodeResult result) {
-        ErrorResolution resolution;
-        try {
-            resolution = errorHandler.handleNodeError(instance, actionNode, result, null);
-        } catch (Exception handlerError) {
-            return failWorkflow(instance, "Error handler threw: " + handlerError.getMessage(), handlerError);
+                                                    NodeResult result, WorkflowError error) {
+        Recovery resolution = recover(workflow, instance, actionNode, result, error);
+        if (resolution.action() == ErrorAction.RETRY && actionNode.type() != NodeType.ACTION) {
+            return instance; // External tasks require another delivery, never action-executor dispatch.
         }
+        return resumeResolution(workflow, instance, branchId, actionNode, resolution);
+    }
 
-        // RETRY re-executes the action node. For async executors this typically returns
-        // PENDING again, re-parking the instance until the next out-of-band result.
-        if (resolution.action() == ErrorAction.RETRY) {
-            WorkflowInstance running = instance.toBuilder()
-                .status(InstanceStatus.RUNNING)
-                .updatedOn(Instant.now())
-                .build();
-            WorkflowInstance executed = executeActionNode(workflow, running, branchId, actionNode);
-            if (executed.status() == InstanceStatus.FAILED) {
-                return executed;
-            }
-            String continueNodeId = executed.activeBranches().stream()
-                .filter(b -> b.branchId().equals(branchId))
-                .map(ActiveBranch::nodeId)
-                .findFirst()
-                .orElse(actionNode.id());
-            if (isBranchOpen(executed, branchId, continueNodeId)) {
-                // Re-parked (PENDING again, or a TRANSITION recovery landed on a blocking node) —
-                // don't advance() past it; the derived WAITING status is set directly here since
-                // there's no surrounding advanceBranches loop/quiesce() call on this path.
-                return executed.toBuilder().status(InstanceStatus.WAITING).updatedOn(Instant.now()).build();
-            }
-            return advance(workflow, executed);
-        }
-
-        // FAIL / TRANSITION — apply the resolution as the synchronous path does.
+    /** Seeds one driver for an external completion's recovery and any already runnable siblings. */
+    private WorkflowInstance resumeResolution(Workflow workflow, WorkflowInstance instance, String branchId,
+                                               WorkflowNode node, Recovery resolution) {
         WorkflowInstance running = instance.toBuilder()
             .status(InstanceStatus.RUNNING)
             .updatedOn(Instant.now())
             .build();
-        WorkflowInstance resolved = applyResolution(workflow, running, branchId, actionNode, resolution);
+        Deque<BranchWork> work = runnableBranches(running);
+        WorkflowInstance resolved;
+        if (resolution.action() == ErrorAction.RETRY) {
+            work.addFirst(new BranchWork(new ActiveBranch(branchId, node.id()), WorkKind.RETRY,
+                null, resolution.error()));
+            resolved = running;
+        } else {
+            resolved = applyResolution(workflow, running, branchId, node, resolution, work);
+        }
         if (resolved.status() != InstanceStatus.RUNNING) {
             return resolved;
         }
-        return advance(workflow, resolved);
+        return advanceBranches(workflow, resolved, work, ParallelRegions.analyze(workflow));
     }
 
+    /** Cancels a nonterminal instance and notifies observers; terminal instances are returned unchanged. */
     public WorkflowInstance cancelWorkflow(Workflow workflow, WorkflowInstance instance) {
         if (instance.status() == InstanceStatus.COMPLETED
                 || instance.status() == InstanceStatus.FAILED
@@ -246,6 +276,10 @@ public class WorkflowEngine {
         return cancelled;
     }
 
+    /**
+     * Resolves an expression without changing state. Null/blank expressions and legitimate null values return
+     * null; evaluation errors throw {@link ConditionEvaluationException}. Context should be non-null.
+     */
     public Object resolveExpression(String expression, Map<String, Object> context) {
         return conditionEvaluator.resolve(expression, context);
     }
@@ -282,11 +316,12 @@ public class WorkflowEngine {
      * @param workflow the workflow definition
      * @param instance the WAITING instance
      * @param nodeId   the id of the parked node to resolve (must correspond to an active branch)
-     * @return the human-task info, or {@code null} if the instance is not WAITING or the node is not a
-     *         HUMAN_TASK
+     * @return the human-task info, or {@code null} if the node is not an active parked HUMAN_TASK
+     *         in a WAITING instance
+     * @throws WorkflowError if an input fails to resolve; this read-only call cannot apply recovery
      */
     public HumanTaskInfo getHumanTaskInfo(Workflow workflow, WorkflowInstance instance, String nodeId) {
-        if (instance.status() != InstanceStatus.WAITING) {
+        if (!isParkedNode(instance, nodeId)) {
             return null;
         }
         WorkflowNode node = workflow.findNodeById(nodeId).orElse(null);
@@ -297,16 +332,7 @@ public class WorkflowEngine {
         NodeConfig.HumanTask config = (NodeConfig.HumanTask) node.typedConfig();
         String description = config.description();
 
-        Map<String, Object> resolvedInputs = new LinkedHashMap<>();
-        for (Map.Entry<String, Object> entry : config.inputs().entrySet()) {
-            String label = entry.getKey();
-            try {
-                resolvedInputs.put(label, resolveInputValue(entry.getValue(), instance.context()));
-            } catch (Exception e) {
-                log.warn("Failed to resolve human task input '{}': {}", label, e.getMessage());
-                resolvedInputs.put(label, null);
-            }
-        }
+        Map<String, Object> resolvedInputs = resolveNodeInputs(node, instance.context());
 
         List<OutputDefinition> outputs = config.outputs().stream().map(this::mapHumanTaskOutput).toList();
 
@@ -346,11 +372,11 @@ public class WorkflowEngine {
      * @param workflow the workflow definition
      * @param instance the WAITING instance
      * @param nodeId   the id of the parked node to resolve (must correspond to an active branch)
-     * @return the receive-event info, or {@code null} if the instance is not WAITING or the node is not a
-     *         RECEIVE_EVENT
+     * @return the receive-event info, or {@code null} if the node is not an active parked RECEIVE_EVENT
+     *         in a WAITING instance
      */
     public ReceiveEventInfo getReceiveEventInfo(Workflow workflow, WorkflowInstance instance, String nodeId) {
-        if (instance.status() != InstanceStatus.WAITING) {
+        if (!isParkedNode(instance, nodeId)) {
             return null;
         }
         WorkflowNode node = workflow.findNodeById(nodeId).orElse(null);
@@ -399,10 +425,10 @@ public class WorkflowEngine {
      * @param workflow the workflow definition
      * @param instance the WAITING instance
      * @param nodeId   the id of the parked node to resolve (must correspond to an active branch)
-     * @return the wait info, or {@code null} if the instance is not WAITING or the node is not a WAIT
+     * @return the wait info, or {@code null} if the node is not an active parked WAIT in a WAITING instance
      */
     public WaitInfo getWaitInfo(Workflow workflow, WorkflowInstance instance, String nodeId) {
-        if (instance.status() != InstanceStatus.WAITING) {
+        if (!isParkedNode(instance, nodeId)) {
             return null;
         }
         WorkflowNode node = workflow.findNodeById(nodeId).orElse(null);
@@ -455,10 +481,11 @@ public class WorkflowEngine {
      * @param workflow the workflow definition
      * @param instance the WAITING instance
      * @param nodeId   the id of the parked node to resolve (must correspond to an active branch)
-     * @return the action info, or {@code null} if the instance is not WAITING or the node is not an ACTION
+     * @return the action info, or {@code null} if the node is not an active parked ACTION in a WAITING instance
+     * @throws WorkflowError if an input fails to resolve; this read-only call cannot apply recovery
      */
     public ActionInfo getActionInfo(Workflow workflow, WorkflowInstance instance, String nodeId) {
-        if (instance.status() != InstanceStatus.WAITING) {
+        if (!isParkedNode(instance, nodeId)) {
             return null;
         }
         WorkflowNode node = workflow.findNodeById(nodeId).orElse(null);
@@ -517,11 +544,12 @@ public class WorkflowEngine {
      * @param instance the WAITING instance
      * @param nodeId   the id of the parked node to test (must correspond to an active branch)
      * @param event    the incoming event
-     * @return true if the given node is a RECEIVE_EVENT that matches the event
+     * @return true if the given node is an active parked RECEIVE_EVENT in a WAITING instance that matches
+     *         the event; false for ineligible nodes
      */
     public boolean matchesEvent(Workflow workflow, WorkflowInstance instance, String nodeId,
                                 Map<String, Object> event) {
-        if (instance.status() != InstanceStatus.WAITING) {
+        if (!isParkedNode(instance, nodeId)) {
             return false;
         }
 
@@ -568,33 +596,98 @@ public class WorkflowEngine {
      */
     private WorkflowInstance advance(Workflow workflow, WorkflowInstance instance) {
         ParallelRegions regions = ParallelRegions.analyze(workflow);
-        Deque<ActiveBranch> work = new ArrayDeque<>(instance.activeBranches());
+        Deque<BranchWork> work = runnableBranches(instance);
         return advanceBranches(workflow, instance, work, regions);
     }
 
     /**
-     * Drives all runnable branches to quiescence. Each work item is a branch that has entered and (for
-     * actions) executed its current node and now needs its outgoing edge(s) resolved. Forks fan out, joins
-     * synchronize, END terminates the instance, and any branch failure fails the whole instance.
+     * Rebuilds the continuation queue from completed activations only. Active branches also include
+     * parked nodes awaiting external completion, whose latest history entry must remain open. Keep
+     * every completed sibling in active-branch order so recovery neither wakes parked work nor loses
+     * work that was already runnable.
+     *
+     * @param instance the instance after node execution or recovery
+     * @return the branches ready to resolve their outgoing edges
+     */
+    private Deque<BranchWork> runnableBranches(WorkflowInstance instance) {
+        return new ArrayDeque<>(instance.activeBranches().stream()
+            .filter(branch -> !isBranchOpen(instance, branch.branchId(), branch.nodeId()))
+            .map(branch -> new BranchWork(branch, WorkKind.CONTINUE))
+            .toList());
+    }
+
+    /** Queues only completed activations, without duplicating a pending recovery entry for this branch. */
+    private void enqueueContinuation(WorkflowInstance instance, String branchId, Deque<BranchWork> work) {
+        if (work.stream().anyMatch(item -> item.branch().branchId().equals(branchId))) {
+            return;
+        }
+        instance.activeBranches().stream()
+            .filter(branch -> branch.branchId().equals(branchId))
+            .filter(branch -> !isBranchOpen(instance, branchId, branch.nodeId()))
+            .findFirst()
+            .ifPresent(branch -> work.addLast(new BranchWork(branch, WorkKind.CONTINUE)));
+    }
+
+    /**
+     * Drives continuations, recovery entries, and externally requested retries to quiescence under one
+     * per-call budget. Each edge move, recovery entry, external retry, or unsuccessful edge selection
+     * consumes one unit. Successful edge selection queues moves without an extra charge. Local action
+     * retries retain their separate MAX_RETRIES guard; neither limit is a durable retry policy.
+     * Forks fan out, joins synchronize, and END terminates the instance.
      *
      * @param workflow the workflow definition
      * @param instance the instance being advanced
-     * @param work     the queue of branches that still need their outgoing edges resolved
+     * @param work     the queue of branch continuations, entries, or retries
      * @param regions  the precomputed parallel-region analysis
      * @return the instance once the work queue drains (or a terminal/blocked state is reached)
      */
     private WorkflowInstance advanceBranches(Workflow workflow, WorkflowInstance instance,
-                                             Deque<ActiveBranch> work, ParallelRegions regions) {
+                                             Deque<BranchWork> work, ParallelRegions regions) {
         int transitions = 0;
+        WorkflowError lastError = null;
         while (!work.isEmpty()) {
-            if (transitions++ >= MAX_TRANSITIONS) {
-                return failWorkflow(instance,
-                    "Exceeded transition limit (" + MAX_TRANSITIONS + ") — possible infinite loop", null);
+            // Entry/external-retry recovery is queued at the front. Edge retries sit behind siblings:
+            // record those when selection fails below, never replay an older diagnostic at dequeue time.
+            if (work.peek().error() != null && work.peek().kind() != WorkKind.CONTINUE) {
+                lastError = work.peek().error();
             }
-            ActiveBranch branch = work.poll();
+            if (transitions >= MAX_TRANSITIONS) {
+                return failWorkflow(instance,
+                    "Exceeded transition limit (" + MAX_TRANSITIONS + ") — possible infinite loop"
+                        + (lastError == null ? "" : "; last error: " + lastError.diagnostic()), lastError);
+            }
+            BranchWork item = work.poll();
+            if (item.kind() != WorkKind.CONTINUE) {
+                transitions++;
+            }
+            ActiveBranch branch = item.branch();
             WorkflowNode node = workflow.findNodeById(branch.nodeId()).orElse(null);
             if (node == null) {
                 return failWorkflow(instance, "Current node not found: " + branch.nodeId(), null);
+            }
+
+            if (item.kind() == WorkKind.MOVE) {
+                instance = moveBranch(workflow, instance, branch.branchId(), node, item.edge(), regions, work);
+                if (instance.status() != InstanceStatus.RUNNING) return instance;
+                continue;
+            }
+
+            if (item.kind() == WorkKind.ENTER) {
+                instance = instance.toBuilder()
+                    .removeActiveBranch(branch.branchId())
+                    .addActiveBranch(branch)
+                    .currentNodeId(node.id())
+                    .updatedOn(Instant.now())
+                    .build();
+                instance = enterNode(workflow, instance, branch.branchId(), node, null, regions, work);
+                if (instance.status() != InstanceStatus.RUNNING) return instance;
+                continue;
+            }
+            if (item.kind() == WorkKind.RETRY) {
+                instance = executeActionNode(workflow, instance, branch.branchId(), node, work);
+                if (instance.status() != InstanceStatus.RUNNING) return instance;
+                enqueueContinuation(instance, branch.branchId(), work);
+                continue;
             }
 
             // Resolve outgoing edges from this (entered, executed) node.
@@ -605,17 +698,21 @@ public class WorkflowEngine {
                 WorkflowEdge selected;
                 try {
                     selected = selectEdge(workflow, instance, node);
-                } catch (ConditionEvaluationException e) {
-                    instance = resolveEdgeError(workflow, instance, branch.branchId(), node, null, e);
+                } catch (WorkflowError e) {
+                    transitions++;
+                    lastError = e;
+                    instance = resolveEdgeError(workflow, instance, branch.branchId(), node, null, e, work);
                     if (instance.status() != InstanceStatus.RUNNING) return instance;
-                    // re-run from the resolution target as a fresh single-branch continue
-                    work = new ArrayDeque<>(instance.activeBranches());
+                    enqueueContinuation(instance, branch.branchId(), work);
                     continue;
                 }
                 if (selected == null) {
-                    instance = resolveNoEdge(workflow, instance, branch.branchId(), node);
+                    transitions++;
+                    lastError = new WorkflowError(WorkflowError.Phase.EDGE_SELECTION, node.id(), null,
+                        null, null, "No matching outgoing edge", null);
+                    instance = resolveNoEdge(workflow, instance, branch.branchId(), node, lastError, work);
                     if (instance.status() != InstanceStatus.RUNNING) return instance;
-                    work = new ArrayDeque<>(instance.activeBranches());
+                    enqueueContinuation(instance, branch.branchId(), work);
                     continue;
                 }
                 targets = List.of(selected);
@@ -628,13 +725,12 @@ public class WorkflowEngine {
             if (fork) {
                 instance = instance.toBuilder().removeActiveBranch(branch.branchId()).build();
             }
-            int childIndex = 0;
-            for (WorkflowEdge edge : targets) {
-                String childBranchId = fork ? branch.branchId() + "." + (childIndex++) : branch.branchId();
-                instance = moveBranch(workflow, instance, childBranchId, node, edge, regions, work);
-                if (instance.status() != InstanceStatus.RUNNING) {
-                    return instance;
-                }
+            // Preserve edge order and immediate recovery precedence without recursive node entry.
+            // Remaining fork arrivals stay ahead of ordinary continuations, but behind recovery entry.
+            for (int childIndex = targets.size() - 1; childIndex >= 0; childIndex--) {
+                WorkflowEdge edge = targets.get(childIndex);
+                String childBranchId = fork ? branch.branchId() + "." + childIndex : branch.branchId();
+                work.addFirst(new BranchWork(new ActiveBranch(childBranchId, node.id()), WorkKind.MOVE, edge));
             }
         }
         return quiesce(workflow, instance);
@@ -656,7 +752,7 @@ public class WorkflowEngine {
      */
     private WorkflowInstance moveBranch(Workflow workflow, WorkflowInstance instance, String branchId,
                                         WorkflowNode source, WorkflowEdge edge, ParallelRegions regions,
-                                        Deque<ActiveBranch> work) {
+                                        Deque<BranchWork> work) {
         WorkflowNode target = workflow.findNodeById(edge.target())
             .orElseThrow(() -> new IllegalStateException("Edge target not found: " + edge.target()));
         WorkflowInstance edgeInstance = instance;
@@ -711,7 +807,7 @@ public class WorkflowEngine {
      */
     private WorkflowInstance enterNode(Workflow workflow, WorkflowInstance instance, String branchId,
                                        WorkflowNode node, WorkflowEdge viaEdge, ParallelRegions regions,
-                                       Deque<ActiveBranch> work) {
+                                       Deque<BranchWork> work) {
         Instant now = Instant.now();
         instance = instance.toBuilder()
             .addHistory(new HistoryEntry(node.id(), node.name(),
@@ -725,30 +821,26 @@ public class WorkflowEngine {
 
         switch (node.type()) {
             case ACTION -> {
-                instance = executeActionNode(workflow, instance, branchId, node);
-                if (instance.status() == InstanceStatus.FAILED) {
+                instance = executeActionNode(workflow, instance, branchId, node, work);
+                if (instance.status() != InstanceStatus.RUNNING) {
                     return instance;
                 }
-                // The branch may have moved via an error-handler TRANSITION inside
-                // executeActionNode (which enters and executes the recovery target). Continue
-                // from wherever the branch now actually sits so multi-step recovery chains
-                // follow the recovery target's own edges — not the original node's edges.
-                String continueNodeId = instance.activeBranches().stream()
-                    .filter(b -> b.branchId().equals(branchId))
-                    .map(ActiveBranch::nodeId)
-                    .findFirst()
-                    .orElse(node.id());
-                // Only continue if the branch's current node actually finished (its history entry
-                // is closed). A PENDING result (or landing on a genuinely blocking recovery target)
-                // leaves that entry open — the branch is parked and must NOT be enqueued. Checking
-                // this instead of instance-wide status() keeps a sibling fork branch parking from
-                // affecting whether THIS branch continues.
-                if (!isBranchOpen(instance, branchId, continueNodeId)) {
-                    work.add(new ActiveBranch(branchId, continueNodeId)); // continue from here
+                enqueueContinuation(instance, branchId, work);
+                return instance;
+            }
+            case HUMAN_TASK -> {
+                try {
+                    resolveNodeInputs(node, instance.context());
+                } catch (WorkflowError error) {
+                    Recovery recovery = recover(workflow, instance, node, null, error);
+                    if (recovery.action() == ErrorAction.RETRY) {
+                        recovery = new Recovery(ErrorResolution.transitionTo(node.id()), error);
+                    }
+                    return applyResolution(workflow, instance, branchId, node, recovery, work);
                 }
                 return instance;
             }
-            case HUMAN_TASK, RECEIVE_EVENT, WAIT -> {
+            case RECEIVE_EVENT, WAIT -> {
                 // Branch parks here (blocked). Overall status resolved in quiesce().
                 return instance;
             }
@@ -800,6 +892,14 @@ public class WorkflowEngine {
             .build();
     }
 
+    /** Checks the shared eligibility contract for node-addressed introspection and event matching. */
+    private boolean isParkedNode(WorkflowInstance instance, String nodeId) {
+        return instance.status() == InstanceStatus.WAITING && nodeId != null
+            && instance.activeBranches().stream()
+                .anyMatch(branch -> nodeId.equals(branch.nodeId())
+                    && isBranchOpen(instance, branch.branchId(), nodeId));
+    }
+
     /**
      * Reports whether a branch's current node is still "open" (parked) — i.e. its most recent history
      * entry for {@code (branchId, nodeId)} has no {@code completedOn}. This is true for blocking node
@@ -832,18 +932,15 @@ public class WorkflowEngine {
      * @param node     the node whose outgoing edge condition failed
      * @param result   the node result (may be {@code null})
      * @param e        the failure that occurred
+     * @param work     the call-local queue receiving recovery entry work
      * @return the resolved instance
      */
     private WorkflowInstance resolveEdgeError(Workflow workflow, WorkflowInstance instance,
                                               String branchId, WorkflowNode node, NodeResult result,
-                                              Exception e) {
-        ErrorResolution resolution;
-        try {
-            resolution = errorHandler.handleNodeError(instance, node, result, e);
-        } catch (Exception handlerError) {
-            return failWorkflow(instance, "Error handler threw: " + handlerError.getMessage(), handlerError);
-        }
-        return applyResolution(workflow, instance, branchId, node, resolution);
+                                              Exception e, Deque<BranchWork> work) {
+        Recovery resolution = recover(workflow, instance, node, result,
+            contextualError(WorkflowError.Phase.EDGE_CONDITION, node, e));
+        return applyResolution(workflow, instance, branchId, node, resolution, work);
     }
 
     /**
@@ -853,69 +950,109 @@ public class WorkflowEngine {
      * @param instance the instance being advanced
      * @param branchId the id of the branch with no matching outgoing edge
      * @param node     the node with no matching outgoing edge
+     * @param error    the selection diagnostic already recorded by the call-local driver
+     * @param work     the call-local queue receiving recovery entry work
      * @return the resolved instance
      */
     private WorkflowInstance resolveNoEdge(Workflow workflow, WorkflowInstance instance, String branchId,
-                                           WorkflowNode node) {
-        ErrorResolution resolution;
-        try {
-            resolution = errorHandler.handleNoMatchingEdge(instance, node);
-        } catch (Exception e) {
-            return failWorkflow(instance, "Error handler threw: " + e.getMessage(), e);
+                                           WorkflowNode node, WorkflowError error, Deque<BranchWork> work) {
+        Recovery resolution = recover(workflow, instance, node, null, error);
+        return applyResolution(workflow, instance, branchId, node, resolution, work);
+    }
+
+    private WorkflowError contextualError(WorkflowError.Phase phase, WorkflowNode node, Exception error) {
+        return phase != WorkflowError.Phase.EXECUTION && phase != WorkflowError.Phase.EXECUTOR_LOOKUP
+            && error instanceof WorkflowError diagnostic ? diagnostic : new WorkflowError(
+            phase, node.id(), null, null, null,
+            error.getMessage() == null ? error.getClass().getName() : error.getMessage(), error);
+    }
+
+    private WorkflowError validateResult(WorkflowNode node, NodeResult result) {
+        if (result == null || result.status() == null) {
+            return new WorkflowError(WorkflowError.Phase.RESULT_VALIDATION, node.id(), null, null,
+                result == null ? "result" : "status", "Node result and status must not be null", null);
         }
-        return applyResolution(workflow, instance, branchId, node, resolution);
+        if (result.output() != null
+                && ((Map<?, ?>) result.output()).keySet().stream().anyMatch(key -> !(key instanceof String))) {
+            return new WorkflowError(WorkflowError.Phase.RESULT_VALIDATION, node.id(), null, null,
+                "output", "Node result output keys must be non-null strings", null);
+        }
+        if (result.status() == NodeResultStatus.FAILED) {
+            return new WorkflowError(WorkflowError.Phase.EXECUTION, node.id(), null, null, null,
+                "Node returned FAILED" + (result.output() == null ? "" : ": " + result.output()), null);
+        }
+        return null;
+    }
+
+    /** Dispatches once and validates the host response before any recovery side effects. */
+    private Recovery recover(Workflow workflow, WorkflowInstance instance, WorkflowNode node,
+                             NodeResult result, WorkflowError error) {
+        try {
+            ErrorResolution resolution = errorHandler.handleError(instance, node, result, error);
+            if (resolution == null || resolution.action() == null) {
+                throw new IllegalArgumentException("Error resolution and action must not be null");
+            }
+            String targetId = resolution.targetNodeId();
+            if (resolution.action() == ErrorAction.TRANSITION) {
+                if (targetId == null || targetId.isBlank()) {
+                    throw new IllegalArgumentException("Error handler TRANSITION target must not be null or blank");
+                }
+                WorkflowNode target = workflow.findNodeById(targetId).orElseThrow(() ->
+                    new IllegalArgumentException("Error handler TRANSITION target not found: " + targetId));
+                if (target.type() == NodeType.START) {
+                    throw new IllegalArgumentException("Cannot transition to node type: START");
+                }
+            } else if (targetId != null) {
+                throw new IllegalArgumentException("Only TRANSITION accepts targetNodeId");
+            }
+            return new Recovery(resolution, error);
+        } catch (Exception handlerError) {
+            WorkflowError failure = new WorkflowError(WorkflowError.Phase.ERROR_HANDLER, node.id(),
+                error.edgeId(), error.expression(), error.field(),
+                "Error handler threw or returned an invalid resolution: " + handlerError
+                    + "; original: " + error.diagnostic(), handlerError);
+            failure.addSuppressed(error);
+            return new Recovery(ErrorResolution.fail(), failure);
+        }
     }
 
     private WorkflowInstance executeActionNode(Workflow workflow, WorkflowInstance instance,
-                                               String branchId, WorkflowNode actionNode) {
+                                               String branchId, WorkflowNode actionNode, Deque<BranchWork> work) {
         String actionType = ((NodeConfig.Action) actionNode.typedConfig()).actionType();
-        NodeExecutor executor = executorProvider.getExecutor(actionType);
-        if (executor == null) {
-            return failWorkflow(instance, "No executor found for action type: " + actionType, null);
-        }
-
-        Map<String, Object> resolvedInputs = resolveNodeInputs(actionNode, instance.context());
         int retries = 0;
 
         while (true) {
-            NodeResult result;
+            NodeResult result = null;
+            WorkflowError error = null;
+            WorkflowError.Phase phase = WorkflowError.Phase.INPUT_RESOLUTION;
             try {
+                Map<String, Object> resolvedInputs = resolveNodeInputs(actionNode, instance.context());
+                phase = WorkflowError.Phase.EXECUTOR_LOOKUP;
+                NodeExecutor executor = executorProvider.getExecutor(actionType);
+                if (executor == null) {
+                    throw new IllegalStateException("No executor found for action type: " + actionType);
+                }
+                phase = WorkflowError.Phase.EXECUTION;
                 result = executor.execute(new NodeExecutionContext(
                     actionNode, resolvedInputs, actionNode.config()));
+                error = validateResult(actionNode, result);
+                if (error == null && result.status() == NodeResultStatus.COMPLETED) {
+                    error = validateNodeOutputs(actionNode, result.output());
+                }
             } catch (Exception e) {
-                ErrorResolution resolution;
-                try {
-                    resolution = errorHandler.handleNodeError(instance, actionNode, null, e);
-                } catch (Exception handlerError) {
-                    return failWorkflow(instance, "Error handler threw: " + handlerError.getMessage(), handlerError);
-                }
-                if (resolution.action() == ErrorAction.RETRY) {
-                    if (++retries > MAX_RETRIES) {
-                        log.error("Retry limit ({}) exceeded for action node: {}", MAX_RETRIES, actionNode.id());
-                        return failWorkflow(instance,
-                            "Exceeded retry limit (" + MAX_RETRIES + ") for action node: " + actionNode.id(), e);
-                    }
-                    continue;
-                }
-                return applyResolution(workflow, instance, branchId, actionNode, resolution);
+                error = contextualError(phase, actionNode, e);
             }
 
-            if (result.status() == NodeResultStatus.FAILED) {
-                ErrorResolution resolution;
-                try {
-                    resolution = errorHandler.handleNodeError(instance, actionNode, result, null);
-                } catch (Exception handlerError) {
-                    return failWorkflow(instance, "Error handler threw: " + handlerError.getMessage(), handlerError);
-                }
+            if (error != null) {
+                Recovery resolution = recover(workflow, instance, actionNode, result, error);
                 if (resolution.action() == ErrorAction.RETRY) {
                     if (++retries > MAX_RETRIES) {
-                        log.error("Retry limit ({}) exceeded for action node: {}", MAX_RETRIES, actionNode.id());
                         return failWorkflow(instance,
-                            "Exceeded retry limit (" + MAX_RETRIES + ") for action node: " + actionNode.id(), null);
+                            "Exceeded retry limit (" + MAX_RETRIES + "): " + error.diagnostic(), error);
                     }
                     continue;
                 }
-                return applyResolution(workflow, instance, branchId, actionNode, resolution);
+                return applyResolution(workflow, instance, branchId, actionNode, resolution, work);
             }
 
             if (result.status() == NodeResultStatus.PENDING) {
@@ -935,26 +1072,6 @@ public class WorkflowEngine {
                     .build();
             }
 
-            // Validate output against declared schema
-            String outputError = validateNodeOutputs(actionNode, result.output());
-            if (outputError != null) {
-                ErrorResolution resolution;
-                try {
-                    resolution = errorHandler.handleNodeError(instance, actionNode, result, null);
-                } catch (Exception handlerError) {
-                    return failWorkflow(instance, "Error handler threw: " + handlerError.getMessage(), handlerError);
-                }
-                if (resolution.action() == ErrorAction.RETRY) {
-                    if (++retries > MAX_RETRIES) {
-                        log.error("Retry limit ({}) exceeded for action node: {}", MAX_RETRIES, actionNode.id());
-                        return failWorkflow(instance,
-                            "Exceeded retry limit (" + MAX_RETRIES + ") for action node: " + actionNode.id(), null);
-                    }
-                    continue;
-                }
-                return applyResolution(workflow, instance, branchId, actionNode, resolution);
-            }
-
             // Success — record output on history, merge into context, fire completed
             Map<String, Object> resolvedOutput = resolveContextKeys(actionNode, result.output());
             instance = completeHistoryEntry(instance, branchId, actionNode.id(), Instant.now(),
@@ -965,7 +1082,8 @@ public class WorkflowEngine {
                 .build();
 
             WorkflowInstance completedInstance = instance;
-            fireEvent(l -> l.onNodeCompleted(completedInstance, actionNode, result));
+            NodeResult completedResult = result;
+            fireEvent(l -> l.onNodeCompleted(completedInstance, actionNode, completedResult));
 
             return instance;
         }
@@ -988,7 +1106,8 @@ public class WorkflowEngine {
             } catch (ConditionEvaluationException e) {
                 log.warn("Condition evaluation failed for edge {}: {}", edge.id(), e.getMessage());
                 // Propagate so the error handler receives the failing expression and node context.
-                throw e;
+                throw new WorkflowError(WorkflowError.Phase.EDGE_CONDITION, node.id(), edge.id(),
+                    edge.condition(), null, e.getMessage(), e);
             }
         }
 
@@ -1005,19 +1124,24 @@ public class WorkflowEngine {
      * @param branchId   the id of the branch that produced the error
      * @param node       the node the error occurred at
      * @param resolution the error handler's chosen resolution
+     * @param work       the call-local queue receiving recovery entry work
      * @return the resolved instance
      */
     private WorkflowInstance applyResolution(Workflow workflow, WorkflowInstance instance, String branchId,
-                                             WorkflowNode node, ErrorResolution resolution) {
+                                             WorkflowNode node, Recovery resolution, Deque<BranchWork> work) {
         return switch (resolution.action()) {
-            case FAIL -> failWorkflow(instance, "Workflow failed at node: " + node.id(), null);
-            case RETRY -> instance;
+            case FAIL -> failWorkflow(instance, resolution.error().diagnostic(), resolution.error());
+            case RETRY -> {
+                work.addLast(new BranchWork(new ActiveBranch(branchId, node.id()), WorkKind.CONTINUE,
+                    null, resolution.error()));
+                yield instance;
+            }
             case TRANSITION -> {
-                WorkflowNode target = workflow.findNodeById(resolution.targetNodeId())
+                WorkflowNode target = workflow.findNodeById(resolution.resolution().targetNodeId())
                     .orElse(null);
                 if (target == null) {
                     yield failWorkflow(instance,
-                        "Error handler TRANSITION target not found: " + resolution.targetNodeId(), null);
+                        "Error handler TRANSITION target not found: " + resolution.resolution().targetNodeId(), null);
                 }
                 // Fail-safe: the token driver always supplies the failing branch's id. A null/blank
                 // branchId indicates a programming error; never fabricate a "root" branch.
@@ -1027,17 +1151,10 @@ public class WorkflowEngine {
                 }
                 // Complete the failing branch's open history entry before leaving it (parity with the
                 // old single-cursor engine, which closed the source entry on every transition).
-                WorkflowInstance sourceCompleted =
-                    completeHistoryEntry(instance, branchId, node.id(), Instant.now(), null);
-                WorkflowInstance moved = sourceCompleted.toBuilder()
-                    .currentNodeId(target.id())
-                    .removeActiveBranch(branchId)
-                    .addActiveBranch(new ActiveBranch(branchId, target.id()))
-                    .updatedOn(Instant.now())
-                    .build();
-                // Enter the transition target (it has no history entry yet).
-                yield enterNode(workflow, moved, branchId, target, null,
-                    ParallelRegions.analyze(workflow), new ArrayDeque<>());
+                work.removeIf(item -> item.branch().branchId().equals(branchId));
+                work.addFirst(new BranchWork(new ActiveBranch(branchId, target.id()), WorkKind.ENTER,
+                    null, resolution.error()));
+                yield completeHistoryEntry(instance, branchId, node.id(), Instant.now(), null);
             }
         };
     }
@@ -1096,7 +1213,7 @@ public class WorkflowEngine {
     private Map<String, Object> resolveMergeOutput(WorkflowInstance instance, WorkflowNode node,
                                                     Map<String, Object> rawOutput) {
         if (node.typedConfig() instanceof NodeConfig.ReceiveEvent config && !config.outputs().isEmpty()) {
-            return applyEventOutputMappings(config.outputs(), instance.context(), rawOutput == null ? Map.of() : rawOutput);
+            return applyEventOutputMappings(node, config.outputs(), instance.context(), rawOutput == null ? Map.of() : rawOutput);
         }
         return resolveContextKeys(node, rawOutput);
     }
@@ -1107,14 +1224,19 @@ public class WorkflowEngine {
      * {@code contextKey}. Entries missing either field are skipped (flagged separately by validation).
      * Wrong structural types are rejected by preflight before execution.
      */
-    private Map<String, Object> applyEventOutputMappings(List<NodeConfig.Mapping> outputDefs, Map<String, Object> context,
+    private Map<String, Object> applyEventOutputMappings(WorkflowNode node, List<NodeConfig.Mapping> outputDefs, Map<String, Object> context,
                                                           Map<String, Object> event) {
         Map<String, Object> mapped = new HashMap<>();
         for (NodeConfig.Mapping def : outputDefs) {
             String contextKey = def.contextKey();
             String expression = def.expression();
             if (contextKey != null && !contextKey.isBlank() && expression != null && !expression.isBlank()) {
-                mapped.put(contextKey, conditionEvaluator.resolve(expression, context, event));
+                try {
+                    mapped.put(contextKey, conditionEvaluator.resolve(expression, context, event));
+                } catch (Exception e) {
+                    throw new WorkflowError(WorkflowError.Phase.OUTPUT_MAPPING, node.id(), null,
+                        expression, contextKey, e.getMessage(), e);
+                }
             }
         }
         return mapped;
@@ -1219,8 +1341,8 @@ public class WorkflowEngine {
             try {
                 resolved.put(label, resolveInputValue(entry.getValue(), context));
             } catch (Exception e) {
-                log.warn("Failed to resolve action input '{}': {}", label, e.getMessage());
-                resolved.put(label, null);
+                throw new WorkflowError(WorkflowError.Phase.INPUT_RESOLUTION, node.id(), null,
+                    entry.getValue() instanceof String expression ? expression : null, label, e.getMessage(), e);
             }
         }
         return Collections.unmodifiableMap(resolved);
@@ -1239,11 +1361,12 @@ public class WorkflowEngine {
         return rawValue;
     }
 
-    private String validateNodeOutputs(WorkflowNode node, Map<String, Object> output) {
+    private WorkflowError validateNodeOutputs(WorkflowNode node, Map<String, Object> output) {
         for (NodeConfig.Field def : outputFields(node)) {
             String name = def.name();
             if (def.required() && (output == null || !output.containsKey(name) || output.get(name) == null)) {
-                return "Missing required output: " + name;
+                return new WorkflowError(WorkflowError.Phase.OUTPUT_VALIDATION, node.id(), null,
+                    null, name, "Missing required output: " + name, null);
             }
         }
         return null;
