@@ -84,6 +84,28 @@ in parallel). Both branches converge on `create-report`, which waits for both be
 - **The region is balanced:** neither branch reaches `end` before `create-report`, so it validates with
   no `FORK_WITHOUT_JOIN` or `PARALLEL_BRANCH_REACHES_END` problems.
 
+## Supported join topology
+
+Join arrivals are tracked by incoming edge ID. Before Java calls any executor, validation checks that
+each fork branch reaches its join through **one distinct incoming edge**. The editor validator and
+simulator apply the same rules; unsupported topology fails simulation before any node is entered.
+
+- Exclusive choices inside a branch are supported when their paths merge **before** the parallel join,
+  so either choice reaches the same arrival edge. Separate conditional/default edges directly into the
+  join are also separate arrival edges and are rejected (`UNBALANCED_PARALLEL`).
+- Nested forks must finish at their own join before reaching the enclosing join. Forks sharing a join,
+  or sibling branches sharing an arrival edge, are rejected (`UNBALANCED_PARALLEL`).
+- Edges from outside the region into its branch interiors or join are rejected
+  (`CROSSING_PARALLEL_REGIONS`), including conditional paths that bypass the fork.
+- A completed region may loop back to its fork, and an inner region may repeat while its outer sibling
+  waits. A branch returning to its own fork **before** joining is rejected (`PARALLEL_REGION_CYCLE`).
+- A join may also fork into the next balanced region. Ordinary sequential exclusive choices remain
+  supported.
+
+These checks are structural: conditions are not assumed to be always true or mutually exhaustive.
+Runtime condition failures, missing matching edges, and loops exceeding the transition limit still fail
+at execution time. Persisted branch and join-arrival fields retain their existing format.
+
 ## Running it
 
 Starting the workflow activates both branches after `fetch-cve`. The instance's `activeBranches` holds

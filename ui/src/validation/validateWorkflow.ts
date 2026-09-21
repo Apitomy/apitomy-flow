@@ -593,6 +593,13 @@ function messageForParallelProblem(code: string): string {
       return 'Parallel branches from this fork do not re-converge at a single join';
     case 'PARALLEL_BRANCH_REACHES_END':
       return 'A parallel branch can reach an end node without first joining';
+    case 'UNBALANCED_PARALLEL':
+      return 'Each parallel branch must reach its join through one distinct incoming edge; merge '
+        + 'exclusive paths and finish nested regions before the join';
+    case 'CROSSING_PARALLEL_REGIONS':
+      return 'An edge crosses a parallel region boundary (regions must be well-nested)';
+    case 'PARALLEL_REGION_CYCLE':
+      return 'A parallel branch can re-enter its fork before joining; repeat regions only after their join';
     default:
       return 'Invalid parallel structure';
   }

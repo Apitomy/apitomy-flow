@@ -702,13 +702,14 @@ public class WorkflowValidator {
             case "FORK_WITHOUT_JOIN" ->
                 "Parallel branches from this fork do not re-converge at a single join";
             case "UNBALANCED_PARALLEL" ->
-                "Parallel branches from this fork converge at different points (unbalanced)";
+                "Each parallel branch must reach its join through one distinct incoming edge; merge "
+                    + "exclusive paths and finish nested regions before the join";
             case "CROSSING_PARALLEL_REGIONS" ->
                 "An edge crosses a parallel region boundary (regions must be well-nested)";
             case "PARALLEL_BRANCH_REACHES_END" ->
                 "A parallel branch can reach an end node without first joining";
             case "PARALLEL_REGION_CYCLE" ->
-                "A cycle exists inside a parallel region";
+                "A parallel branch can re-enter its fork before joining; repeat regions only after their join";
             default -> "Invalid parallel structure";
         };
     }

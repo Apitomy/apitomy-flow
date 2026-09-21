@@ -1,0 +1,76 @@
+[
+    {
+        "name": "exclusive arrivals at join",
+        "nodes": ["start", "a", "b", "x", "y", "end"],
+        "edges": [["start", "a"], ["start", "b"], ["a", "x", "context.choose"], ["a", "y", "default"], ["x", "end"], ["y", "end"], ["b", "end"]],
+        "problem": {"code": "UNBALANCED_PARALLEL", "nodeId": "start"}
+    },
+    {
+        "name": "exclusive parallel edges directly into join",
+        "nodes": ["start", "a", "b", "end"],
+        "edges": [["start", "a"], ["start", "b"], ["a", "end", "context.choose"], ["a", "end", "default"], ["b", "end"]],
+        "problem": {"code": "UNBALANCED_PARALLEL", "nodeId": "start"}
+    },
+    {
+        "name": "outside arrival at join",
+        "nodes": ["start", "f", "a", "b", "outside", "j", "end"],
+        "edges": [["start", "f", "context.choose"], ["start", "outside", "default"], ["f", "a"], ["f", "b"], ["a", "j"], ["b", "j"], ["outside", "j"], ["j", "end"]],
+        "problem": {"code": "CROSSING_PARALLEL_REGIONS", "nodeId": "f"}
+    },
+    {
+        "name": "outside arrival into branch interior",
+        "nodes": ["start", "f", "a", "b", "outside", "j", "end"],
+        "edges": [["start", "f", "context.choose"], ["start", "outside", "default"], ["f", "a"], ["f", "b"], ["a", "j"], ["b", "j"], ["outside", "a"], ["j", "end"]],
+        "problem": {"code": "CROSSING_PARALLEL_REGIONS", "nodeId": "f"}
+    },
+    {
+        "name": "unjoined fork reentry",
+        "nodes": ["start", "f", "a", "b", "j", "end"],
+        "edges": [["start", "f"], ["f", "a"], ["f", "b"], ["a", "f", "context.choose"], ["a", "j", "default"], ["b", "j"], ["j", "end"]],
+        "problem": {"code": "PARALLEL_REGION_CYCLE", "nodeId": "f"}
+    },
+    {
+        "name": "nested forks sharing a join",
+        "nodes": ["start", "a", "b", "x", "y", "end"],
+        "edges": [["start", "a"], ["start", "b"], ["a", "x"], ["a", "y"], ["x", "end"], ["y", "end"], ["b", "end"]],
+        "problem": {"code": "UNBALANCED_PARALLEL", "nodeId": "start"}
+    },
+    {
+        "name": "exclusive paths merge before join",
+        "nodes": ["start", "a", "b", "x", "y", "merge", "end"],
+        "edges": [["start", "a"], ["start", "b"], ["a", "x", "context.choose"], ["a", "y", "default"], ["x", "merge"], ["y", "merge"], ["merge", "end"], ["b", "end"]],
+        "visits": {"a": 1, "b": 1, "merge": 1, "end": 1}
+    },
+    {
+        "name": "direct fork to join branch",
+        "nodes": ["start", "a", "end"],
+        "edges": [["start", "end"], ["start", "a"], ["a", "end"]],
+        "visits": {"a": 1, "end": 1}
+    },
+    {
+        "name": "nested balanced regions",
+        "nodes": ["start", "a", "b", "x", "y", "inner", "end"],
+        "edges": [["start", "a"], ["start", "b"], ["a", "x"], ["a", "y"], ["x", "inner"], ["y", "inner"], ["inner", "end"], ["b", "end"]],
+        "visits": {"a": 1, "b": 1, "x": 1, "y": 1, "inner": 1, "end": 1}
+    },
+    {
+        "name": "repeated nested balanced regions with asymmetric branches",
+        "nodes": ["start", "f", "a", "b", "x", "y", "inner", "j", "end"],
+        "edges": [["start", "f"], ["f", "a"], ["f", "b"], ["a", "x"], ["a", "y"], ["x", "inner"], ["y", "inner"], ["inner", "j"], ["b", "j"], ["j", "f", "context.repeat"], ["j", "end", "default"]],
+        "repeatAt": "j",
+        "visits": {"f": 2, "a": 2, "b": 2, "x": 2, "y": 2, "inner": 2, "j": 2, "end": 1}
+    },
+    {
+        "name": "inner region repeats while outer sibling waits",
+        "nodes": ["start", "a", "b", "x", "y", "inner", "end"],
+        "edges": [["start", "a"], ["start", "b"], ["a", "x"], ["a", "y"], ["x", "inner"], ["y", "inner"], ["inner", "a", "context.repeat"], ["inner", "end", "default"], ["b", "end"]],
+        "repeatAt": "inner",
+        "visits": {"a": 2, "b": 1, "x": 2, "y": 2, "inner": 2, "end": 1}
+    },
+    {
+        "name": "join also forks into next balanced region",
+        "nodes": ["start", "a", "b", "j", "x", "y", "end"],
+        "edges": [["start", "a"], ["start", "b"], ["a", "j"], ["b", "j"], ["j", "x"], ["j", "y"], ["x", "end"], ["y", "end"]],
+        "visits": {"a": 1, "b": 1, "j": 1, "x": 1, "y": 1, "end": 1}
+    }
+]
