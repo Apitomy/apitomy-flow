@@ -131,6 +131,12 @@ public class WorkflowEngine {
             return reparked.toBuilder().status(InstanceStatus.WAITING).updatedOn(Instant.now()).build();
         }
 
+        // COMPLETED actions use the synchronous contract, before remapping or merging output.
+        // PENDING payloads above are intentionally partial and do not require all declared outputs.
+        if (node.type() == NodeType.ACTION && validateNodeOutputs(node, result.output()) != null) {
+            return handleFailedCompletion(workflow, instance, branch.branchId(), node, result);
+        }
+
         // COMPLETED — record output on the branch's history entry, merge context, then continue this branch.
         Map<String, Object> resolvedOutput;
         try {
@@ -281,11 +287,11 @@ public class WorkflowEngine {
      * @param workflow the workflow definition
      * @param instance the WAITING instance
      * @param nodeId   the id of the parked node to resolve (must correspond to an active branch)
-     * @return the human-task info, or {@code null} if the instance is not WAITING or the node is not a
-     *         HUMAN_TASK
+     * @return the human-task info, or {@code null} if the node is not an active parked HUMAN_TASK
+     *         in a WAITING instance
      */
     public HumanTaskInfo getHumanTaskInfo(Workflow workflow, WorkflowInstance instance, String nodeId) {
-        if (instance.status() != InstanceStatus.WAITING) {
+        if (!isParkedNode(instance, nodeId)) {
             return null;
         }
         WorkflowNode node = workflow.findNodeById(nodeId).orElse(null);
@@ -353,11 +359,11 @@ public class WorkflowEngine {
      * @param workflow the workflow definition
      * @param instance the WAITING instance
      * @param nodeId   the id of the parked node to resolve (must correspond to an active branch)
-     * @return the receive-event info, or {@code null} if the instance is not WAITING or the node is not a
-     *         RECEIVE_EVENT
+     * @return the receive-event info, or {@code null} if the node is not an active parked RECEIVE_EVENT
+     *         in a WAITING instance
      */
     public ReceiveEventInfo getReceiveEventInfo(Workflow workflow, WorkflowInstance instance, String nodeId) {
-        if (instance.status() != InstanceStatus.WAITING) {
+        if (!isParkedNode(instance, nodeId)) {
             return null;
         }
         WorkflowNode node = workflow.findNodeById(nodeId).orElse(null);
@@ -422,10 +428,10 @@ public class WorkflowEngine {
      * @param workflow the workflow definition
      * @param instance the WAITING instance
      * @param nodeId   the id of the parked node to resolve (must correspond to an active branch)
-     * @return the wait info, or {@code null} if the instance is not WAITING or the node is not a WAIT
+     * @return the wait info, or {@code null} if the node is not an active parked WAIT in a WAITING instance
      */
     public WaitInfo getWaitInfo(Workflow workflow, WorkflowInstance instance, String nodeId) {
-        if (instance.status() != InstanceStatus.WAITING) {
+        if (!isParkedNode(instance, nodeId)) {
             return null;
         }
         WorkflowNode node = workflow.findNodeById(nodeId).orElse(null);
@@ -477,10 +483,10 @@ public class WorkflowEngine {
      * @param workflow the workflow definition
      * @param instance the WAITING instance
      * @param nodeId   the id of the parked node to resolve (must correspond to an active branch)
-     * @return the action info, or {@code null} if the instance is not WAITING or the node is not an ACTION
+     * @return the action info, or {@code null} if the node is not an active parked ACTION in a WAITING instance
      */
     public ActionInfo getActionInfo(Workflow workflow, WorkflowInstance instance, String nodeId) {
-        if (instance.status() != InstanceStatus.WAITING) {
+        if (!isParkedNode(instance, nodeId)) {
             return null;
         }
         WorkflowNode node = workflow.findNodeById(nodeId).orElse(null);
@@ -545,11 +551,12 @@ public class WorkflowEngine {
      * @param instance the WAITING instance
      * @param nodeId   the id of the parked node to test (must correspond to an active branch)
      * @param event    the incoming event
-     * @return true if the given node is a RECEIVE_EVENT that matches the event
+     * @return true if the given node is an active parked RECEIVE_EVENT in a WAITING instance that matches
+     *         the event; false for ineligible nodes
      */
     public boolean matchesEvent(Workflow workflow, WorkflowInstance instance, String nodeId,
                                 Map<String, Object> event) {
-        if (instance.status() != InstanceStatus.WAITING) {
+        if (!isParkedNode(instance, nodeId)) {
             return false;
         }
 
@@ -872,6 +879,14 @@ public class WorkflowEngine {
             .currentNodeId(current)
             .updatedOn(Instant.now())
             .build();
+    }
+
+    /** Checks the shared eligibility contract for node-addressed introspection and event matching. */
+    private boolean isParkedNode(WorkflowInstance instance, String nodeId) {
+        return instance.status() == InstanceStatus.WAITING && nodeId != null
+            && instance.activeBranches().stream()
+                .anyMatch(branch -> nodeId.equals(branch.nodeId())
+                    && isBranchOpen(instance, branch.branchId(), nodeId));
     }
 
     /**

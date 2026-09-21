@@ -25,6 +25,64 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class WorkflowEngineErrorTest {
 
+    // C3 review follow-up: edge-only RETRY must consume the driver budget without action redispatch.
+    @ParameterizedTest
+    @ValueSource(strings = {"1 +", "false"})
+    void edgeOnlyRetryExhaustsTransitionBudget(String condition) {
+        AtomicInteger executions = new AtomicInteger();
+        AtomicInteger errors = new AtomicInteger();
+        Workflow workflow = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), actionNode("action", "test"), endNode("end")),
+            List.of(edge("start-action", "start", "action"), edge("action-end", "action", "end", condition, 0)));
+        WorkflowEngine engine = new WorkflowEngine(NodeExecutorProvider.fromList(testExecutor(context -> {
+            executions.incrementAndGet();
+            return new NodeResult(NodeResultStatus.COMPLETED, Map.of("executed", true));
+        })), List.of(), recoveryHandler((node, count) -> count >= 150
+            ? ErrorResolution.fail() : ErrorResolution.retry(), errors));
+
+        WorkflowInstance result = engine.startWorkflow(workflow, Map.of());
+
+        assertEquals(InstanceStatus.FAILED, result.status());
+        assertTrue(result.failureReason().contains("transition limit"), result.failureReason());
+        assertEquals(99, errors.get(), "The initial edge move and 99 selection failures share the budget");
+        assertEquals(1, executions.get());
+        assertEquals(List.of("start", "action"), result.history().stream().map(HistoryEntry::nodeId).toList());
+        assertTrue(result.history().stream().allMatch(entry -> entry.completedOn() != null));
+    }
+
+    // C3 review follow-up: merge-error RETRY awaits another delivery and preserves parked siblings.
+    @ParameterizedTest
+    @EnumSource(value = NodeResultStatus.class, names = {"COMPLETED", "PENDING"})
+    void mergeErrorRetryPreservesParkedStateUntilAnotherDelivery(NodeResultStatus status) {
+        AtomicInteger errors = new AtomicInteger();
+        Workflow workflow = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), receiveEventNode("event", "approved", List.of(),
+                List.of(Map.of("contextKey", "mapped", "expression", "event.amount + 1"))),
+                humanTaskNode("sibling"), endNode("end")),
+            List.of(edge("start-event", "start", "event"), edge("start-sibling", "start", "sibling"),
+                edge("event-end", "event", "end"), edge("sibling-end", "sibling", "end")));
+        WorkflowEngine engine = new WorkflowEngine(null, List.of(),
+            recoveryHandler((node, count) -> ErrorResolution.retry(), errors));
+        WorkflowInstance waiting = engine.startWorkflow(workflow, Map.of("existing", true));
+
+        WorkflowInstance retried = engine.completeNode(workflow, waiting, "event",
+            new NodeResult(status, Map.of("amount", "not-a-number")));
+
+        assertEquals(InstanceStatus.WAITING, retried.status());
+        assertEquals(waiting.context(), retried.context());
+        assertEquals(waiting.history(), retried.history());
+        assertEquals(waiting.activeBranches(), retried.activeBranches());
+        assertEquals(1, errors.get());
+        WorkflowInstance delivered = engine.completeNode(workflow, retried, "event",
+            new NodeResult(NodeResultStatus.COMPLETED, Map.of("amount", 2)));
+        assertEquals(InstanceStatus.WAITING, delivered.status());
+        assertEquals(3L, delivered.context().get("mapped"));
+        assertEquals(waiting.history().getLast(), delivered.history().getLast());
+        assertEquals(1, errors.get());
+        assertEquals(InstanceStatus.COMPLETED, engine.completeNode(workflow, delivered, "sibling",
+            new NodeResult(NodeResultStatus.COMPLETED, Map.of())).status());
+    }
+
     @ParameterizedTest(name = "two-action cycle={0}")
     @ValueSource(booleans = {false, true})
     void recoveryCyclesExhaustTransitionBudget(boolean twoActions) {
