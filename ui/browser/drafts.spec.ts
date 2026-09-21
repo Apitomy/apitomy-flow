@@ -1,4 +1,4 @@
-import { test, expect, changes, field, ready } from './test.ts';
+import { test, expect, changes, field, ready, waitForViewportChange } from './test.ts';
 
 for (const id of ['a', 'h']) {
     test(`${id} value typing preserves DOM identity/caret and coalesces nested config history with empty-key drafts`, async ({ page }) => {
@@ -113,10 +113,17 @@ for (const id of ['a', 'h']) {
         await editor.getByRole('button', { name: '+ Add input', exact: true }).click();
         await expect(keys).toHaveCount(5);
         const document = (await changes(editor)).at(-1)!;
+        // Make import's fit observable even for an equal document. Panel reset precedes the scheduled fit.
+        await editor.getByRole('button', { name: 'Zoom Out', exact: true }).click();
+        await editor.getByRole('button', { name: 'Zoom Out', exact: true }).click();
+        const viewport = editor.locator('.react-flow__viewport');
+        const beforeImport = await viewport.getAttribute('style');
         await editor.locator('input[type=file]').setInputFiles({ name: 'same.json', mimeType: 'application/json',
             buffer: Buffer.from(JSON.stringify(document)) });
         await expect(editor.locator('.properties-panel')).toContainText('Select a node');
+        await waitForViewportChange(viewport, beforeImport);
         await editor.locator(`.react-flow__node[data-id="${id}"]`).click();
+        await expect(editor.locator(`.react-flow__node[data-id="${id}"]`)).toHaveClass(/selected/);
         await expect(keys).toHaveCount(4);
         await editor.getByRole('button', { name: '+ Add input', exact: true }).click();
         await expect(keys).toHaveCount(5);
