@@ -42,12 +42,12 @@ describe('semantic validation ownership', () => {
 
     it('invalidates config, routing and host extension changes even with the same workflow id/version', () => {
         const initial = createEditorState(workflow);
+        const extended: Workflow = structuredClone(workflow);
+        for (const node of extended.nodes) node.config.extension = { enabled: true };
         for (const command of [
             { type: 'nodeData', id: 's', data: { config: { inputs: [{ name: 'required', type: 'string', required: true }] } } },
             { type: 'edgeData', id: 'edge', data: { condition: 'context.enabled' } },
-            { type: 'import', workflow: { ...workflow, nodes: workflow.nodes.map(node => ({
-                ...node, config: { ...node.config, extension: { enabled: true } },
-            })) } },
+            { type: 'import', workflow: extended },
         ] satisfies EditorCommand[]) {
             const changed = editorReducer(initial, command);
             expect(changed.semanticDocument).not.toBe(initial.semanticDocument);
