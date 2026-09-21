@@ -1,5 +1,6 @@
 package io.apitomy.flow.engine;
 
+import io.apitomy.flow.engine.RecoveryPolicy.Recovery;
 import io.apitomy.flow.model.*;
 import io.apitomy.flow.spi.*;
 import io.apitomy.flow.validation.ValidationProblem;
@@ -10,6 +11,8 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
+
+import static io.apitomy.flow.engine.RecoveryPolicy.contextualError;
 
 /**
  * Stateless, synchronous workflow driver. Definitions and instances must be non-null and callers must not
@@ -35,13 +38,9 @@ public class WorkflowEngine {
         }
     }
 
-    private record Recovery(ErrorResolution resolution, WorkflowError error) {
-        private ErrorAction action() { return resolution.action(); }
-    }
-
     private final NodeExecutorProvider executorProvider;
     private final List<WorkflowEventListener> listeners;
-    private final WorkflowErrorHandler errorHandler;
+    private final RecoveryPolicy recoveryPolicy;
     private final WorkflowValidator validator;
     private final ConditionEvaluator conditionEvaluator;
     private final NodeValueResolver values;
@@ -54,7 +53,7 @@ public class WorkflowEngine {
                           WorkflowErrorHandler errorHandler) {
         this.executorProvider = executorProvider != null ? executorProvider : actionType -> null;
         this.listeners = listeners != null ? List.copyOf(listeners) : List.of();
-        this.errorHandler = errorHandler != null ? errorHandler : new DefaultErrorHandler();
+        this.recoveryPolicy = new RecoveryPolicy(errorHandler);
         this.validator = new WorkflowValidator();
         this.conditionEvaluator = new ConditionEvaluator();
         this.values = new NodeValueResolver(conditionEvaluator);
@@ -151,7 +150,8 @@ public class WorkflowEngine {
                 try {
                     resolvedOutput = values.mergeOutput(instance, node, result.output());
                 } catch (Exception e) {
-                    return resolveMergeOutputError(workflow, instance, branch.branchId(), node, result, e);
+                    return handleFailedCompletion(workflow, instance, branch.branchId(), node, result,
+                        contextualError(WorkflowError.Phase.OUTPUT_MAPPING, node, e));
                 }
                 reparked = reparked.toBuilder().mergeContext(resolvedOutput).build();
             }
@@ -170,7 +170,8 @@ public class WorkflowEngine {
         try {
             resolvedOutput = values.mergeOutput(instance, node, result.output());
         } catch (Exception e) {
-            return resolveMergeOutputError(workflow, instance, branch.branchId(), node, result, e);
+            return handleFailedCompletion(workflow, instance, branch.branchId(), node, result,
+                contextualError(WorkflowError.Phase.OUTPUT_MAPPING, node, e));
         }
         WorkflowInstance updated = completeHistoryEntry(instance, branch.branchId(), nodeId,
             Instant.now(), resolvedOutput);
@@ -206,38 +207,15 @@ public class WorkflowEngine {
         return completeNode(workflow, instance, nodeId, result);
     }
 
-    /**
-     * Reuses the existing error handler when {@link NodeValueResolver#mergeOutput} throws (e.g. a receive-event
-     * output mapping's expression fails to evaluate against the delivered event/context), instead of
-     * letting the exception propagate out of {@link #completeNode} and leave the instance stuck in
-     * WAITING. Mirrors {@link #resolveEdgeError}'s handler-dispatch/fail-safe pattern.
-     *
-     * @param workflow the workflow definition
-     * @param instance the instance being completed
-     * @param branchId the id of the branch whose node's output failed to resolve
-     * @param node     the node whose output mapping failed to resolve
-     * @param result   the node result that was being merged
-     * @param e        the failure that occurred while resolving the merge output
-     * @return the resolved instance
-     */
-    private WorkflowInstance resolveMergeOutputError(Workflow workflow, WorkflowInstance instance, String branchId,
-                                                      WorkflowNode node, NodeResult result, Exception e) {
-        Recovery resolution = recover(workflow, instance, node, result,
-            contextualError(WorkflowError.Phase.OUTPUT_MAPPING, node, e));
-        if (resolution.action() == ErrorAction.RETRY) {
-            return instance; // Keep the failed delivery parked for another external completion.
-        }
-        return resumeResolution(workflow, instance, branchId, node, resolution);
-    }
-
+    /** Applies the shared completion policy before seeding the iterative recovery driver. */
     private WorkflowInstance handleFailedCompletion(Workflow workflow, WorkflowInstance instance,
-                                                    String branchId, WorkflowNode actionNode,
+                                                    String branchId, WorkflowNode node,
                                                     NodeResult result, WorkflowError error) {
-        Recovery resolution = recover(workflow, instance, actionNode, result, error);
-        if (resolution.action() == ErrorAction.RETRY && actionNode.type() != NodeType.ACTION) {
+        Recovery resolution = recoveryPolicy.resolve(workflow, instance, node, result, error);
+        if (resolution.awaitsExternalDelivery(node)) {
             return instance; // External tasks require another delivery, never action-executor dispatch.
         }
-        return resumeResolution(workflow, instance, branchId, actionNode, resolution);
+        return resumeResolution(workflow, instance, branchId, node, resolution);
     }
 
     /** Seeds one driver for an external completion's recovery and any already runnable siblings. */
@@ -703,7 +681,8 @@ public class WorkflowEngine {
                 } catch (WorkflowError e) {
                     transitions++;
                     lastError = e;
-                    instance = resolveEdgeError(workflow, instance, branch.branchId(), node, null, e, work);
+                    instance = applyResolution(workflow, instance, branch.branchId(), node,
+                        recoveryPolicy.resolve(workflow, instance, node, null, e), work);
                     if (instance.status() != InstanceStatus.RUNNING) return instance;
                     enqueueContinuation(instance, branch.branchId(), work);
                     continue;
@@ -712,7 +691,8 @@ public class WorkflowEngine {
                     transitions++;
                     lastError = new WorkflowError(WorkflowError.Phase.EDGE_SELECTION, node.id(), null,
                         null, null, "No matching outgoing edge", null);
-                    instance = resolveNoEdge(workflow, instance, branch.branchId(), node, lastError, work);
+                    instance = applyResolution(workflow, instance, branch.branchId(), node,
+                        recoveryPolicy.resolve(workflow, instance, node, null, lastError), work);
                     if (instance.status() != InstanceStatus.RUNNING) return instance;
                     enqueueContinuation(instance, branch.branchId(), work);
                     continue;
@@ -834,7 +814,7 @@ public class WorkflowEngine {
                 try {
                     values.inputs(node, instance.context());
                 } catch (WorkflowError error) {
-                    Recovery recovery = recover(workflow, instance, node, null, error);
+                    Recovery recovery = recoveryPolicy.resolve(workflow, instance, node, null, error);
                     if (recovery.action() == ErrorAction.RETRY) {
                         recovery = new Recovery(ErrorResolution.transitionTo(node.id()), error);
                     }
@@ -925,82 +905,6 @@ public class WorkflowEngine {
         return false;
     }
 
-    /**
-     * Reuses the existing error handler for a failed edge-condition evaluation on the sequential path.
-     *
-     * @param workflow the workflow definition
-     * @param instance the instance being advanced
-     * @param branchId the id of the branch whose edge condition failed
-     * @param node     the node whose outgoing edge condition failed
-     * @param result   the node result (may be {@code null})
-     * @param e        the failure that occurred
-     * @param work     the call-local queue receiving recovery entry work
-     * @return the resolved instance
-     */
-    private WorkflowInstance resolveEdgeError(Workflow workflow, WorkflowInstance instance,
-                                              String branchId, WorkflowNode node, NodeResult result,
-                                              Exception e, Deque<BranchWork> work) {
-        Recovery resolution = recover(workflow, instance, node, result,
-            contextualError(WorkflowError.Phase.EDGE_CONDITION, node, e));
-        return applyResolution(workflow, instance, branchId, node, resolution, work);
-    }
-
-    /**
-     * Reuses the existing error handler for the "no matching edge" case on the sequential path.
-     *
-     * @param workflow the workflow definition
-     * @param instance the instance being advanced
-     * @param branchId the id of the branch with no matching outgoing edge
-     * @param node     the node with no matching outgoing edge
-     * @param error    the selection diagnostic already recorded by the call-local driver
-     * @param work     the call-local queue receiving recovery entry work
-     * @return the resolved instance
-     */
-    private WorkflowInstance resolveNoEdge(Workflow workflow, WorkflowInstance instance, String branchId,
-                                           WorkflowNode node, WorkflowError error, Deque<BranchWork> work) {
-        Recovery resolution = recover(workflow, instance, node, null, error);
-        return applyResolution(workflow, instance, branchId, node, resolution, work);
-    }
-
-    private WorkflowError contextualError(WorkflowError.Phase phase, WorkflowNode node, Exception error) {
-        return phase != WorkflowError.Phase.EXECUTION && phase != WorkflowError.Phase.EXECUTOR_LOOKUP
-            && error instanceof WorkflowError diagnostic ? diagnostic : new WorkflowError(
-            phase, node.id(), null, null, null,
-            error.getMessage() == null ? error.getClass().getName() : error.getMessage(), error);
-    }
-
-    /** Dispatches once and validates the host response before any recovery side effects. */
-    private Recovery recover(Workflow workflow, WorkflowInstance instance, WorkflowNode node,
-                             NodeResult result, WorkflowError error) {
-        try {
-            ErrorResolution resolution = errorHandler.handleError(instance, node, result, error);
-            if (resolution == null || resolution.action() == null) {
-                throw new IllegalArgumentException("Error resolution and action must not be null");
-            }
-            String targetId = resolution.targetNodeId();
-            if (resolution.action() == ErrorAction.TRANSITION) {
-                if (targetId == null || targetId.isBlank()) {
-                    throw new IllegalArgumentException("Error handler TRANSITION target must not be null or blank");
-                }
-                WorkflowNode target = workflow.findNodeById(targetId).orElseThrow(() ->
-                    new IllegalArgumentException("Error handler TRANSITION target not found: " + targetId));
-                if (target.type() == NodeType.START) {
-                    throw new IllegalArgumentException("Cannot transition to node type: START");
-                }
-            } else if (targetId != null) {
-                throw new IllegalArgumentException("Only TRANSITION accepts targetNodeId");
-            }
-            return new Recovery(resolution, error);
-        } catch (Exception handlerError) {
-            WorkflowError failure = new WorkflowError(WorkflowError.Phase.ERROR_HANDLER, node.id(),
-                error.edgeId(), error.expression(), error.field(),
-                "Error handler threw or returned an invalid resolution: " + handlerError
-                    + "; original: " + error.diagnostic(), handlerError);
-            failure.addSuppressed(error);
-            return new Recovery(ErrorResolution.fail(), failure);
-        }
-    }
-
     private WorkflowInstance executeActionNode(Workflow workflow, WorkflowInstance instance,
                                                String branchId, WorkflowNode actionNode, Deque<BranchWork> work) {
         String actionType = ((NodeConfig.Action) actionNode.typedConfig()).actionType();
@@ -1029,7 +933,7 @@ public class WorkflowEngine {
             }
 
             if (error != null) {
-                Recovery resolution = recover(workflow, instance, actionNode, result, error);
+                Recovery resolution = recoveryPolicy.resolve(workflow, instance, actionNode, result, error);
                 if (resolution.action() == ErrorAction.RETRY) {
                     if (++retries > MAX_RETRIES) {
                         return failWorkflow(instance,

@@ -14,9 +14,11 @@ interface Snapshot extends Selection {
     /** Stable owned validation input; layout edits retain it and history restores it atomically. */
     semanticDocument: Workflow;
     nodeKeys: Record<string, string>;
+    selectedNodeIds: string[];
+    selectedEdgeIds: string[];
 }
 
-export interface EditorState extends Snapshot {
+export interface EditorState extends Omit<Snapshot, 'selectedNodeIds' | 'selectedEdgeIds'> {
     nodes: Node<FlowNodeData>[];
     edges: Edge[];
     past: Snapshot[];
@@ -64,6 +66,8 @@ export function createEditorState(workflow: Workflow): EditorState {
 
 function snapshot(state: EditorState): Snapshot {
     return { document: state.document, semanticDocument: state.semanticDocument, nodeKeys: state.nodeKeys,
+        selectedNodeIds: state.nodes.filter(node => node.selected).map(node => node.id),
+        selectedEdgeIds: state.edges.filter(edge => edge.selected).map(edge => edge.id),
         selectedNodeId: state.selectedNodeId, selectedEdgeId: state.selectedEdgeId };
 }
 
@@ -76,13 +80,16 @@ function validSelection(document: Workflow, selection: Selection): Selection {
     };
 }
 
-// Merge current measurements/selection into new semantic data, never into history snapshots.
-function present(state: EditorState, document: Workflow, nodeKeys = state.nodeKeys): Pick<EditorState, 'nodes' | 'edges'> {
+// Retain live measurements independently from the selection restored by history.
+function present(state: EditorState, document: Workflow, nodeKeys = state.nodeKeys,
+    selection?: Pick<Snapshot, 'selectedNodeIds' | 'selectedEdgeIds'>): Pick<EditorState, 'nodes' | 'edges'> {
     const nodes = new Map(state.nodes.map(node => [state.nodeKeys[node.id], node]));
     const edges = new Map(state.edges.map(edge => [edge.id, edge]));
     return {
-        nodes: toReactFlowNodes(document.nodes).map(node => ({ ...nodes.get(nodeKeys[node.id]), ...node, dragging: false })),
-        edges: toReactFlowEdges(document.edges).map(edge => ({ ...edges.get(edge.id), ...edge })),
+        nodes: toReactFlowNodes(document.nodes).map(node => ({ ...nodes.get(nodeKeys[node.id]), ...node, dragging: false,
+            ...(selection ? { selected: selection.selectedNodeIds.includes(node.id) } : {}) })),
+        edges: toReactFlowEdges(document.edges).map(edge => ({ ...edges.get(edge.id), ...edge,
+            ...(selection ? { selected: selection.selectedEdgeIds.includes(edge.id) } : {}) })),
     };
 }
 
@@ -159,7 +166,7 @@ export function editorReducer(state: EditorState, command: EditorCommand): Edito
             const target = source.at(-1);
             if (!target) return state;
             return {
-                ...state, ...target, ...present(state, target.document, target.nodeKeys), group: undefined,
+                ...state, ...target, ...present(state, target.document, target.nodeKeys, target), group: undefined,
                 past: command.type === 'undo' ? state.past.slice(0, -1) : [...state.past, snapshot(state)],
                 future: command.type === 'redo' ? state.future.slice(0, -1) : [...state.future, snapshot(state)],
                 revision: state.revision + 1,
