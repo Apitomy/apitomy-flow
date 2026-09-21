@@ -41,3 +41,5 @@ dist/
 dist-demo/
 .vite/
 *.tsbuildinfo
+
+.worktrees/
