@@ -33,7 +33,7 @@ describe('shared parallel topology fixtures', () => {
         });
 
         it(`${fixture.name}: rejects before entry or completes balanced regions`, () => {
-            for (const choose of [true, false]) {
+            for (const [choose, reverse] of [[true, true], [true, false], [false, true], [false, false]]) {
                 let state = startSimulation(workflow, { choose });
                 if (fixture.problem) {
                     expect(state.status).toBe('failed');
@@ -45,16 +45,26 @@ describe('shared parallel topology fixtures', () => {
                 } else {
                     state = runSimulation(workflow, state);
                     for (let attempts = 0; state.status === 'blocked' && attempts < 50; attempts++) {
-                        const id = (choose ? state.activeBranches[0] : state.activeBranches.at(-1)!).nodeId;
+                        const id = (reverse ? state.activeBranches.at(-1)! : state.activeBranches[0]).nodeId;
                         const count = state.visitedNodeIds.filter(nodeId => nodeId === id).length;
                         state = runSimulation(workflow, resumeSimulation(workflow, state, {
-                            output: id === fixture.repeatAt ? { repeat: count < 2 } : {},
+                            output: id === fixture.repeatAt ? { repeat: count < 2 }
+                                : (fixture.outputs as Record<string, Record<string, unknown>> | undefined)?.[id] ?? {},
                         }, id));
                     }
                     expect(state.status).toBe('completed');
                     expect(state.joinArrivals).toEqual({});
-                    for (const [id, count] of Object.entries(fixture.visits!)) {
-                        expect(state.visitedNodeIds.filter(nodeId => nodeId === id), id).toHaveLength(count!);
+                    const expected = fixture.cases?.find(input => input.choose === choose);
+                    if (fixture.cases) expect(expected).toBeDefined();
+                    if (expected) {
+                        const visits: Record<string, number> = Object.fromEntries(fixture.nodes.map(id => [id, 0]));
+                        for (const id of state.visitedNodeIds) visits[id] = (visits[id] ?? 0) + 1;
+                        expect(visits).toEqual(expected.visits);
+                        expect(state.context).toEqual(expected.context);
+                    } else {
+                        for (const [id, count] of Object.entries(fixture.visits!)) {
+                            expect(state.visitedNodeIds.filter(nodeId => nodeId === id), id).toHaveLength(count!);
+                        }
                     }
                 }
             }

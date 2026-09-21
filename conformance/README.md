@@ -39,6 +39,11 @@ Recognition of an engine-only construct is conservative: it means **not validate
 Malformed expressions containing such constructs may also receive the unsupported warning; use Java
 validation as the authority. Expressions are parsed in full before evaluation, including lazy branches.
 
+Unquoted identifiers remain ASCII-only in the browser dialect. Non-ASCII syntax outside string literals,
+including valid Unicode members such as `context.café` or `event.变量`, receives the advisory unsupported
+classification and remains importable. Quoted keys (`context['café']`) are supported and evaluate normally.
+The Unicode fixtures exercise Java compilation/evaluation and browser condition/mapping validation/import.
+
 ## Verified guarantees and limits
 
 - The corpus pins results for the listed examples, not universal equivalence with Jakarta EL. Java
@@ -63,6 +68,10 @@ validation as the authority. Expressions are parsed in full before evaluation, i
 - Shared routing checkpoints assert status, context, visited nodes, active branch IDs and join arrivals
   after every resume, with a JSON round trip before each completion. Timestamps and random instance IDs
   are intentionally not compared. SimState is not the WorkflowInstance wire format.
+- The conditional parallel fixture defines complete per-input visit counts (including zero for the
+  unselected branch), distinct branch outputs and exact final contexts. Both choices run in both pending
+  completion orders; Java also executes both choices with synchronous actions. Unexpected extra visits
+  or leaked unselected-branch outputs fail the contract.
 
 Inherited literal handling and C2 parallel restrictions remain in force. Add a fixture when extending
 the subset or changing a contract; do not silently skip a case in either runner.

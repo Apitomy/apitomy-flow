@@ -2,6 +2,7 @@ package io.apitomy.flow.engine;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
 import io.apitomy.flow.model.*;
 import io.apitomy.flow.spi.*;
 import io.apitomy.flow.validation.WorkflowValidator;
@@ -86,7 +87,7 @@ class ParallelTopologyTest {
                     String id = context.node().id();
                     int count = visits.merge(id, 1, Integer::sum);
                     return new NodeResult(NodeResultStatus.COMPLETED,
-                        id.equals(fixture.data().path("repeatAt").asText()) ? Map.of("repeat", count < 2) : Map.of());
+                        output(fixture, id, count));
                 }
             };
             WorkflowEngine engine = new WorkflowEngine(NodeExecutorProvider.fromList(executor), List.of(), null);
@@ -102,9 +103,7 @@ class ParallelTopologyTest {
                     () -> engine.startWorkflow(workflow, Map.of("choose", choose)));
                 assertEquals(InstanceStatus.COMPLETED, result.status());
                 assertTrue(result.joinArrivals().isEmpty());
-                fixture.data().path("visits").properties().forEach(entry -> assertEquals(
-                    entry.getValue().asInt(), result.history().stream()
-                        .filter(h -> h.nodeId().equals(entry.getKey())).count(), entry.getKey()));
+                assertOutcome(fixture, choose, result);
             }
         }
     }
@@ -112,32 +111,57 @@ class ParallelTopologyTest {
     @ParameterizedTest(name = "parked branches: {0}")
     @MethodSource("balancedFixtures")
     void balancedRegionsResumeInEitherOrder(Fixture fixture) {
-        for (boolean reverse : List.of(true, false)) {
-            NodeExecutor executor = new NodeExecutor() {
-                /** Identifies the pending action executor. */
-                public String actionType() { return "record"; }
-                /** Parks every action to exercise branch-addressed completion. */
-                public NodeResult execute(NodeExecutionContext context) {
-                    return new NodeResult(NodeResultStatus.PENDING, Map.of());
-                }
-            };
-            Workflow workflow = workflow(fixture.data());
-            WorkflowEngine engine = new WorkflowEngine(NodeExecutorProvider.fromList(executor), List.of(), null);
-            WorkflowInstance result = engine.startWorkflow(workflow, Map.of("choose", reverse));
-            for (int attempts = 0; result.status() == InstanceStatus.WAITING && attempts < 50; attempts++) {
-                String id = (reverse ? result.activeBranches().getLast() : result.activeBranches().getFirst()).nodeId();
-                long count = result.history().stream().filter(h -> h.nodeId().equals(id)).count();
-                Map<String, Object> output = id.equals(fixture.data().path("repeatAt").asText())
-                    ? Map.of("repeat", count < 2) : Map.of();
-                result = engine.completeNode(workflow, result, id, new NodeResult(NodeResultStatus.COMPLETED, output));
+        for (boolean choose : List.of(true, false)) {
+            for (boolean reverse : List.of(true, false)) {
+                assertResumedOutcome(fixture, choose, reverse);
             }
-            assertEquals(InstanceStatus.COMPLETED, result.status());
-            assertTrue(result.activeBranches().isEmpty());
-            assertTrue(result.joinArrivals().isEmpty());
-            WorkflowInstance completed = result;
-            fixture.data().path("visits").properties().forEach(entry -> assertEquals(
-                entry.getValue().asInt(), completed.history().stream()
-                    .filter(h -> h.nodeId().equals(entry.getKey())).count(), entry.getKey()));
         }
+    }
+
+    private void assertResumedOutcome(Fixture fixture, boolean choose, boolean reverse) {
+        NodeExecutor executor = new NodeExecutor() {
+            /** Identifies the pending action executor. */
+            public String actionType() { return "record"; }
+            /** Parks every action to exercise branch-addressed completion. */
+            public NodeResult execute(NodeExecutionContext context) {
+                return new NodeResult(NodeResultStatus.PENDING, Map.of());
+            }
+        };
+        Workflow workflow = workflow(fixture.data());
+        WorkflowEngine engine = new WorkflowEngine(NodeExecutorProvider.fromList(executor), List.of(), null);
+        WorkflowInstance result = engine.startWorkflow(workflow, Map.of("choose", choose));
+        for (int attempts = 0; result.status() == InstanceStatus.WAITING && attempts < 50; attempts++) {
+            String id = (reverse ? result.activeBranches().getLast() : result.activeBranches().getFirst()).nodeId();
+            long count = result.history().stream().filter(h -> h.nodeId().equals(id)).count();
+            Map<String, Object> output = output(fixture, id, count);
+            result = engine.completeNode(workflow, result, id, new NodeResult(NodeResultStatus.COMPLETED, output));
+        }
+        assertEquals(InstanceStatus.COMPLETED, result.status());
+        assertTrue(result.activeBranches().isEmpty());
+        assertTrue(result.joinArrivals().isEmpty());
+        assertOutcome(fixture, choose, result);
+    }
+
+    private static Map<String, Object> output(Fixture fixture, String id, long count) {
+        if (id.equals(fixture.data().path("repeatAt").asText())) return Map.of("repeat", count < 2);
+        JsonNode output = fixture.data().path("outputs").path(id);
+        return output.isMissingNode() ? Map.of() : new ObjectMapper().convertValue(output, new TypeReference<>() {});
+    }
+
+    private static void assertOutcome(Fixture fixture, boolean choose, WorkflowInstance result) {
+        for (JsonNode expected : fixture.data().path("cases")) {
+            if (expected.path("choose").asBoolean() != choose) continue;
+            Map<String, Integer> visits = new HashMap<>();
+            fixture.data().path("nodes").forEach(id -> visits.put(id.asText(), 0));
+            result.history().forEach(entry -> visits.merge(entry.nodeId(), 1, Integer::sum));
+            ObjectMapper mapper = new ObjectMapper();
+            assertEquals(expected.path("visits"), mapper.valueToTree(visits));
+            assertEquals(expected.path("context"), mapper.valueToTree(result.context()));
+            return;
+        }
+        assertFalse(fixture.data().has("cases"), "Missing per-input expectation for choose=" + choose);
+        fixture.data().path("visits").properties().forEach(entry -> assertEquals(
+            entry.getValue().asInt(), result.history().stream()
+                .filter(h -> h.nodeId().equals(entry.getKey())).count(), entry.getKey()));
     }
 }

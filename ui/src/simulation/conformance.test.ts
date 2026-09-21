@@ -59,7 +59,13 @@ describe('shared expression conformance', () => {
                     { code: 'UNSUPPORTED_EXPRESSION_DIALECT', severity: 'warning', edgeId: 'condition' },
                     { code: 'UNSUPPORTED_EXPRESSION_DIALECT', severity: 'warning', nodeId: 'event' },
                 ] : []);
-                expect(parseWorkflow(JSON.stringify(workflow)).workflow !== undefined).toBe(!fixture.invalid);
+                const imported = parseWorkflow(JSON.stringify(workflow)).workflow;
+                expect(imported !== undefined).toBe(!fixture.invalid);
+                if (fixture.browser === 'unsupported') {
+                    expect(imported!.edges[0].condition).toBe(fixture.expression);
+                    expect(imported!.nodes[1].config.outputs)
+                        .toEqual([{ contextKey: 'result', expression: fixture.expression }]);
+                }
             });
         }
     }

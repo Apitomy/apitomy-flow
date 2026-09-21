@@ -246,6 +246,9 @@ function tokenize(input: string): Token[] {
             continue;
         }
 
+        // The browser lexer is ASCII-only outside strings. Non-ASCII syntax (including Java's
+        // Unicode identifiers) needs full EL validation, not an import-blocking malformed diagnosis.
+        if (input.codePointAt(i)! > 0x7f) throw new UnsupportedSyntaxError();
         throw new Error(`Unexpected character '${ch}' at position ${i}`);
     }
 
