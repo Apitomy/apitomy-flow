@@ -19,6 +19,8 @@ export interface EditorState extends Snapshot {
     past: Snapshot[];
     future: Snapshot[];
     revision: number;
+    /** Monotonic UI draft reset token; deliberately excluded from undo snapshots. */
+    draftReset: number;
     group?: string;
     simulating: boolean;
     interactive: boolean;
@@ -53,7 +55,7 @@ export function createEditorState(workflow: Workflow): EditorState {
         document, nodes: toReactFlowNodes(document.nodes), edges: toReactFlowEdges(document.edges),
         nodeKeys: Object.fromEntries(document.nodes.map(node => [node.id, `initial:${node.id}`])),
         selectedNodeId: null, selectedEdgeId: null, past: [], future: [], revision: fallback ? 1 : 0,
-        simulating: false, interactive: true,
+        simulating: false, interactive: true, draftReset: 0,
     };
 }
 
@@ -104,9 +106,12 @@ export function editorReducer(state: EditorState, command: EditorCommand): Edito
     }
     if (command.type === 'endGroup') return state.group ? { ...state, group: undefined } : state;
     if (command.type === 'select') {
-        return { ...state, ...validSelection(state.document, {
+        const selection = validSelection(state.document, {
             selectedNodeId: command.nodeId ?? null, selectedEdgeId: command.edgeId ?? null,
-        }), group: undefined };
+        });
+        return { ...state, ...selection, group: undefined,
+            draftReset: state.draftReset + (selection.selectedNodeId !== state.selectedNodeId
+                || selection.selectedEdgeId !== state.selectedEdgeId ? 1 : 0) };
     }
     const canvasEnabled = state.interactive && !state.simulating;
     if (command.type === 'nodesChange') {
@@ -145,6 +150,7 @@ export function editorReducer(state: EditorState, command: EditorCommand): Edito
                 past: command.type === 'undo' ? state.past.slice(0, -1) : [...state.past, snapshot(state)],
                 future: command.type === 'redo' ? state.future.slice(0, -1) : [...state.future, snapshot(state)],
                 revision: state.revision + 1,
+                draftReset: state.draftReset + 1,
             };
         }
         case 'nodeData':
@@ -201,7 +207,9 @@ export function editorReducer(state: EditorState, command: EditorCommand): Edito
             const next = commit(state, needsLayout(imported.nodes)
                 ? { ...imported, nodes: layoutWorkflow(imported.nodes, imported.edges) } : imported,
             undefined, { selectedNodeId: null, selectedEdgeId: null }, {});
-            return next === state ? state : { ...next, edges: toReactFlowEdges(next.document.edges) };
+            return { ...next, draftReset: state.draftReset + 1,
+                selectedNodeId: null, selectedEdgeId: null,
+                nodes: toReactFlowNodes(next.document.nodes), edges: toReactFlowEdges(next.document.edges) };
         }
         case 'metadata':
             return commit(state, { ...document, id: command.metadata.id, name: command.metadata.name,

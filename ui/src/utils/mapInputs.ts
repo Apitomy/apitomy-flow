@@ -69,7 +69,7 @@ export function pairsToMap(pairs: KeyValuePair[]): Record<string, string> {
  * @param pairs the edited pairs
  * @return the set of colliding non-empty keys
  */
-export function duplicateKeys(pairs: KeyValuePair[]): Set<string> {
+export function duplicateKeys(pairs: readonly { key: string }[]): Set<string> {
   const seen = new Set<string>();
   const duplicates = new Set<string>();
   for (const pair of pairs) {

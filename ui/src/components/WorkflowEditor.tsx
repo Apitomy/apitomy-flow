@@ -35,6 +35,7 @@ import { SimulationPanel } from './panels/SimulationPanel.tsx';
 import { NodeContextMenu } from './NodeContextMenu.tsx';
 import { useEditorState } from '../hooks/useEditorState.ts';
 import { editorShortcut } from '../hooks/editorShortcuts.ts';
+import { deleteWithEditorFocus } from '../hooks/editorDeletion.ts';
 import {
   startSimulation,
   stepSimulation,
@@ -215,8 +216,8 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
   }, [dispatch]);
 
   const onDeleteNode = useCallback((nodeId: string) => {
-    dispatch({ type: 'delete', nodeIds: [nodeId] });
-  }, [dispatch]);
+    deleteWithEditorFocus(state, { type: 'delete', nodeIds: [nodeId] }, editorRootRef.current, dispatch);
+  }, [state, dispatch]);
 
   const onNodeDragStop = useCallback(() => {
     dispatch({ type: 'commitPositions' });
@@ -316,14 +317,14 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
     event.preventDefault();
     event.stopPropagation();
     if (shortcut === 'delete') {
-      dispatch({ type: 'delete',
+      deleteWithEditorFocus(state, { type: 'delete',
         nodeIds: nodes.filter(node => node.selected).map(node => node.id),
         edgeIds: edges.filter(edge => edge.selected).map(edge => edge.id),
-      });
+      }, editorRootRef.current, dispatch);
     } else {
       dispatch({ type: shortcut });
     }
-  }, [dispatch, nodes, edges, simActive, interactivityEnabled]);
+  }, [dispatch, nodes, edges, simActive, interactivityEnabled, state]);
 
   const onResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -574,6 +575,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
           />
         ) : (
           <PropertiesPanel
+            draftIdentity={`${selectedNodeId ? state.nodeKeys[selectedNodeId] : ''}:${state.draftReset}`}
             selectedNode={selectedNode}
             selectedEdge={selectedEdge}
             nodeProblems={selectedNodeProblems}

@@ -97,3 +97,28 @@ C10 (#133) must run the following rendered scenarios with the actual editor, Rea
 Remaining risks are browser event ordering/focus, asynchronous host echo ambiguity in the existing API,
 and full-document clone/equality cost on large graphs. C10 owns the rendered harness and C13 owns
 large-graph/history benchmarking. No jsdom or browser-test dependency is introduced here.
+
+## Review corrections: map drafts and deletion focus
+
+Map-input rows use a separate, explicit draft protocol (`mapInputDraft.ts`). Each draft records stable row
+IDs and the last serialized map. Semantically equal cloned maps acknowledge that draft without rebuilding
+rows, including duplicate/empty rows that cannot be represented losslessly in a map. Unrelated document
+commits therefore preserve drafts. Unequal external maps replace the draft. Object key order is ignored;
+array order and literal types remain significant. Untouched numeric, boolean, null, object, and array
+values stay literal when another row/key changes; editing a value in the text control produces a string.
+
+The panel receives a logical node key plus a monotonic draft-reset token. Selection transitions and
+successful undo/redo increment the token, while imports reset it even when the imported document equals
+the current document. Ordinary commits and local echoes do not increment it. History snapshots exclude
+the token so resets never rewind. Resetting discards unsaved duplicate rows deliberately, even when their
+serialized map equals the restored map. Both human-task and free-form action maps use this protocol.
+
+Keyboard and context-menu deletion transfer focus to the surviving editor root with `preventScroll`
+before dispatch, keeping immediate scoped undo/redo available when the focused element disappears.
+Locked, simulated, and empty deletions do not move focus. Pure regression tests verify this ordering
+through the real reducer and shortcut policy; they do not prove browser focus behavior.
+
+C10 must additionally verify continuous multi-character map key/value typing without focus/caret loss,
+duplicate/empty rows across unrelated edits, non-last-row removal, equal-map resets, selection switching,
+and literal-value preservation in both map editors. With two editors mounted, focus/select a node or edge
+by keyboard, Delete, Ctrl/Cmd+Z, and redo without an intervening click; repeat context-menu deletion.
