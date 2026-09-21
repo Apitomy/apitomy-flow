@@ -3,10 +3,16 @@ package io.apitomy.flow.engine;
 import io.apitomy.flow.model.*;
 import io.apitomy.flow.spi.*;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.EnumSource;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiFunction;
+import java.util.function.Function;
 
 import static io.apitomy.flow.TestWorkflows.*;
 import static org.junit.jupiter.api.Assertions.*;
@@ -18,6 +24,245 @@ import static org.junit.jupiter.api.Assertions.*;
  * handler receives the correct result or exception.
  */
 class WorkflowEngineErrorTest {
+
+    @ParameterizedTest(name = "two-action cycle={0}")
+    @ValueSource(booleans = {false, true})
+    void recoveryCyclesExhaustTransitionBudget(boolean twoActions) {
+        List<String> failures = new ArrayList<>();
+        WorkflowErrorHandler handler = new WorkflowErrorHandler() {
+            /** Cycles until the engine budget stops recovery, with a probe-only fail-safe. */
+            public ErrorResolution handleNodeError(WorkflowInstance instance, WorkflowNode node,
+                                                    NodeResult result, Exception error) {
+                failures.add(node.id());
+                if (failures.size() >= 150) {
+                    return ErrorResolution.fail();
+                }
+                return ErrorResolution.transitionTo(twoActions && node.id().equals("a") ? "b" : "a");
+            }
+            /** Fails unexpected routing errors. */
+            public ErrorResolution handleNoMatchingEdge(WorkflowInstance instance, WorkflowNode node) {
+                return ErrorResolution.fail();
+            }
+        };
+        Workflow workflow = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), actionNode("a", "fail"), actionNode("b", "fail"), endNode("end")),
+            List.of(edge("start-a", "start", "a"), edge("a-b", "a", "b"), edge("b-end", "b", "end")));
+        WorkflowEngine engine = new WorkflowEngine(NodeExecutorProvider.fromList(failingExecutor("fail")),
+            List.of(), handler);
+
+        WorkflowInstance result = assertDoesNotThrow(() -> engine.startWorkflow(workflow, Map.of()));
+
+        assertEquals(InstanceStatus.FAILED, result.status());
+        assertTrue(result.failureReason().contains("transition limit"), result.failureReason());
+        assertTrue(failures.size() <= 100, "Recovery must stop within the shared transition budget");
+        assertTrue(result.history().stream().allMatch(entry -> entry.branchId().equals("root")));
+        if (twoActions) {
+            assertEquals(List.of("a", "b", "a", "b"), failures.subList(0, 4));
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"exception", "invalid-output", "async-transition", "async-retry",
+        "merge-completed", "merge-pending", "edge-error", "no-edge"})
+    void everyRecoveryEntryPointUsesTheDriverBudget(String path) {
+        AtomicInteger executions = new AtomicInteger();
+        AtomicInteger errors = new AtomicInteger();
+        NodeExecutor executor = testExecutor(context -> {
+            int attempt = executions.incrementAndGet();
+            if (path.startsWith("async") && attempt == 1) {
+                return new NodeResult(NodeResultStatus.PENDING, Map.of());
+            }
+            if (path.equals("exception")) {
+                throw new IllegalStateException("execution failed");
+            }
+            return new NodeResult(path.equals("invalid-output")
+                ? NodeResultStatus.COMPLETED : NodeResultStatus.FAILED, Map.of());
+        });
+        WorkflowErrorHandler handler = recoveryHandler((node, count) -> {
+            if (count >= 150) return ErrorResolution.fail();
+            if (path.equals("async-retry") && count == 1) return ErrorResolution.retry();
+            return ErrorResolution.transitionTo("action");
+        }, errors);
+        WorkflowNode action = actionNode("action", "test", Map.of(),
+            path.equals("invalid-output") ? List.of(inputDef("required", "string", true)) : List.of());
+        List<WorkflowNode> nodes = new ArrayList<>(List.of(startNode("start"), action, endNode("end")));
+        List<WorkflowEdge> edges = new ArrayList<>(List.of(edge("action-end", "action", "end")));
+        if (path.startsWith("merge")) {
+            nodes.add(receiveEventNode("event", "approved", List.of(),
+                List.of(Map.of("contextKey", "mapped", "expression", "event.amount + 1"))));
+            edges.add(edge("start-event", "start", "event"));
+            edges.add(edge("event-action", "event", "action"));
+        } else {
+            edges.add(edge("start-action", "start", "action",
+                path.equals("edge-error") ? "1 +" : path.equals("no-edge") ? "false" : null, 0));
+        }
+        Workflow workflow = new Workflow("w", "W", null, null, nodes, edges);
+        WorkflowEngine engine = new WorkflowEngine(NodeExecutorProvider.fromList(executor), List.of(), handler);
+        WorkflowInstance result = engine.startWorkflow(workflow, Map.of());
+        if (path.startsWith("async")) {
+            assertEquals(InstanceStatus.WAITING, result.status());
+            result = engine.completeNode(workflow, result, "action", new NodeResult(NodeResultStatus.FAILED, Map.of()));
+        } else if (path.startsWith("merge")) {
+            assertEquals(InstanceStatus.WAITING, result.status());
+            result = engine.completeNode(workflow, result, "event", new NodeResult(
+                path.equals("merge-pending") ? NodeResultStatus.PENDING : NodeResultStatus.COMPLETED,
+                Map.of("amount", "not-a-number")));
+        }
+
+        assertEquals(InstanceStatus.FAILED, result.status());
+        assertTrue(result.failureReason().contains("transition limit"), result.failureReason());
+        assertTrue(executions.get() <= 101, "At most 100 executions in this call plus an earlier pending call");
+        assertTrue(errors.get() < 150, "The engine must stop before the probe's fail-safe");
+    }
+
+    @Test
+    void recoveryAndOrdinaryEdgesShareOneBudget() {
+        AtomicInteger executions = new AtomicInteger();
+        NodeExecutor executor = testExecutor(context -> {
+            int attempt = executions.incrementAndGet();
+            return new NodeResult(attempt <= 60 ? NodeResultStatus.FAILED : NodeResultStatus.COMPLETED,
+                Map.of("done", attempt >= 120));
+        });
+        Workflow workflow = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), actionNode("action", "test"), endNode("end")),
+            List.of(edge("start-action", "start", "action"),
+                edge("loop", "action", "action", "!context.done", 0), defaultEdge("end", "action", "end")));
+        WorkflowEngine engine = new WorkflowEngine(NodeExecutorProvider.fromList(executor), List.of(),
+            recoveryHandler((node, count) -> ErrorResolution.transitionTo("action"), new AtomicInteger()));
+
+        WorkflowInstance result = engine.startWorkflow(workflow, Map.of());
+
+        assertEquals(InstanceStatus.FAILED, result.status());
+        assertTrue(result.failureReason().contains("transition limit"));
+        assertEquals(100, executions.get(), "Recovery entries and normal moves consume the same 100 units");
+    }
+
+    @Test
+    void eachExternalCompletionStartsAFreshRecoveryBudget() {
+        AtomicInteger executions = new AtomicInteger();
+        NodeExecutor executor = testExecutor(context -> new NodeResult(
+            executions.incrementAndGet() % 60 == 0 ? NodeResultStatus.PENDING : NodeResultStatus.FAILED, Map.of()));
+        Workflow workflow = simpleActionWorkflow("test");
+        WorkflowEngine engine = new WorkflowEngine(NodeExecutorProvider.fromList(executor), List.of(),
+            recoveryHandler((node, count) -> ErrorResolution.transitionTo("action"), new AtomicInteger()));
+
+        WorkflowInstance first = engine.startWorkflow(workflow, Map.of());
+        assertEquals(InstanceStatus.WAITING, first.status());
+        assertEquals(60, executions.get());
+        WorkflowInstance second = engine.completeNode(workflow, first, "action",
+            new NodeResult(NodeResultStatus.FAILED, Map.of()));
+
+        assertEquals(InstanceStatus.WAITING, second.status());
+        assertEquals(120, executions.get());
+        assertNull(first.history().getLast().completedOn(), "Earlier immutable snapshot stays parked");
+        assertNull(second.history().getLast().completedOn());
+        assertEquals(InstanceStatus.COMPLETED, engine.completeNode(workflow, second, "action",
+            new NodeResult(NodeResultStatus.COMPLETED, Map.of())).status());
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = NodeType.class, names = {"HUMAN_TASK", "WAIT", "RECEIVE_EVENT", "ACTION"})
+    void directRecoveryTargetsParkUntilExternalCompletion(NodeType targetType) {
+        WorkflowNode target = switch (targetType) {
+            case HUMAN_TASK -> humanTaskNode("target");
+            case WAIT -> waitNode("target", "PT1M");
+            case RECEIVE_EVENT -> receiveEventNode("target", "approved");
+            case ACTION -> actionNode("target", "test");
+            default -> throw new IllegalArgumentException("Unsupported target");
+        };
+        Workflow workflow = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), actionNode("action", "test"), target, endNode("end")),
+            List.of(edge("start-action", "start", "action"), edge("action-target", "action", "target"),
+                edge("target-end", "target", "end")));
+        NodeExecutor executor = testExecutor(context -> new NodeResult(
+            context.node().id().equals("target") ? NodeResultStatus.PENDING : NodeResultStatus.FAILED, Map.of()));
+        WorkflowEngine engine = new WorkflowEngine(NodeExecutorProvider.fromList(executor), List.of(),
+            recoveryHandler((node, count) -> ErrorResolution.transitionTo("target"), new AtomicInteger()));
+
+        WorkflowInstance waiting = engine.startWorkflow(workflow, Map.of());
+
+        assertEquals(InstanceStatus.WAITING, waiting.status());
+        assertEquals("target", waiting.currentNodeId());
+        assertEquals(List.of(new ActiveBranch("root", "target")), waiting.activeBranches());
+        assertEquals(List.of("start", "action", "target"),
+            waiting.history().stream().map(HistoryEntry::nodeId).toList());
+        assertNotNull(waiting.history().get(1).completedOn());
+        assertNull(waiting.history().getLast().completedOn());
+        assertNull(waiting.history().getLast().edgeId(), "Recovery entry must not fabricate a followed edge");
+        assertEquals(InstanceStatus.COMPLETED, engine.completeNode(workflow, waiting, "target",
+            new NodeResult(NodeResultStatus.COMPLETED, Map.of())).status());
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = NodeType.class, names = {"HUMAN_TASK", "WAIT", "RECEIVE_EVENT", "ACTION", "END"})
+    void mergeErrorRecoveryRunsMultiStepChainThenEntersTarget(NodeType targetType) {
+        WorkflowNode target = switch (targetType) {
+            case HUMAN_TASK -> humanTaskNode("target");
+            case WAIT -> waitNode("target", "PT1M");
+            case RECEIVE_EVENT -> receiveEventNode("target", "approved");
+            case ACTION -> actionNode("target", "test");
+            case END -> endNode("target");
+            default -> throw new IllegalArgumentException("Unsupported target");
+        };
+        List<WorkflowNode> nodes = new ArrayList<>(List.of(startNode("start"),
+            receiveEventNode("event", "approved", List.of(),
+                List.of(Map.of("contextKey", "mapped", "expression", "event.amount + 1"))),
+            actionNode("recovery", "test"), actionNode("cleanup", "test"), target));
+        List<WorkflowEdge> edges = new ArrayList<>(List.of(edge("start-event", "start", "event"),
+            edge("event-recovery", "event", "recovery"), edge("recovery-cleanup", "recovery", "cleanup"),
+            edge("cleanup-target", "cleanup", "target")));
+        if (targetType != NodeType.END) {
+            nodes.add(endNode("end"));
+            edges.add(edge("target-end", "target", "end"));
+        }
+        Workflow workflow = new Workflow("w", "W", null, null, nodes, edges);
+        NodeExecutor executor = testExecutor(context -> new NodeResult(
+            context.node().id().equals("target") ? NodeResultStatus.PENDING : NodeResultStatus.COMPLETED,
+            Map.of(context.node().id(), true)));
+        WorkflowEngine engine = new WorkflowEngine(NodeExecutorProvider.fromList(executor), List.of(),
+            recoveryHandler((node, count) -> ErrorResolution.transitionTo("recovery"), new AtomicInteger()));
+        WorkflowInstance waiting = engine.startWorkflow(workflow, Map.of());
+
+        WorkflowInstance result = engine.completeNode(workflow, waiting, "event",
+            new NodeResult(NodeResultStatus.COMPLETED, Map.of("amount", "not-a-number")));
+
+        assertEquals(targetType == NodeType.END ? InstanceStatus.COMPLETED : InstanceStatus.WAITING, result.status());
+        assertEquals("target", result.currentNodeId());
+        assertEquals(true, result.context().get("recovery"));
+        assertEquals(true, result.context().get("cleanup"));
+        assertEquals(List.of("start", "event", "recovery", "cleanup", "target"),
+            result.history().stream().map(HistoryEntry::nodeId).toList());
+        assertTrue(result.history().stream().allMatch(entry -> entry.branchId().equals("root")));
+        if (targetType != NodeType.END) {
+            assertNull(result.history().getLast().completedOn());
+            result = engine.completeNode(workflow, result, "target", new NodeResult(NodeResultStatus.COMPLETED, Map.of()));
+            assertEquals(InstanceStatus.COMPLETED, result.status());
+        }
+    }
+
+    private NodeExecutor testExecutor(Function<NodeExecutionContext, NodeResult> execute) {
+        return new NodeExecutor() {
+            /** Identifies the test action type. */
+            public String actionType() { return "test"; }
+            /** Supplies the result for this activation. */
+            public NodeResult execute(NodeExecutionContext context) { return execute.apply(context); }
+        };
+    }
+
+    private WorkflowErrorHandler recoveryHandler(BiFunction<WorkflowNode, Integer, ErrorResolution> recover,
+                                                  AtomicInteger errors) {
+        return new WorkflowErrorHandler() {
+            /** Selects recovery for a node failure. */
+            public ErrorResolution handleNodeError(WorkflowInstance instance, WorkflowNode node,
+                                                    NodeResult result, Exception error) {
+                return recover.apply(node, errors.incrementAndGet());
+            }
+            /** Selects recovery when routing cannot continue. */
+            public ErrorResolution handleNoMatchingEdge(WorkflowInstance instance, WorkflowNode node) {
+                return recover.apply(node, errors.incrementAndGet());
+            }
+        };
+    }
 
     private NodeExecutor failingExecutor(String actionType) {
         return new NodeExecutor() {
