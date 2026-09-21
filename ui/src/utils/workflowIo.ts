@@ -1,6 +1,8 @@
 import { type Workflow } from '../types/workflow.ts';
 import { type ValidationProblem } from '../types/validation.ts';
 import { validateWorkflow } from '../validation/validateWorkflow.ts';
+import { normalizeWorkflow } from '../validation/workflowShape.ts';
+import { layoutWorkflow } from '../layout/layoutWorkflow.ts';
 
 /** Outcome of importing a workflow definition from JSON text. */
 export interface ImportResult {
@@ -38,38 +40,20 @@ export function parseWorkflow(text: string): ImportResult {
     return { problems: [], error: `Not valid JSON: ${(e as Error).message}` };
   }
 
-  const shapeError = shapeProblem(raw);
-  if (shapeError) {
-    return { problems: [], error: shapeError };
+  const normalized = normalizeWorkflow(raw);
+  if (!normalized.workflow) {
+    return { problems: normalized.problems, error: normalized.problems[0]?.message };
   }
 
-  const workflow = raw as Workflow;
-  let problems: ValidationProblem[];
-  try {
-    problems = validateWorkflow(workflow);
-  } catch (e) {
-    return {
-      problems: [],
-      error: `Invalid workflow definition: ${(e as Error).message}`,
-    };
-  }
+  const workflow = normalized.workflow;
+  const problems = validateWorkflow(workflow);
   if (problems.some(p => p.severity === 'error')) {
     return { problems };
   }
-  return { workflow, problems };
-}
-
-/** Returns a message describing the first structural problem, or undefined when the shape is acceptable. */
-function shapeProblem(raw: unknown): string | undefined {
-  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-    return 'A workflow definition must be a JSON object.';
+  if (normalized.needsLayout) {
+    workflow.nodes = layoutWorkflow(workflow.nodes, workflow.edges);
   }
-  const obj = raw as Record<string, unknown>;
-  if (typeof obj.id !== 'string') return 'A workflow definition must have a string "id".';
-  if (typeof obj.name !== 'string') return 'A workflow definition must have a string "name".';
-  if (!Array.isArray(obj.nodes)) return 'A workflow definition must have a "nodes" array.';
-  if (!Array.isArray(obj.edges)) return 'A workflow definition must have an "edges" array.';
-  return undefined;
+  return { workflow, problems };
 }
 
 /** Builds a filesystem-friendly base filename (no extension) from a workflow's id/name. */

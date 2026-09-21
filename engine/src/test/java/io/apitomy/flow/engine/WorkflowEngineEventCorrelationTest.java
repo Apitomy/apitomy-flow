@@ -119,17 +119,16 @@ class WorkflowEngineEventCorrelationTest {
     }
 
     @Test
-    void matchesEventReturnsFalseForNonStringEventType() {
+    void rejectsNonStringEventTypeBeforeStarting() {
         WorkflowNode receiveNode = new WorkflowNode("wait", NodeType.RECEIVE_EVENT, "Wait",
             Map.of("eventType", 42), new Position(0, 0));
         Workflow workflow = new Workflow("w", "W", null, null,
             List.of(startNode("start"), receiveNode, endNode("end")),
             List.of(edge("e1", "start", "wait"), edge("e2", "wait", "end")));
 
-        WorkflowInstance instance = engine.startWorkflow(workflow, Map.of());
-        assertEquals(InstanceStatus.WAITING, instance.status());
-
-        assertFalse(engine.matchesEvent(workflow, instance, Map.of("type", "42")),
-            "Should return false gracefully, not throw ClassCastException");
+        WorkflowValidationException failure = assertThrows(WorkflowValidationException.class,
+            () -> engine.startWorkflow(workflow, Map.of()));
+        assertTrue(failure.getProblems().stream().anyMatch(problem ->
+            problem.code().equals("INVALID_EVENT_TYPE_VALUE") && "wait".equals(problem.nodeId())));
     }
 }
