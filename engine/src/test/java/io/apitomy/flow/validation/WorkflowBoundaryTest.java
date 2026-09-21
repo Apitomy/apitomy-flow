@@ -1,12 +1,16 @@
 package io.apitomy.flow.validation;
 
 import io.apitomy.flow.model.*;
+import io.apitomy.flow.engine.WorkflowEngine;
+import io.apitomy.flow.engine.WorkflowValidationException;
+import io.apitomy.flow.spi.NodeExecutorProvider;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestFactory;
 import org.junit.jupiter.api.DynamicTest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
@@ -16,6 +20,49 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class WorkflowBoundaryTest {
     private final WorkflowValidator validator = new WorkflowValidator();
+
+    @TestFactory
+    Stream<DynamicTest> rejectsNonStringDeclarationMappingAndOptionKeysBeforeAdaptation() {
+        return Stream.of(NodeType.START, NodeType.ACTION, NodeType.HUMAN_TASK, NodeType.RECEIVE_EVENT)
+            .flatMap(type -> (type == NodeType.RECEIVE_EVENT ? Stream.of(false) : Stream.of(false, true))
+                .flatMap(option -> Stream.of(42, null).map(key -> DynamicTest.dynamicTest(
+                    type + (option ? " option" : " declaration") + " key=" + key, () -> {
+                        Map<Object, Object> malformed = new LinkedHashMap<>();
+                        malformed.put(key, "host");
+                        Map<Object, Object> declaration = new LinkedHashMap<>();
+                        if (type == NodeType.RECEIVE_EVENT) {
+                            declaration.put("contextKey", "received");
+                            declaration.put("expression", "event.value");
+                        } else {
+                            declaration.put("name", "id");
+                        }
+                        if (option) {
+                            malformed.put("label", "Yes");
+                            malformed.put("value", "yes");
+                            declaration.put("options", List.of(malformed));
+                        } else {
+                            declaration.putAll(malformed);
+                        }
+                        String collection = type == NodeType.START ? "inputs" : "outputs";
+                        WorkflowNode node = new WorkflowNode("a", type, "A",
+                            Map.of(collection, List.of(declaration), "actionType", "noop"), null);
+                        Workflow workflow = type == NodeType.START
+                            ? new Workflow("w", "W", null, null, List.of(node, endNode("e")),
+                                List.of(edge("ae", "a", "e")))
+                            : withNode(node);
+                        String code = option ? "MALFORMED_OUTPUT_OPTION"
+                            : type == NodeType.START ? "INVALID_INPUT_DEFINITION" : "INVALID_OUTPUT_DEFINITION";
+                        String path = "config." + collection + "[0]" + (option ? ".options[0]" : "");
+                        assertError(workflow, code);
+                        List<ValidationProblem> problems = validator.validate(workflow);
+                        assertTrue(problems.stream().anyMatch(problem -> problem.code().equals(code)
+                            && "a".equals(problem.nodeId()) && problem.message().contains(path)));
+                        WorkflowEngine engine = new WorkflowEngine(NodeExecutorProvider.fromList(List.of()), List.of(), null);
+                        WorkflowValidationException failure = assertThrows(WorkflowValidationException.class,
+                            () -> engine.startWorkflow(workflow, Map.of()));
+                        assertEquals(problems, failure.getProblems());
+                    }))));
+    }
 
     private void assertError(Workflow workflow, String code) {
         List<ValidationProblem> problems = assertDoesNotThrow(() -> validator.validate(workflow));

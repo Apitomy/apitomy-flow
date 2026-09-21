@@ -4,11 +4,17 @@
         "id": "config-contract", "name": "All built-in configs", "version": 3,
         "nodes": [
             { "id": "start", "type": "start", "name": "Start", "config": {
-                "inputs": [{ "name": "id", "type": null, "required": null, "x-field": [null, 1] }]
+                "inputs": [{ "name": "id", "type": null, "required": null, "x-field": [null, 1],
+                    "contextKey": null, "label": null, "description": null, "widget": "host-widget",
+                    "options": [{ "label": null, "value": "yes", "x-option": [null, true] }],
+                    "defaultValue": { "nested": [null, 1] } }]
             } },
             { "id": "action", "type": "action", "name": "Action", "position": null, "config": {
                 "actionType": "host", "inputs": { "literal": [null, true, 42, { "nested": "value" }] },
-                "outputs": [{ "name": "result", "contextKey": "renamed", "x-output": { "flag": true } }],
+                "outputs": [{ "name": "result", "contextKey": "renamed", "x-output": { "flag": true },
+                    "label": null, "description": null, "widget": "host-widget",
+                    "options": [{ "label": null, "value": "yes", "x-option": [null, true] }],
+                    "defaultValue": { "nested": [null, 1] } }],
                 "x-host": { "nested": [null, { "enabled": true }] }
             } },
             { "id": "human", "type": "human-task", "name": "Human", "config": {

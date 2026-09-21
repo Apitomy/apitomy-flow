@@ -7,7 +7,18 @@ export interface JsonObject { [key: string]: JsonValue | undefined }
 /** Unknown config keys are host-owned JSON. Prefer namespaced keys such as `x-acme`. */
 export type ConfigExtensions = JsonObject;
 
-export interface WorkflowInput extends ConfigExtensions {
+/** Reserved metadata on every input/output declaration; unknown keys remain host-owned JSON. */
+export interface DeclarationMetadata extends ConfigExtensions {
+    description?: string | null;
+    label?: string | null;
+    /** Advisory text on start/action declarations; human-task authoring offers supported widgets. */
+    widget?: string | null;
+    contextKey?: string | null;
+    options?: OutputOption[] | null;
+    defaultValue?: JsonValue;
+}
+
+export interface WorkflowInput extends DeclarationMetadata {
   name: string;
   type?: 'string' | 'number' | 'boolean' | 'object' | null;
   required?: boolean | null;
@@ -30,7 +41,7 @@ export interface OutputOption extends ConfigExtensions {
  * every other attribute is optional and backward-compatible. Consumed by hosts (e.g. Axiom) to
  * render the runtime completion form.
  */
-export interface HumanTaskOutput extends ConfigExtensions {
+export interface HumanTaskOutput extends DeclarationMetadata {
   /** Context key the answer is stored under. */
   name: string;
   /** Semantic type governing the stored value. Defaults to `string` when omitted. */
@@ -60,7 +71,7 @@ export interface HumanTaskOutput extends ConfigExtensions {
  * the action type descriptor (`ActionTypeField`), plus the per-node-instance `contextKey`
  * override.
  */
-export interface ActionOutputConfig extends ConfigExtensions {
+export interface ActionOutputConfig extends DeclarationMetadata {
   /** The output's declared name (as produced by the action executor). */
   name: string;
   type?: 'string' | 'number' | 'boolean' | 'object' | null;

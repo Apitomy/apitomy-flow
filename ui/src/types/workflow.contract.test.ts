@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { WorkflowNode, ActionOutputConfig, EventOutputMapping, JsonValue,
+import type { WorkflowNode, WorkflowInput, ActionOutputConfig, EventOutputMapping, JsonValue,
     StartConfig, EndConfig, ActionConfig, HumanTaskConfig, ReceiveEventConfig, WaitConfig } from '../index.ts';
 
 describe('public typed workflow contract', () => {
@@ -36,3 +36,35 @@ function checkContract(node: WorkflowNode) {
     void [wrongInputs, wrongDuration, wrongExtension];
 }
 void checkContract;
+
+// Each reserved field must reject malformed JSON independently of the extension index signature.
+function checkDeclarationMetadata() {
+    // @ts-expect-error Reserved contextKey is nullable text, not a JSON number.
+    const inputKey: WorkflowInput = { name: 'id', contextKey: 42 };
+    // @ts-expect-error Reserved label is nullable text.
+    const inputLabel: WorkflowInput = { name: 'id', label: 42 };
+    // @ts-expect-error Reserved widget is nullable text.
+    const inputWidget: WorkflowInput = { name: 'id', widget: [] };
+    // @ts-expect-error Reserved options must contain option objects.
+    const inputOptions: WorkflowInput = { name: 'id', options: [null] };
+    // @ts-expect-error Option values are nullable text, including on start declarations.
+    const inputOptionValue: WorkflowInput = { name: 'id', options: [{ value: 42 }] };
+    // @ts-expect-error Reserved label is nullable text.
+    const actionLabel: ActionOutputConfig = { name: 'result', label: 42 };
+    // @ts-expect-error Reserved description is nullable text.
+    const actionDescription: ActionOutputConfig = { name: 'result', description: { bad: true } };
+    // @ts-expect-error Reserved widget is nullable text.
+    const actionWidget: ActionOutputConfig = { name: 'result', widget: [] };
+    // @ts-expect-error Reserved options must contain option objects.
+    const actionOptions: ActionOutputConfig = { name: 'result', options: [null] };
+    // @ts-expect-error Option labels are nullable text, including on action declarations.
+    const actionOptionLabel: ActionOutputConfig = { name: 'result', options: [{ label: 42 }] };
+    const metadata = { label: null, description: null, widget: 'host-widget', contextKey: null,
+        options: [{ label: null, value: 'yes', 'x-option': [null, true] }],
+        defaultValue: { nested: [null, 1] }, 'x-host': { values: [null, true] } };
+    const input: WorkflowInput = { name: 'id', ...metadata };
+    const action: ActionOutputConfig = { name: 'result', ...metadata };
+    void [inputKey, inputLabel, inputWidget, inputOptions, inputOptionValue, actionLabel,
+        actionDescription, actionWidget, actionOptions, actionOptionLabel, input, action];
+}
+void checkDeclarationMetadata;

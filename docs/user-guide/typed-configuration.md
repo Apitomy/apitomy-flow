@@ -16,7 +16,12 @@ the responsibility of the existing validators. Passing the schema alone does not
 The package root exports `WorkflowNode`, `NodeConfigMap`, `NodeConfig`, `StartConfig`, `EndConfig`,
 `ActionConfig`, `HumanTaskConfig`, `ReceiveEventConfig`, `WaitConfig`, `WorkflowInput`,
 `ActionOutputConfig`, `HumanTaskOutput`, `OutputOption`, `OutputWidget`, `EventOutputMapping`,
-`JsonValue`, `JsonObject`, and `ConfigExtensions`.
+`JsonValue`, `JsonObject`, `ConfigExtensions`, and `DeclarationMetadata`.
+
+All input/output declarations reserve `description`, `label`, `widget`, `contextKey`, `options`, and
+`defaultValue` through `DeclarationMetadata`, including start/action declarations where presentation
+metadata is advisory. Those keys retain their structural types rather than falling through to the
+extension index signature. Unknown keys still accept recursive JSON values.
 
 `WorkflowNode` is a discriminated union. Narrow `node.type` before interpreting built-in configuration:
 

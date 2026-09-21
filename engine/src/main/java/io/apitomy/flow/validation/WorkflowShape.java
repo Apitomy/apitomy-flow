@@ -88,6 +88,8 @@ final class WorkflowShape {
                 check(false, eventMappings ? "MISSING_OUTPUT_CONTEXT_KEY" : code, path, "an object", nodeId, problems);
                 continue;
             }
+            check(def.keySet().stream().allMatch(String.class::isInstance), code, path,
+                "an object with string keys", nodeId, problems);
             if (eventMappings) {
                 check(def.get("contextKey") == null || def.get("contextKey") instanceof String,
                     "MISSING_OUTPUT_CONTEXT_KEY", path + ".contextKey", "a string", nodeId, problems);
@@ -108,10 +110,11 @@ final class WorkflowShape {
                 for (int j = 0; j < optionList.size(); j++) {
                     Object option = optionList.get(j);
                     check(option instanceof Map<?, ?> opt
+                        && opt.keySet().stream().allMatch(String.class::isInstance)
                         && (opt.get("label") == null || opt.get("label") instanceof String)
                         && (opt.get("value") == null || opt.get("value") instanceof String),
                         "MALFORMED_OUTPUT_OPTION", path + ".options[" + j + "]",
-                        "an object with string label/value", nodeId, problems);
+                        "an object with string keys and string label/value", nodeId, problems);
                 }
             }
         }

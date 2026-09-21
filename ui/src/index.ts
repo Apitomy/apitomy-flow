@@ -1,6 +1,6 @@
 export type {
     Workflow, WorkflowNode, WorkflowEdge, NodeType, WorkflowInput, HumanTaskOutput, OutputOption, OutputWidget,
-    ActionOutputConfig, EventOutputMapping, JsonValue, JsonObject, ConfigExtensions, NodeConfig, NodeConfigMap,
+    ActionOutputConfig, EventOutputMapping, JsonValue, JsonObject, ConfigExtensions, DeclarationMetadata, NodeConfig, NodeConfigMap,
     StartConfig, EndConfig, ActionConfig, HumanTaskConfig, ReceiveEventConfig, WaitConfig,
 } from './types/workflow.ts';
 export type { WorkflowInstance, InstanceStatus, HistoryEntry, ActiveBranch } from './types/instance.ts';
