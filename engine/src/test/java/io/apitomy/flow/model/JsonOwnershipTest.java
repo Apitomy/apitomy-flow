@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.BinaryNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.POJONode;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import io.apitomy.flow.spi.NodeExecutionContext;
@@ -17,8 +18,11 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -172,6 +176,47 @@ class JsonOwnershipTest {
         assertEquals(1, reread.path("array").size());
         assertThrows(UnsupportedOperationException.class,
             () -> instance.context().entrySet().iterator().next().setValue("replacement"));
+    }
+
+    @Test
+    void keyIterationDoesNotCopyTreeValuesOrAllowSnapshotMutation() {
+        AtomicInteger treeCreations = new AtomicInteger();
+        JsonNodeFactory factory = new JsonNodeFactory(false) {
+            /** Counts tree creation while preserving normal Jackson object-node behavior. */
+            @Override
+            public ObjectNode objectNode() {
+                treeCreations.incrementAndGet();
+                return super.objectNode();
+            }
+        };
+        ObjectNode tree = factory.objectNode();
+        tree.putObject("nested").put("value", 1);
+        Map<String, Object> supplied = new LinkedHashMap<>();
+        supplied.put("payload", tree);
+        supplied.put("nothing", null);
+        Map<String, Object> snapshot = WorkflowInstance.builder().context(supplied).build().context();
+        supplied.clear();
+        treeCreations.set(0);
+
+        Set<String> keys = snapshot.keySet();
+        List<String> expected = List.of("payload", "nothing");
+        assertEquals(expected, new ArrayList<>(keys));
+        assertEquals(expected, keys.stream().toList());
+        List<String> visited = new ArrayList<>();
+        keys.forEach(visited::add);
+        assertEquals(expected, visited);
+        Iterator<String> iterator = keys.iterator();
+        assertEquals("payload", iterator.next());
+        assertThrows(UnsupportedOperationException.class, iterator::remove);
+        assertThrows(UnsupportedOperationException.class, () -> keys.remove("payload"));
+        assertThrows(UnsupportedOperationException.class, keys::clear);
+        assertEquals(0, treeCreations.get(), "key-only reads must not copy any tree values");
+
+        ObjectNode read = (ObjectNode) snapshot.get("payload");
+        assertTrue(treeCreations.get() > 0, "the counter must detect an actual detached tree read");
+        ((ObjectNode) read.path("nested")).put("value", 2);
+        assertEquals(1, ((JsonNode) snapshot.get("payload")).path("nested").path("value").asInt());
+        assertEquals(expected, new ArrayList<>(keys));
     }
 
     @Test

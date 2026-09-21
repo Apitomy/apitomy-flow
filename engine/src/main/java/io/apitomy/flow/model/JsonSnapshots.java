@@ -123,6 +123,10 @@ public final class JsonSnapshots {
         @Override
         public boolean containsKey(Object key) { return values.containsKey(key); }
 
+        /** Returns read-only keys without reading or detaching any tree values. */
+        @Override
+        public Set<Object> keySet() { return Collections.unmodifiableSet(values.keySet()); }
+
         /** Returns entries whose values never expose an owned mutable tree. */
         @Override
         public Set<Entry<Object, Object>> entrySet() { return entries; }
