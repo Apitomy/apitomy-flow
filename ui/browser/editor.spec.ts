@@ -1,6 +1,56 @@
 import { test, expect, changes, field, ready, completeGraphs } from './test.ts';
 import { importedWorkflow, workflow } from './fixtures.ts';
 
+test('undo restores panel and canvas selection after selecting another node, including Delete payload', async ({ page }) => {
+    await page.goto('/');
+    const editor = page.getByTestId('one');
+    await ready(editor);
+    await editor.locator('.react-flow__node[data-id="a"]').click();
+    await field(editor, 'Name').fill('Edited action');
+    await editor.locator('.react-flow__node[data-id="h"]').click();
+    await expect(field(editor, 'Name')).toHaveValue('Review');
+    await editor.getByRole('button', { name: 'Undo', exact: true }).click();
+    await expect(field(editor, 'Name')).toHaveValue('Action');
+    await expect(field(editor, 'Node ID')).toHaveValue('a');
+    await expect(editor.locator('.react-flow__node.selected')).toHaveCount(1);
+    await expect(editor.locator('.react-flow__node[data-id="a"]')).toHaveClass(/selected/);
+    await expect(editor.locator('.react-flow__edge.selected')).toHaveCount(0);
+    await editor.locator('[data-workflow-editor]').focus();
+    await page.keyboard.press('Delete');
+    await expect(editor.locator('.react-flow__node')).toHaveCount(3);
+    const emitted = await changes(editor);
+    expect(emitted).toHaveLength(3);
+    expect(emitted[2]).toEqual({ ...workflow(), nodes: workflow().nodes.filter(node => node.id !== 'a'),
+        edges: workflow().edges.filter(edge => edge.id === 'he') });
+    await expect(editor.locator('.properties-panel')).toContainText('Select a node');
+    completeGraphs(emitted);
+});
+
+test('import redo clears intervening edge selection in panel and canvas before Delete', async ({ page }) => {
+    await page.goto('/');
+    const editor = page.getByTestId('one');
+    await ready(editor);
+    await editor.locator('input[type=file]').setInputFiles({ name: 'import.json', mimeType: 'application/json',
+        buffer: Buffer.from(JSON.stringify(importedWorkflow())) });
+    await expect.poll(async () => (await changes(editor)).length).toBe(1);
+    const imported = (await changes(editor))[0];
+    await editor.getByRole('button', { name: 'Undo', exact: true }).click();
+    const edge = editor.getByRole('group', { name: 'Edge from s to a', exact: true });
+    await edge.focus();
+    await page.keyboard.press('Enter');
+    await expect(edge).toHaveClass(/selected/);
+    await editor.getByRole('button', { name: 'Redo', exact: true }).click();
+    await expect(editor.locator('.properties-panel')).toContainText('Select a node');
+    await expect(editor.locator('.react-flow__node.selected, .react-flow__edge.selected')).toHaveCount(0);
+    expect((await changes(editor)).at(-1)).toEqual(imported);
+    await editor.locator('[data-workflow-editor]').focus();
+    await page.keyboard.press('Delete');
+    await expect(editor.locator('.react-flow__edge')).toHaveCount(imported.edges.length);
+    expect(await changes(editor)).toHaveLength(3);
+    expect((await changes(editor)).at(-1)).toEqual(imported);
+    completeGraphs(await changes(editor));
+});
+
 test('StrictMode positioned mounts are silent; fallback layout publishes once and is not undoable', async ({ page }) => {
     await page.goto('/');
     const editor = page.getByTestId('one');
