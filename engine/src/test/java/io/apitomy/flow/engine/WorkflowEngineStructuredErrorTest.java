@@ -5,6 +5,7 @@ import io.apitomy.flow.spi.*;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -18,6 +19,58 @@ import static io.apitomy.flow.TestWorkflows.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class WorkflowEngineStructuredErrorTest {
+    @ParameterizedTest
+    @CsvSource({"1 +, 99, 1, a0", "false, 99, 1, a0", "1 +, 98, 2, a1", "false, 98, 2, a1",
+        "1 +, 2, 98, a1", "false, 2, 98, a1"})
+    void budgetFailureRetainsLatestEdgeErrorWithRetriesBehindSiblings(String condition, int siblings,
+                                                                      int expectedErrors, String failingNode) {
+        List<WorkflowNode> nodes = new ArrayList<>(List.of(startNode("start"), endNode("end")));
+        List<WorkflowEdge> edges = new ArrayList<>();
+        for (int index = 0; index < siblings; index++) {
+            String id = "a" + index;
+            nodes.add(actionNode(id, "test"));
+            edges.add(edge("start-" + id, "start", id));
+            edges.add(edge("out-" + id, id, "end", index < 2 ? condition : null, 0));
+        }
+        List<WorkflowError> handled = new ArrayList<>();
+        AtomicReference<Exception> notified = new AtomicReference<>();
+        AtomicInteger executions = new AtomicInteger();
+        WorkflowEngine engine = new WorkflowEngine(provider(context -> {
+            executions.incrementAndGet();
+            return new NodeResult(NodeResultStatus.COMPLETED, null);
+        }), List.of(new WorkflowEventListener() {
+            /** Captures the actual budget failure diagnostic. */
+            public void onWorkflowFailed(WorkflowInstance instance, Exception error) { notified.set(error); }
+        }), new DefaultErrorHandler() {
+            /** Queues edge retries behind runnable siblings in the real driver. */
+            public ErrorResolution handleError(WorkflowInstance instance, WorkflowNode node,
+                                               NodeResult result, WorkflowError error) {
+                handled.add(error);
+                return ErrorResolution.retry();
+            }
+        });
+
+        WorkflowInstance result = engine.startWorkflow(new Workflow("w", "W", null, null, nodes, edges), Map.of());
+
+        assertEquals(InstanceStatus.FAILED, result.status());
+        assertEquals(siblings, executions.get(), "Edge retries must not re-execute completed actions");
+        assertEquals(expectedErrors, handled.size(), "Retries must retain tail ordering and the shared budget");
+        WorkflowError latest = handled.getLast();
+        assertEquals(failingNode, latest.nodeId());
+        assertSame(latest, notified.get(), "An older queued recovery must not replace the latest diagnostic");
+        assertTrue(result.failureReason().contains("transition limit"), result.failureReason());
+        assertTrue(result.failureReason().contains("node=" + failingNode), result.failureReason());
+        if (condition.equals("1 +")) {
+            assertEquals(WorkflowError.Phase.EDGE_CONDITION, latest.phase());
+            assertTrue(result.failureReason().contains("edge=out-" + failingNode), result.failureReason());
+            assertTrue(result.failureReason().contains("expression=1 +"), result.failureReason());
+            assertInstanceOf(ConditionEvaluationException.class, latest.getCause());
+        } else {
+            assertEquals(WorkflowError.Phase.EDGE_SELECTION, latest.phase());
+            assertTrue(result.failureReason().contains("No matching outgoing edge"), result.failureReason());
+        }
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"input", "output", "edge", "mapping", "execution", "lookup", "no-edge"})
     void structuredCallbackAndFailureListenerRetainIdentityAndCause(String path) {

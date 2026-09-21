@@ -677,7 +677,9 @@ public class WorkflowEngine {
         int transitions = 0;
         WorkflowError lastError = null;
         while (!work.isEmpty()) {
-            if (work.peek().error() != null) {
+            // Entry/external-retry recovery is queued at the front. Edge retries sit behind siblings:
+            // record those when selection fails below, never replay an older diagnostic at dequeue time.
+            if (work.peek().error() != null && work.peek().kind() != WorkKind.CONTINUE) {
                 lastError = work.peek().error();
             }
             if (transitions >= MAX_TRANSITIONS) {
@@ -729,6 +731,7 @@ public class WorkflowEngine {
                     selected = selectEdge(workflow, instance, node);
                 } catch (WorkflowError e) {
                     transitions++;
+                    lastError = e;
                     instance = resolveEdgeError(workflow, instance, branch.branchId(), node, null, e, work);
                     if (instance.status() != InstanceStatus.RUNNING) return instance;
                     enqueueContinuation(instance, branch.branchId(), work);
@@ -736,7 +739,9 @@ public class WorkflowEngine {
                 }
                 if (selected == null) {
                     transitions++;
-                    instance = resolveNoEdge(workflow, instance, branch.branchId(), node, work);
+                    lastError = new WorkflowError(WorkflowError.Phase.EDGE_SELECTION, node.id(), null,
+                        null, null, "No matching outgoing edge", null);
+                    instance = resolveNoEdge(workflow, instance, branch.branchId(), node, lastError, work);
                     if (instance.status() != InstanceStatus.RUNNING) return instance;
                     enqueueContinuation(instance, branch.branchId(), work);
                     continue;
@@ -976,13 +981,13 @@ public class WorkflowEngine {
      * @param instance the instance being advanced
      * @param branchId the id of the branch with no matching outgoing edge
      * @param node     the node with no matching outgoing edge
+     * @param error    the selection diagnostic already recorded by the call-local driver
      * @param work     the call-local queue receiving recovery entry work
      * @return the resolved instance
      */
     private WorkflowInstance resolveNoEdge(Workflow workflow, WorkflowInstance instance, String branchId,
-                                           WorkflowNode node, Deque<BranchWork> work) {
-        Recovery resolution = recover(workflow, instance, node, null, new WorkflowError(
-            WorkflowError.Phase.EDGE_SELECTION, node.id(), null, null, null, "No matching outgoing edge", null));
+                                           WorkflowNode node, WorkflowError error, Deque<BranchWork> work) {
+        Recovery resolution = recover(workflow, instance, node, null, error);
         return applyResolution(workflow, instance, branchId, node, resolution, work);
     }
 
