@@ -51,7 +51,12 @@ export function parseWorkflow(text: string): ImportResult {
     return { problems };
   }
   if (normalized.needsLayout) {
-    workflow.nodes = layoutWorkflow(workflow.nodes, workflow.edges);
+    try {
+      workflow.nodes = layoutWorkflow(workflow.nodes, workflow.edges);
+    } catch {
+      const message = 'Automatic layout failed to produce valid node positions.';
+      return { problems: [...problems, { severity: 'error', code: 'LAYOUT_FAILED', message }], error: message };
+    }
   }
   return { workflow, problems };
 }

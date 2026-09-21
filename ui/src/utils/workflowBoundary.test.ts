@@ -17,6 +17,22 @@ function definition() {
 }
 
 describe('workflow JSON boundary', () => {
+    it.each(['constructor', 'toString', '__proto__', 'layout-0'])('lays out the legitimate ID %s safely', id => {
+        const raw = definition();
+        raw.nodes[1].id = id;
+        raw.edges[0].target = id;
+        raw.edges[1].source = id;
+        const result = parseWorkflow(JSON.stringify(raw));
+        expect(result.error).toBeUndefined();
+        expect(result.workflow).toBeDefined();
+        expect(result.workflow!.nodes.map(node => node.id)).toEqual(['s', id, 'e']);
+        expect(result.workflow!.edges).toMatchObject(raw.edges);
+        expect(result.workflow!.nodes.every(node => Number.isFinite(node.position.x)
+            && Number.isFinite(node.position.y))).toBe(true);
+        expect(result.workflow!.nodes[0].position.x).toBeLessThan(result.workflow!.nodes[1].position.x);
+        expect(result.workflow!.nodes[1].position.x).toBeLessThan(result.workflow!.nodes[2].position.x);
+    });
+
     it.each([null, 3, true, 'workflow', [], {}, { id: 'x', name: 'X', nodes: {}, edges: [] },
         { id: 'x', name: 'X', nodes: [], edges: null }])('reports malformed roots as structured errors: %j', raw => {
         const result = parseWorkflow(JSON.stringify(raw));
