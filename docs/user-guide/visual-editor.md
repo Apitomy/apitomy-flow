@@ -198,6 +198,8 @@ The editor retains such expressions and reports `UNSUPPORTED_EXPRESSION_DIALECT`
 them malformed. This warning means the browser cannot validate them; Java validation remains authoritative.
 Trying to simulate them produces an explicit unsupported-dialect error. Edge conditions and event-output
 mappings use the same parser; malformed supported syntax such as `1e` or `1 +` is diagnosed in both.
+Unquoted Unicode identifiers such as `context.café` also receive the advisory unsupported warning and
+remain importable. Use quoted keys such as `context['café']` for browser evaluation.
 
 **Loop guard:** each advancement allows 100 transitions across runnable branches. Resuming a blocked
 node starts a fresh budget; repeated Step/Run calls do not. Actions always pause in the simulator,
