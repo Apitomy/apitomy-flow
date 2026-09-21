@@ -2,12 +2,17 @@ import { type Workflow, type WorkflowEdge } from '../types/workflow.ts';
 import { type ValidationProblem, type ValidationSeverity } from '../types/validation.ts';
 import { analyzeParallelRegions } from '../simulation/parallelRegions.ts';
 import { isValidExpression } from '../simulation/elEvaluator.ts';
+import { normalizeWorkflow } from './workflowShape.ts';
 
 function problem(severity: ValidationSeverity, code: string, message: string, nodeId?: string, edgeId?: string): ValidationProblem {
   return { severity, code, message, nodeId, edgeId };
 }
 
-export function validateWorkflow(workflow: Workflow): ValidationProblem[] {
+/** Validates unknown wire data before running semantic graph checks. */
+export function validateWorkflow(raw: unknown): ValidationProblem[] {
+  const normalized = normalizeWorkflow(raw);
+  if (!normalized.workflow) return normalized.problems;
+  const workflow = normalized.workflow;
   const problems: ValidationProblem[] = [];
   validateStructure(workflow, problems);
   validateConnectivity(workflow, problems);
@@ -129,9 +134,9 @@ function validateStructure(workflow: Workflow, problems: ValidationProblem[]) {
     } else if (typeof inputsVal !== 'object' || Array.isArray(inputsVal)) {
       problems.push(problem('warning', 'INVALID_INPUTS_TYPE', 'Action node inputs must be a Map', action.id));
     } else {
-      const inputs = inputsVal as Record<string, string>;
+      const inputs = inputsVal as Record<string, unknown>;
       for (const [name, expr] of Object.entries(inputs)) {
-        if (!expr || expr.trim() === '') {
+        if (expr == null || (typeof expr === 'string' && expr.trim() === '')) {
           problems.push(problem('warning', 'EMPTY_ACTION_INPUT_EXPRESSION',
             `Action node input "${name}" has no EL expression`, action.id));
         }
@@ -300,9 +305,9 @@ function validateSemantics(workflow: Workflow, problems: ValidationProblem[]) {
       problems.push(problem('warning', 'MISSING_TASK_DESCRIPTION', 'Human task node has no description', node.id));
     }
     if (node.config.inputs && typeof node.config.inputs === 'object' && !Array.isArray(node.config.inputs)) {
-      const inputs = node.config.inputs as Record<string, string>;
+      const inputs = node.config.inputs as Record<string, unknown>;
       for (const [name, expr] of Object.entries(inputs)) {
-        if (!expr || expr.trim() === '') {
+        if (expr == null || (typeof expr === 'string' && expr.trim() === '')) {
           problems.push(problem('warning', 'EMPTY_TASK_INPUT_EXPRESSION',
             `Human task input "${name}" has no EL expression`, node.id));
         }

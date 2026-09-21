@@ -16,7 +16,7 @@ import { type EditorSpi } from '../../types/spi.ts';
 import { type ActionTypeDescriptor } from '../../types/spi.ts';
 import { type HumanTaskOutput, type OutputOption, type OutputWidget, type ActionOutputConfig, type EventOutputMapping } from '../../types/workflow.ts';
 import { type ValidationProblem } from '../../types/validation.ts';
-import { duplicateKeys, nextPairId } from '../../utils/mapInputs.ts';
+import { duplicateKeys, nextPairId, inputValueText } from '../../utils/mapInputs.ts';
 import { createMapDraft, editMapDraft, syncMapDraft, type MapDraftPair } from '../../utils/mapInputDraft.ts';
 import { evaluateCondition, ElEvaluationError } from '../../simulation/elEvaluator.ts';
 import { JsonCodeEditor } from '../common/JsonCodeEditor.tsx';
@@ -371,7 +371,7 @@ function HumanTaskOutputsEditor({ outputs, onChange }: {
 }
 
 /**
- * Editor for a map-based input list of key → literal value or EL-expression. The
+ * Editor for a map-based input list (JSON literals or EL expressions). The
  * list is edited internally as an ordered array of `{ key, value }` pairs — identified by position,
  * not by key — so that empty-key and duplicate-key entries can coexist without the silent data loss
  * a plain map suffers (an empty "+ Add input" overwriting the previous one, or a rename colliding
@@ -423,7 +423,7 @@ function MapInputsEditor({ map, onChange, draftIdentity, keyPlaceholder, valuePl
             </div>
             <input
               type="text"
-              value={typeof pair.value === 'string' ? pair.value : JSON.stringify(pair.value) ?? ''}
+              value={inputValueText(pair.value)}
               placeholder={valuePlaceholder}
               onChange={(e) => commit(pairs.map((p, j) => (j === i ? { ...p, value: e.target.value } : p)))}
             />
@@ -950,7 +950,7 @@ function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading,
               <label>Inputs</label>
               <div className="properties-panel__inputs-list">
                 {descriptor.inputs.map((field) => {
-                  const inputs = (node.data.config.inputs as Record<string, string>) || {};
+                  const inputs = (node.data.config.inputs as Record<string, unknown>) || {};
                   return (
                     <div key={field.name} className="properties-panel__input-item">
                       <div className="properties-panel__spi-field-header">
@@ -965,7 +965,7 @@ function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading,
                       )}
                       <input
                         type="text"
-                        value={inputs[field.name] ?? ''}
+                        value={inputValueText(inputs[field.name])}
                         placeholder={`e.g. context.${field.name}`}
                         onChange={(e) => {
                           const updated = { ...inputs, [field.name]: e.target.value };

@@ -1,4 +1,5 @@
 import { type WorkflowNode } from '../types/workflow.ts';
+import { inputValueText } from './mapInputs.ts';
 
 /**
  * A single labeled value in a node's definition view, e.g. `orderId: string` for a start node
@@ -43,15 +44,15 @@ function formatConfigValue(value: unknown): string {
   return String(value);
 }
 
-/** Builds an "Inputs" section from a map-based inputs config (label/name -> context expression), as used by action and human-task nodes. */
+/** Builds an "Inputs" section from expressions or JSON literals on action and human-task nodes. */
 function mapInputsSection(config: Record<string, any>): DefinitionSection | null {
   const inputs = config.inputs;
   if (!inputs || typeof inputs !== 'object' || Array.isArray(inputs) || Object.keys(inputs).length === 0) return null;
   return {
     label: 'Inputs',
-    fields: Object.entries(inputs as Record<string, string>).map(([key, value]) => ({
+    fields: Object.entries(inputs as Record<string, unknown>).map(([key, value]) => ({
       label: key,
-      value: String(value),
+      value: inputValueText(value),
     })),
   };
 }
