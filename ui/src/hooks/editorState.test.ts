@@ -12,6 +12,59 @@ const workflow: Workflow = {
 };
 
 describe('editor transactions', () => {
+    it('restores panel and multi-selection together while retaining current measurements', () => {
+        let state = editorReducer(createEditorState(workflow), { type: 'nodesChange', changes: [
+            { type: 'select', id: 'start', selected: true },
+            { type: 'select', id: 'end', selected: true },
+        ] });
+        state = editorReducer(state, { type: 'edgesChange', changes: [
+            { type: 'select', id: 'edge', selected: true },
+        ] });
+        state = editorReducer(state, { type: 'select', nodeId: 'start' });
+        state = editorReducer(state, { type: 'nodeData', id: 'start', data: { name: 'Edited' } });
+        state = editorReducer(state, { type: 'nodesChange', changes: [
+            { type: 'select', id: 'start', selected: false },
+            { type: 'dimensions', id: 'start', dimensions: { width: 321, height: 54 } },
+        ] });
+        state = editorReducer(state, { type: 'edgesChange', changes: [
+            { type: 'select', id: 'edge', selected: false },
+        ] });
+        state = editorReducer(state, { type: 'select', nodeId: 'end' });
+        const undone = editorReducer(state, { type: 'undo' });
+        expect(undone.selectedNodeId).toBe('start');
+        expect(undone.nodes.filter(node => node.selected).map(node => node.id)).toEqual(['start', 'end']);
+        expect(undone.edges.filter(edge => edge.selected).map(edge => edge.id)).toEqual(['edge']);
+        expect(undone.nodes[0].measured).toEqual({ width: 321, height: 54 });
+        const redone = editorReducer(undone, { type: 'redo' });
+        expect(redone.selectedNodeId).toBe('end');
+        expect(redone.nodes.filter(node => node.selected).map(node => node.id)).toEqual(['end']);
+        expect(redone.edges.filter(edge => edge.selected)).toEqual([]);
+        expect(redone.nodes[0].measured).toEqual({ width: 321, height: 54 });
+    });
+
+    it('replaying import clears intervening node and edge selection before deletion', () => {
+        let state = editorReducer(createEditorState(workflow), {
+            type: 'import', workflow: { ...workflow, id: 'imported' },
+        });
+        state = editorReducer(state, { type: 'undo' });
+        state = editorReducer(state, { type: 'nodesChange', changes: [
+            { type: 'select', id: 'start', selected: true },
+        ] });
+        state = editorReducer(state, { type: 'edgesChange', changes: [
+            { type: 'select', id: 'edge', selected: true },
+        ] });
+        state = editorReducer(state, { type: 'select', edgeId: 'edge' });
+        state = editorReducer(state, { type: 'redo' });
+        expect(state.selectedNodeId).toBeNull();
+        expect(state.selectedEdgeId).toBeNull();
+        expect(state.nodes.filter(node => node.selected)).toEqual([]);
+        expect(state.edges.filter(edge => edge.selected)).toEqual([]);
+        expect(editorReducer(state, { type: 'delete',
+            nodeIds: state.nodes.filter(node => node.selected).map(node => node.id),
+            edgeIds: state.edges.filter(edge => edge.selected).map(edge => edge.id),
+        })).toBe(state);
+    });
+
     it('discards old canvas selection when importing a different document with reused IDs', () => {
         let state = editorReducer(createEditorState(workflow), { type: 'edgesChange', changes: [
             { type: 'select', id: 'edge', selected: true },
@@ -166,7 +219,7 @@ describe('editor transactions', () => {
             .toEqual([{ x: 50, y: 80 }, { x: 50, y: 300 }]);
     });
 
-    it('keeps measurements and selection out of history and preserves them across undo', () => {
+    it('does not create history for measurements or selection and preserves them across undo', () => {
         let state = createEditorState(workflow);
         state = editorReducer(state, { type: 'nodesChange', changes: [
             { type: 'dimensions', id: 'start', dimensions: { width: 123, height: 45 } },
