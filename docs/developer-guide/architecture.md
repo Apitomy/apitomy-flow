@@ -12,6 +12,9 @@
 
 ### WorkflowEngine
 
+See [Engine errors and host extension contracts](engine-errors.md) for structured diagnostics,
+input-failure recovery, callback ordering, nullability, compatibility, and host durability responsibilities.
+
 The central class. Three categories of methods:
 
 | Category | Methods |

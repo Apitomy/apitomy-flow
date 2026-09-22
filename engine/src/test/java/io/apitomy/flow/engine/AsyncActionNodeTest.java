@@ -92,7 +92,9 @@ class AsyncActionNodeTest {
             public ErrorResolution handleNodeError(WorkflowInstance instance, WorkflowNode node,
                                                     NodeResult result, Exception error) {
                 assertSame(invalid, result);
-                assertNull(error);
+                WorkflowError diagnostic = assertInstanceOf(WorkflowError.class, error);
+                assertEquals(WorkflowError.Phase.OUTPUT_VALIDATION, diagnostic.phase());
+                assertEquals("answer", diagnostic.field());
                 assertEquals("action", node.id());
                 int count = errors.incrementAndGet();
                 if (count >= 150) return ErrorResolution.fail(); // Probe fail-safe for a broken budget.
