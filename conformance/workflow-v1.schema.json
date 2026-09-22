@@ -1,0 +1,130 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://apitomy.io/flow/schema/workflow-v1.schema.json",
+    "title": "Apitomy Flow wire contract v1",
+    "description": "Structural wire contract. Workflow.version is a host revision, not the schema version. Semantic validation remains in the engine/UI validators. Unknown fields are host-owned JSON and must be retained.",
+    "type": "object",
+    "required": ["id", "name", "nodes", "edges"],
+    "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "$ref": "#/definitions/text" },
+        "version": { "$ref": "#/definitions/integer" },
+        "nodes": { "type": "array", "items": { "$ref": "#/definitions/node" } },
+        "edges": { "type": "array", "items": { "$ref": "#/definitions/edge" } }
+    },
+    "additionalProperties": true,
+    "definitions": {
+        "text": { "type": ["string", "null"] },
+        "integer": { "type": ["integer", "null"], "minimum": -2147483648, "maximum": 2147483647 },
+        "flag": { "type": ["boolean", "null"] },
+        "option": {
+            "type": "object",
+            "properties": { "label": { "$ref": "#/definitions/text" }, "value": { "$ref": "#/definitions/text" } },
+            "additionalProperties": true
+        },
+        "field": {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+                "name": { "type": "string" },
+                "type": { "$ref": "#/definitions/text" },
+                "required": { "$ref": "#/definitions/flag" },
+                "description": { "$ref": "#/definitions/text" },
+                "label": { "$ref": "#/definitions/text" },
+                "widget": { "$ref": "#/definitions/text" },
+                "contextKey": { "$ref": "#/definitions/text" },
+                "defaultValue": true,
+                "options": { "type": ["array", "null"], "items": { "$ref": "#/definitions/option" } }
+            },
+            "additionalProperties": true
+        },
+        "fields": { "type": ["array", "null"], "items": { "$ref": "#/definitions/field" } },
+        "mapping": {
+            "type": "object",
+            "properties": {
+                "contextKey": { "$ref": "#/definitions/text" },
+                "expression": { "$ref": "#/definitions/text" }
+            },
+            "additionalProperties": true
+        },
+        "start": {
+            "type": ["object", "null"],
+            "properties": { "inputs": { "$ref": "#/definitions/fields" } },
+            "additionalProperties": true
+        },
+        "action": {
+            "type": ["object", "null"],
+            "properties": {
+                "actionType": { "$ref": "#/definitions/text" },
+                "inputs": { "type": ["object", "null"] },
+                "outputs": { "$ref": "#/definitions/fields" }
+            },
+            "additionalProperties": true
+        },
+        "humanTask": {
+            "type": ["object", "null"],
+            "properties": {
+                "description": { "$ref": "#/definitions/text" },
+                "inputs": { "type": ["object", "null"] },
+                "outputs": { "$ref": "#/definitions/fields" }
+            },
+            "additionalProperties": true
+        },
+        "receiveEvent": {
+            "type": ["object", "null"],
+            "properties": {
+                "eventType": { "$ref": "#/definitions/text" },
+                "match": { "type": ["array", "null"], "items": { "type": "string" } },
+                "outputs": { "type": ["array", "null"], "items": { "$ref": "#/definitions/mapping" } }
+            },
+            "additionalProperties": true
+        },
+        "wait": {
+            "type": ["object", "null"],
+            "properties": { "duration": { "$ref": "#/definitions/text" } },
+            "additionalProperties": true
+        },
+        "node": {
+            "type": "object",
+            "required": ["id", "type"],
+            "properties": {
+                "id": { "type": "string", "pattern": "\\S" },
+                "type": { "enum": ["start", "end", "action", "human-task", "receive-event", "wait"] },
+                "name": { "$ref": "#/definitions/text" },
+                "config": { "type": ["object", "null"] },
+                "position": {
+                    "type": ["object", "null"], "required": ["x", "y"],
+                    "properties": { "x": { "type": "number" }, "y": { "type": "number" } },
+                    "additionalProperties": true
+                }
+            },
+            "allOf": [
+                { "if": { "properties": { "type": { "const": "start" } } },
+                  "then": { "properties": { "config": { "$ref": "#/definitions/start" } } } },
+                { "if": { "properties": { "type": { "const": "action" } } },
+                  "then": { "properties": { "config": { "$ref": "#/definitions/action" } } } },
+                { "if": { "properties": { "type": { "const": "human-task" } } },
+                  "then": { "properties": { "config": { "$ref": "#/definitions/humanTask" } } } },
+                { "if": { "properties": { "type": { "const": "receive-event" } } },
+                  "then": { "properties": { "config": { "$ref": "#/definitions/receiveEvent" } } } },
+                { "if": { "properties": { "type": { "const": "wait" } } },
+                  "then": { "properties": { "config": { "$ref": "#/definitions/wait" } } } }
+            ],
+            "additionalProperties": true
+        },
+        "edge": {
+            "type": "object", "required": ["id", "source", "target"],
+            "properties": {
+                "id": { "type": "string", "pattern": "\\S" },
+                "source": { "type": "string", "pattern": "\\S" },
+                "target": { "type": "string", "pattern": "\\S" },
+                "condition": { "$ref": "#/definitions/text" },
+                "label": { "$ref": "#/definitions/text" },
+                "priority": { "$ref": "#/definitions/integer" },
+                "isDefault": { "$ref": "#/definitions/flag" }
+            },
+            "additionalProperties": true
+        }
+    }
+}

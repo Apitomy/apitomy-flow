@@ -3,7 +3,8 @@ import { getNodeDefinition } from './nodeDefinition.ts';
 import { type WorkflowNode } from '../types/workflow.ts';
 import { parseWorkflow } from './workflowIo.ts';
 
-function node(overrides: Partial<WorkflowNode>): WorkflowNode {
+// Deliberately accepts malformed config to exercise defensive display of legacy host data.
+function node(overrides: Omit<Partial<WorkflowNode>, 'config'> & { config?: unknown }): WorkflowNode {
   return {
     id: 'n1',
     type: 'action',
@@ -11,10 +12,28 @@ function node(overrides: Partial<WorkflowNode>): WorkflowNode {
     config: {},
     position: { x: 0, y: 0 },
     ...overrides,
-  };
+  } as WorkflowNode;
 }
 
 describe('getNodeDefinition', () => {
+    describe.each(['start', 'human-task', 'action', 'receive-event'] as const)('%s host-loaded nodes', type => {
+        it.each([
+            { state: 'null', fields: { config: null } },
+            { state: 'omitted', fields: {} },
+        ])('returns an empty definition view when config is $state', ({ fields }) => {
+            // Hosts can supply wire-schema nodes directly, without parseWorkflow normalization.
+            const hostNode = { id: 'n1', type, name: 'My Node', ...fields } as unknown as WorkflowNode;
+
+            expect(getNodeDefinition(hostNode)).toEqual({
+                id: 'n1',
+                type,
+                name: 'My Node',
+                description: undefined,
+                sections: [],
+            });
+        });
+    });
+
     it.each(['action', 'human-task'])('formats imported %s literals safely for the Viewer', type => {
         const result = parseWorkflow(JSON.stringify({
             id: 'w', name: 'Workflow',

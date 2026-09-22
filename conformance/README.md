@@ -14,8 +14,11 @@ language-specific fixture is required.
 | `routing.json` | Priority/default routing, event mappings, pre-merge context, output aliases, literal inputs, workflow round trips, parked branches and join arrivals across serialized resumes |
 | `budgets.json` | Fresh budget per advancement, repeated resumes, exact limit and one-over-limit, browser Step and Run |
 | `parallel-topology.json` | C2 topology acceptance/rejection, conditional parallel paths, nested regions, loops and branch completion orders |
+| `workflow-v1.schema.json` | Versioned structural wire schema; semantic validation remains in the runtime validators |
+| `config-v1.json`, `config-invalid-v1.json` | All built-in configs, nullability/defaults, optional positions, nested host extensions, and shared rejection cases |
 
 Run from `engine/`: `mvn test`. Run from `ui/`: `npm test` and `npx tsc --noEmit`.
+See [typed configuration](../docs/user-guide/typed-configuration.md) for schema versioning and migration.
 Focused runners are `ConformanceTest`/`ParallelTopologyTest` and
 `src/simulation/conformance.test.ts`/`src/simulation/parallelTopology.test.ts`.
 
