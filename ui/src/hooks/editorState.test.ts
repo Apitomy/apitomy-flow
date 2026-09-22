@@ -12,6 +12,69 @@ const workflow: Workflow = {
 };
 
 describe('editor transactions', () => {
+    it.each([
+        { type: 'cloneNode', id: 'end', newId: 'copy' },
+        { type: 'addNode', node: { ...workflow.nodes[1], id: 'copy' } },
+    ] satisfies EditorCommand[])('$type selects only the new node for Delete and restores selection through history', command => {
+        let selected = editorReducer(createEditorState(workflow), { type: 'nodesChange', changes: [
+            { type: 'select', id: 'start', selected: true },
+            { type: 'select', id: 'end', selected: true },
+        ] });
+        selected = editorReducer(selected, { type: 'edgesChange', changes: [
+            { type: 'select', id: 'edge', selected: true },
+        ] });
+        selected = editorReducer(selected, command.type === 'cloneNode'
+            ? { type: 'select', nodeId: 'end' } : { type: 'select', edgeId: 'edge' });
+        const before = structuredClone(selected);
+
+        const added = editorReducer(selected, command);
+        expect(added.selectedNodeId).toBe('copy');
+        expect(added.selectedEdgeId).toBeNull();
+        expect.soft(added.nodes.filter(node => node.selected).map(node => node.id)).toEqual(['copy']);
+        expect.soft(added.edges.filter(edge => edge.selected)).toEqual([]);
+        expect(added.past).toHaveLength(1);
+        expect(selected).toEqual(before);
+
+        const deleted = editorReducer(added, { type: 'delete',
+            nodeIds: added.nodes.filter(node => node.selected).map(node => node.id),
+            edgeIds: added.edges.filter(edge => edge.selected).map(edge => edge.id),
+        });
+        expect.soft(deleted.document).toEqual(workflow);
+        expect.soft(deleted.selectedNodeId).toBeNull();
+        expect(deleted.selectedEdgeId).toBeNull();
+        expect(deleted.nodes.filter(node => node.selected)).toEqual([]);
+        expect(deleted.edges.filter(edge => edge.selected)).toEqual([]);
+        expect(deleted.past).toHaveLength(2);
+
+        const undoDelete = editorReducer(deleted, { type: 'undo' });
+        expect(undoDelete.document).toEqual(added.document);
+        expect(undoDelete.selectedNodeId).toBe('copy');
+        expect(undoDelete.selectedEdgeId).toBeNull();
+        expect.soft(undoDelete.nodes.filter(node => node.selected).map(node => node.id)).toEqual(['copy']);
+        expect.soft(undoDelete.edges.filter(edge => edge.selected)).toEqual([]);
+
+        const undoAdd = editorReducer(undoDelete, { type: 'undo' });
+        expect(undoAdd.document).toEqual(workflow);
+        expect(undoAdd.selectedNodeId).toBe(before.selectedNodeId);
+        expect(undoAdd.selectedEdgeId).toBe(before.selectedEdgeId);
+        expect(undoAdd.nodes.filter(node => node.selected).map(node => node.id)).toEqual(['start', 'end']);
+        expect(undoAdd.edges.filter(edge => edge.selected).map(edge => edge.id)).toEqual(['edge']);
+
+        const redoAdd = editorReducer(undoAdd, { type: 'redo' });
+        expect(redoAdd.document).toEqual(added.document);
+        expect(redoAdd.selectedNodeId).toBe('copy');
+        expect(redoAdd.selectedEdgeId).toBeNull();
+        expect.soft(redoAdd.nodes.filter(node => node.selected).map(node => node.id)).toEqual(['copy']);
+        expect.soft(redoAdd.edges.filter(edge => edge.selected)).toEqual([]);
+
+        const redoDelete = editorReducer(redoAdd, { type: 'redo' });
+        expect.soft(redoDelete.document).toEqual(workflow);
+        expect.soft(redoDelete.selectedNodeId).toBeNull();
+        expect(redoDelete.selectedEdgeId).toBeNull();
+        expect(redoDelete.nodes.filter(node => node.selected)).toEqual([]);
+        expect(redoDelete.edges.filter(edge => edge.selected)).toEqual([]);
+    });
+
     it('restores panel and multi-selection together while retaining current measurements', () => {
         let state = editorReducer(createEditorState(workflow), { type: 'nodesChange', changes: [
             { type: 'select', id: 'start', selected: true },

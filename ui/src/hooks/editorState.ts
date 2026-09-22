@@ -91,12 +91,12 @@ function present(state: EditorState, document: Workflow, nodeKeys = state.nodeKe
 }
 
 function commit(state: EditorState, document: Workflow, group?: string, selection: Selection = state,
-    keys = state.nodeKeys): EditorState {
+    keys = state.nodeKeys, canvasSelection?: Pick<Snapshot, 'selectedNodeIds' | 'selectedEdgeIds'>): EditorState {
     if (JSON.stringify(document) === JSON.stringify(state.document)) return state;
     const owned = structuredClone(document);
     const nodeKeys = Object.fromEntries(owned.nodes.map(node => [node.id, keys[node.id] ?? `${state.revision + 1}:${node.id}`]));
     return {
-        ...state, document: owned, nodeKeys, ...present(state, owned, nodeKeys), ...validSelection(owned, selection),
+        ...state, document: owned, nodeKeys, ...present(state, owned, nodeKeys, canvasSelection), ...validSelection(owned, selection),
         past: group && state.group === group ? state.past : [...state.past, snapshot(state)].slice(-50),
         future: [], group, revision: state.revision + 1,
     };
@@ -193,7 +193,8 @@ export function editorReducer(state: EditorState, command: EditorCommand): Edito
         case 'addNode':
             if (document.nodes.some(node => node.id === command.node.id)) return state;
             return commit(state, { ...document, nodes: [...document.nodes, command.node] }, undefined,
-                { selectedNodeId: command.node.id, selectedEdgeId: null });
+                { selectedNodeId: command.node.id, selectedEdgeId: null }, state.nodeKeys,
+                { selectedNodeIds: [command.node.id], selectedEdgeIds: [] });
         case 'cloneNode': {
             const node = document.nodes.find(node => node.id === command.id);
             return node ? editorReducer(state, { type: 'addNode', node: {
