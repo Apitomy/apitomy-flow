@@ -12,7 +12,56 @@ function workflow(config: WorkflowNode['config'], position: unknown = { x: 0, y:
     };
 }
 
+function clearedHumanTaskWorkflow(): Workflow {
+    return {
+        id: 'workflow',
+        name: 'Workflow',
+        nodes: [{
+            id: 'review',
+            type: 'human-task',
+            name: 'Review',
+            config: {
+                assignee: undefined,
+                description: 'Review the decision',
+                // The editor retains these optional keys after their fields are cleared.
+                outputs: [{ name: 'decision', type: 'string', label: undefined, description: undefined }],
+            },
+            position: { x: 0, y: 0 },
+        }],
+        edges: [],
+    };
+}
+
 describe('semantic workflow diffs', () => {
+    it.each(['base', 'compare'])('ignores cleared optional object properties on the %s side', (side) => {
+        const edited = clearedHumanTaskWorkflow();
+        const persisted: Workflow = JSON.parse(JSON.stringify(edited));
+        const [base, compare] = side === 'base' ? [edited, persisted] : [persisted, edited];
+
+        const result = diffWorkflows(base, compare);
+
+        expect(result.nodes.review.status).toBe('unchanged');
+        expect(result.nodes.review.changes).toEqual([]);
+        expect(result.summary.nodes).toEqual({ added: 0, removed: 0, changed: 0, cosmetic: 0, unchanged: 1 });
+        expect(nodeFieldComparisons(result.nodes.review)).toEqual([]);
+    });
+
+    it.each(['base', 'compare'])('omits cleared output fields from details with edited payload on the %s side', (side) => {
+        const edited = clearedHumanTaskWorkflow();
+        const persisted: Workflow = JSON.parse(JSON.stringify(edited));
+        const [base, compare] = side === 'base' ? [edited, persisted] : [persisted, edited];
+        compare.nodes[0].config.description = 'Review the updated decision';
+
+        const result = diffWorkflows(base, compare);
+
+        expect(result.nodes.review.status).toBe('changed');
+        expect(result.nodes.review.changes).toEqual(['config']);
+        expect(result.summary.nodes.changed).toBe(1);
+        expect(nodeFieldComparisons(result.nodes.review)).toEqual([
+            { field: 'description', before: 'Review the decision', after: 'Review the updated decision' },
+        ]);
+    });
+
     it('ignores object key order at every depth, including objects inside arrays', () => {
         const base = workflow({
             actionType: 'send',
@@ -64,8 +113,12 @@ describe('semantic workflow diffs', () => {
         { label: 'null value', before: { value: null }, after: { value: false } },
         { label: 'added key', before: {}, after: { value: null } },
         { label: 'removed key', before: { value: null }, after: {} },
+        { label: 'undefined property versus null', before: { value: undefined }, after: { value: null } },
+        { label: 'different defined keys', before: { first: 1, second: undefined }, after: { first: undefined, second: 1 } },
         { label: 'array order', before: [1, 2], after: [2, 1] },
         { label: 'array length', before: [1], after: [1, 2] },
+        { label: 'undefined array element versus null', before: [undefined], after: [null] },
+        { label: 'undefined array element versus omission', before: [undefined], after: [] },
         { label: 'object array order', before: [{ id: 'a' }, { id: 'b' }], after: [{ id: 'b' }, { id: 'a' }] },
         { label: 'array versus object', before: [], after: {} },
     ])('preserves $label changes in summary and details', ({ before, after }) => {

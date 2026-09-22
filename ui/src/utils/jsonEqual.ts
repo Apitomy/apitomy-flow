@@ -1,4 +1,4 @@
-/** Compare JSON values recursively, ignoring object key order but preserving array order. */
+/** Compare JSON values recursively, ignoring object key order and undefined object properties, preserving array order. */
 export function jsonEqual(before: unknown, after: unknown): boolean {
     if (before === after) {
         return true;
@@ -14,7 +14,8 @@ export function jsonEqual(before: unknown, after: unknown): boolean {
 
     const beforeObject = before as Record<string, unknown>;
     const afterObject = after as Record<string, unknown>;
-    const keys = Object.keys(beforeObject);
-    return keys.length === Object.keys(afterObject).length
+    const keys = Object.keys(beforeObject).filter((key) => beforeObject[key] !== undefined);
+    const afterKeys = Object.keys(afterObject).filter((key) => afterObject[key] !== undefined);
+    return keys.length === afterKeys.length
         && keys.every((key) => Object.hasOwn(afterObject, key) && jsonEqual(beforeObject[key], afterObject[key]));
 }
