@@ -1,6 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { serializeWorkflow, parseWorkflow, workflowFileName } from './workflowIo.ts';
 import { type Workflow } from '../types/workflow.ts';
+import * as workflowShape from '../validation/workflowShape.ts';
+import * as workflowValidation from '../validation/validateWorkflow.ts';
 
 function validWorkflow(): Workflow {
   return {
@@ -30,6 +32,29 @@ describe('serializeWorkflow', () => {
 });
 
 describe('parseWorkflow', () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    it.each(['normalization', 'validation'] as const)('returns a structured import error when %s throws', stage => {
+        // Real deep-chain traversal overflows, but its depth limit varies by runtime and costs seconds.
+        // Simulate that failure at each boundary while exercising real JSON parsing and import handling.
+        const failure = () => { throw new RangeError('Maximum call stack size exceeded'); };
+        if (stage === 'normalization') {
+            vi.spyOn(workflowShape, 'normalizeWorkflow').mockImplementationOnce(failure);
+        } else {
+            vi.spyOn(workflowValidation, 'validateWorkflow').mockImplementationOnce(failure);
+        }
+
+        const result = parseWorkflow(serializeWorkflow(validWorkflow()));
+
+        expect(result.workflow).toBeUndefined();
+        expect(result.error).toEqual(expect.stringContaining('Maximum call stack size exceeded'));
+        expect(result.problems).toContainEqual({
+            severity: 'error',
+            code: 'VALIDATION_FAILED',
+            message: result.error,
+        });
+    });
+
   it('accepts a valid workflow with no error-severity problems', () => {
     const result = parseWorkflow(serializeWorkflow(validWorkflow()));
     expect(result.workflow).toBeDefined();

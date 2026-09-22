@@ -30,7 +30,8 @@ export function serializeWorkflow(workflow: Workflow): string {
  * shape yields a fatal `error`, and an otherwise-parseable definition is run
  * through the built-in validation so problems are surfaced rather than a broken
  * graph being loaded silently. When error-severity problems are present the
- * `workflow` is withheld so callers refuse the import.
+ * `workflow` is withheld so callers refuse the import. Unexpected normalization
+ * or validation exceptions also become a fatal error and structured problem.
  */
 export function parseWorkflow(text: string): ImportResult {
   let raw: unknown;
@@ -40,13 +41,20 @@ export function parseWorkflow(text: string): ImportResult {
     return { problems: [], error: `Not valid JSON: ${(e as Error).message}` };
   }
 
-  const normalized = normalizeWorkflow(raw);
-  if (!normalized.workflow) {
-    return { problems: normalized.problems, error: normalized.problems[0]?.message };
+  let normalized: ReturnType<typeof normalizeWorkflow>;
+  let problems: ValidationProblem[];
+  try {
+    normalized = normalizeWorkflow(raw);
+    if (!normalized.workflow) {
+      return { problems: normalized.problems, error: normalized.problems[0]?.message };
+    }
+    problems = validateWorkflow(normalized.workflow);
+  } catch (e) {
+    const message = `Invalid workflow definition: ${e instanceof Error ? e.message : String(e)}`;
+    return { problems: [{ severity: 'error', code: 'VALIDATION_FAILED', message }], error: message };
   }
 
   const workflow = normalized.workflow;
-  const problems = validateWorkflow(workflow);
   if (problems.some(p => p.severity === 'error')) {
     return { problems };
   }
