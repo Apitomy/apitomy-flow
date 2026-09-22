@@ -164,15 +164,15 @@ export function getNodeDefinition(node: WorkflowNode): NodeDefinitionView {
   let sections: DefinitionSection[];
   let description: string | undefined;
   if (node.type === 'start') {
-    sections = [startInputsSection(node.config)].filter((s): s is DefinitionSection => s !== null);
+    sections = [startInputsSection(node.config ?? {})].filter((s): s is DefinitionSection => s !== null);
   } else if (node.type === 'human-task') {
     description = typeof config.description === 'string' && config.description ? config.description : undefined;
-    sections = [mapInputsSection(node.config), humanTaskOutputsSection(node.config)]
+    sections = [mapInputsSection(node.config ?? {}), humanTaskOutputsSection(node.config ?? {})]
       .filter((s): s is DefinitionSection => s !== null);
   } else if (node.type === 'action') {
-    sections = actionSections(node.config);
+    sections = actionSections(node.config ?? {});
   } else if (node.type === 'receive-event') {
-    sections = [receiveEventOutputsSection(node.config)].filter((s): s is DefinitionSection => s !== null);
+    sections = [receiveEventOutputsSection(node.config ?? {})].filter((s): s is DefinitionSection => s !== null);
   } else {
     sections = [];
   }
