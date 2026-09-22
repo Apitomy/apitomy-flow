@@ -1,6 +1,6 @@
 # Node Executors
 
-The `NodeExecutor` interface is the SPI that the host application implements to handle action nodes. Each executor handles one action type.
+The host implements the `NodeExecutor` SPI to handle action nodes. Each executor handles one action type.
 
 ## Interface
 
@@ -26,18 +26,24 @@ public record NodeExecutionContext(
 ) {}
 ```
 
-The `inputs` map contains values resolved from the action node's input EL expressions. The executor receives only the declared inputs — it does not have access to the full workflow context.
+`inputs` contains resolved input expressions and literal values. The executor receives only declared
+inputs, not the full workflow context.
 
 ## Result
 
 ```java
 public record NodeResult(
-    NodeResultStatus status,       // COMPLETED or FAILED
+    NodeResultStatus status,       // COMPLETED, FAILED, or PENDING
     Map<String, Object> output     // merged into workflow context on success
 ) {}
 ```
 
-On `COMPLETED`, the engine validates the output against the node's declared output schema (required fields must be present and non-null), then merges the output map into the workflow context. On `FAILED`, the error handler is invoked (see [Error Handling](error-handling.md)).
+On `COMPLETED`, required declared outputs must be present and non-null before merging into context.
+On `FAILED`, the error handler is invoked (see [Error Handling](error-handling.md)).
+
+This is a required-presence check, not full value/type validation. `contextKey` aliases apply after that
+check. `PENDING` parks the action and can merge partial output; the host completes it later through
+`completeNode`. See [pending actions](engine-usage.md#pending-actions) for the complete contract.
 
 ## Example
 
@@ -74,7 +80,9 @@ WorkflowEngine engine = new WorkflowEngine(
 );
 ```
 
-The `NodeExecutorProvider` is a functional interface with a single method `getExecutor(String actionType)`. The `fromList` factory creates a provider from a list of executors, keyed by their `actionType()`. You can also implement `NodeExecutorProvider` directly for custom lookup logic (e.g. service registry, dependency injection). If no matching executor is found, the workflow fails.
+The provider's functional method is `getExecutor(String actionType)`. `fromList` snapshots registrations
+and rejects null entries, blank/null action types, and duplicates. Implement the provider directly for
+custom lookup. A missing/throwing provider enters structured recovery and fails by default.
 
 ## Action Node Config
 
@@ -94,7 +102,11 @@ Action nodes must include an `actionType` field and should declare `inputs` and 
 }
 ```
 
-- **`inputs`** — map of label to EL expression. Resolved against the workflow context before execution and passed to the executor as `context.inputs()`.
-- **`outputs`** — list of `{name, type, required}`. After execution, the engine validates that required outputs are present and non-null in the result. Missing required outputs are routed through the error handler.
+- **`inputs`** — map of label to expression string or JSON literal. Strings resolve against context;
+  non-string values remain literals. Use an EL quoted string such as `'hello'` for a constant string.
+  The executor receives the resolved values as `context.inputs()`.
+- **`outputs`** — list of `{name, type, required}` with optional `contextKey`. Missing/null required
+  outputs enter error recovery before any output is merged.
 
-The validator emits `MISSING_ACTION_INPUTS` and `MISSING_ACTION_OUTPUTS` warnings when these are absent. The full config map is also available to the executor as `nodeConfig`.
+Absent declarations produce `MISSING_ACTION_INPUTS` / `MISSING_ACTION_OUTPUTS` warnings. The executor also
+receives the full config map as `nodeConfig`.

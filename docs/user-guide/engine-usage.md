@@ -1,6 +1,8 @@
 # Engine Usage
 
-The `WorkflowEngine` is a stateless, synchronous Java class. All methods take state in and return updated state out — the input instance is never mutated.
+The `WorkflowEngine` is a stateless Java class with synchronous calls and support for asynchronous work.
+State-changing calls return snapshots without mutating the input; read-only calls return info or values.
+Some no-op paths return the same snapshot. See [current branch contracts](current-contracts.md).
 
 ## Creating the Engine
 
@@ -12,7 +14,8 @@ WorkflowEngine engine = new WorkflowEngine(
 );
 ```
 
-The `NodeExecutorProvider` is a functional interface — implement it directly for custom executor lookup (e.g. a service registry), or use the `fromList` convenience factory. All dependencies are passed via constructor — no CDI, no service discovery.
+`NodeExecutorProvider` is a functional interface: implement custom lookup (e.g. a service registry), or
+use `fromList`. All dependencies are passed via constructor — no CDI or service discovery.
 
 ## Starting a Workflow
 
@@ -33,7 +36,8 @@ WorkflowInstance instance = engine.startWorkflow(definition, initialContext, "my
 5. Enters the start node and evaluates outgoing edges
 6. Chains through action nodes until a wait state or end is reached
 
-The returned instance is in `WAITING` (hit a human-task, receive-event, or wait node), `COMPLETED` (reached an end node), or `FAILED` (error during execution).
+The returned instance is in `WAITING` (all remaining branches parked, including pending actions),
+`COMPLETED` (reached an end node), or `FAILED` (unrecovered execution error).
 
 ## Completing a Waiting Node
 
@@ -44,9 +48,15 @@ NodeResult result = new NodeResult(NodeResultStatus.COMPLETED,
 WorkflowInstance updated = engine.completeCurrentNode(definition, instance, result);
 ```
 
-- Throws `IllegalStateException` if the instance is not in `WAITING` status
+- Throws `IllegalStateException` if the instance is not `WAITING` or has no single current node
 - Merges the result's output into the workflow context
 - Evaluates outgoing edges and chains through action nodes until the next wait or end
+
+Use `completeNode(definition, instance, nodeId, result)` when parallel branches may be parked. It rejects
+a node that is not an active parked branch. Completed ACTION results must supply non-null required outputs
+under their declared names, before alias mapping. Invalid/failed results enter
+[error recovery](error-handling.md); they are not successful completions. Human-task output declarations
+remain presentation metadata rather than submission validation.
 
 ## Cancelling a Workflow
 
@@ -67,39 +77,55 @@ See [Event Correlation](event-correlation.md) for details.
 
 ## Handling Wait States
 
-The engine is stateless and synchronous — when it reaches a node that requires external input (Human Task, Receive Event, or Wait), it sets the instance to `WAITING` and returns. The consuming application is responsible for detecting the wait, handling it, and resuming the workflow. All three wait-state node types follow the same pattern:
+Human Task, Receive Event, Wait, and ACTION returning `PENDING` park until the host resumes them.
+The driver continues runnable siblings before returning `WAITING`. Use this branch-aware host pattern:
 
-1. **Detect** — after `startWorkflow` or `completeCurrentNode` returns, check `instance.status() == WAITING`
-2. **Introspect** — call the appropriate `get*Info` method to learn what the instance is waiting for
+1. **Detect** — after start/completion returns, check `instance.status() == WAITING`
+2. **Introspect** — enumerate `activeBranches` and call node-addressed `get*Info` methods
 3. **Handle** — perform the external work (present a task inbox, listen for events, schedule a timer)
-4. **Resume** — call `completeCurrentNode(workflow, instance, result)` with the outcome
+4. **Resume** — call `completeNode(workflow, latestInstance, nodeId, result)` with the outcome
 
 ```java
 WorkflowInstance instance = engine.startWorkflow(workflow, inputs);
 
 if (instance.status() == InstanceStatus.WAITING) {
-    // Try each introspection method — exactly one will return non-null
-    HumanTaskInfo task = engine.getHumanTaskInfo(workflow, instance);
-    if (task != null) {
-        // Create an inbox item with task.description(), task.inputs(), task.outputs()
-        // When the human completes it, call completeCurrentNode with their response
-    }
-
-    ReceiveEventInfo event = engine.getReceiveEventInfo(workflow, instance);
-    if (event != null) {
-        // Index the instance by event.eventType() for efficient matching
-        // When a matching event arrives, call completeCurrentNode with the event payload
-    }
-
-    WaitInfo wait = engine.getWaitInfo(workflow, instance);
-    if (wait != null) {
-        // Schedule a timer for wait.duration()
-        // When it fires, call completeCurrentNode with an empty result
+    for (ActiveBranch branch : instance.activeBranches()) {
+        String nodeId = branch.nodeId();
+        HumanTaskInfo task = engine.getHumanTaskInfo(workflow, instance, nodeId);
+        ReceiveEventInfo event = engine.getReceiveEventInfo(workflow, instance, nodeId);
+        WaitInfo wait = engine.getWaitInfo(workflow, instance, nodeId);
+        ActionInfo action = engine.getActionInfo(workflow, instance, nodeId);
+        // For this node, dispatch the applicable task/event/timer/action integration.
+        // Store nodeId with the work item; persist state before durable dispatch.
     }
 }
 ```
 
-The consuming application persists the instance and resumes it later when the external condition is met. The engine does not manage persistence, scheduling, or event subscriptions — those are the application's responsibility.
+The host persists the returned instance, schedules timers, manages subscriptions and serializes delivery
+against the latest saved state. Use durable dispatch/idempotency for external side effects; callbacks and
+completion IDs provide no exactly-once guarantee. See [compatibility](current-contracts.md).
+
+### Pending actions
+
+An executor may dispatch external work and return:
+
+```java
+return new NodeResult(NodeResultStatus.PENDING, Map.of("jobId", jobId));
+```
+
+Partial output is mapped/merged immediately; the history entry stays open and no `onNodeCompleted` fires.
+The host later supplies `COMPLETED` or `FAILED` through `completeNode`. A `PENDING` completion re-parks the
+node and may merge further partial output. Required ACTION outputs are checked on the final result itself;
+an earlier partial value in context does not satisfy a missing required field in that result.
+
+`getActionInfo(workflow, instance, nodeId)` returns `nodeId`, `nodeName`, `actionType`, resolved `inputs`,
+and `expectedOutputs` for an active parked action, or null otherwise. Info reads do not execute the action.
+Input resolution failures in action/human info reads throw `WorkflowError` rather than applying recovery.
+
+The overloads without `nodeId` use the single current node, or the first eligible branch in
+`activeBranches` order when multiple branches are parked. They do not enumerate all work. The corresponding
+`matchesEvent` convenience overload means “any parked receiver matches”; it does not identify the node
+to finish.
 
 ## Resolving Expressions
 
@@ -107,7 +133,8 @@ The consuming application persists the instance and resumes it later when the ex
 Object value = engine.resolveExpression("context.creditScore", instance.context());
 ```
 
-Evaluates a Jakarta EL expression against a workflow context and returns the resolved value. Useful for rendering human task input values — for example, resolving display labels to their current context values. Supports nested map access and Jackson `JsonNode` navigation.
+Evaluates Jakarta EL against workflow context and returns the resolved value. This is useful for resolving
+human-task display values. Nested map access and Jackson `JsonNode` navigation are supported.
 
 ## Getting Human Task Info
 
@@ -115,7 +142,7 @@ Evaluates a Jakarta EL expression against a workflow context and returns the res
 HumanTaskInfo info = engine.getHumanTaskInfo(definition, instance);
 ```
 
-Returns a `HumanTaskInfo` record when the instance is waiting at a human-task node, `null` otherwise. The record contains:
+Returns `HumanTaskInfo` for an eligible parked human-task node, null otherwise. The record contains:
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -125,7 +152,7 @@ Returns a `HumanTaskInfo` record when the instance is waiting at a human-task no
 | `inputs` | Map<String, Object> | Display labels as keys, resolved context values as values |
 | `outputs` | List<OutputDefinition> | The form fields to complete the task (see below) |
 
-Input EL expressions (from the node's config) are evaluated against the instance context automatically — the caller receives fully resolved values.
+Input expression strings resolve against instance context; non-string JSON inputs remain literals.
 
 ### Output field metadata
 
@@ -159,7 +186,7 @@ human answers against the declared outputs — hosts remain responsible for vali
 ReceiveEventInfo info = engine.getReceiveEventInfo(definition, instance);
 ```
 
-Returns a `ReceiveEventInfo` record when the instance is waiting at a receive-event node, `null` otherwise. The record contains:
+Returns `ReceiveEventInfo` for an eligible parked receiver, null otherwise. The record contains:
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -167,8 +194,9 @@ Returns a `ReceiveEventInfo` record when the instance is waiting at a receive-ev
 | `nodeName` | String | The receive-event node name |
 | `eventType` | String | The event type this node is waiting for |
 | `matchExpressions` | List<String> | Raw EL expressions used for event correlation |
+| `outputMappings` | List<EventOutputMapping> | Optional expressions mapping the event into context |
 
-The `eventType` can be used to index waiting instances for efficient event matching — only instances waiting for a given event type need to be checked when an event arrives.
+Use `eventType` to index waiting instances and avoid checking unrelated instances when an event arrives.
 
 ## Getting Wait Info
 
@@ -176,7 +204,7 @@ The `eventType` can be used to index waiting instances for efficient event match
 WaitInfo info = engine.getWaitInfo(definition, instance);
 ```
 
-Returns a `WaitInfo` record when the instance is waiting at a wait node, `null` otherwise. The record contains:
+Returns `WaitInfo` for an eligible parked wait node, null otherwise. The record contains:
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -184,13 +212,16 @@ Returns a `WaitInfo` record when the instance is waiting at a wait node, `null` 
 | `nodeName` | String | The wait node name |
 | `duration` | Duration | The configured wait duration (parsed from ISO 8601) |
 
-The consuming application reads the duration, schedules a timer, and calls `completeCurrentNode` when the timer expires.
+The host reads the duration, schedules a timer, and calls `completeNode` for that node when it expires.
 
 ## Action Chaining
 
-When an action node completes, the engine immediately evaluates edges and transitions to the next node. If the next node is also an action, it executes that too — continuing until it reaches a wait state or end. A single call to `startWorkflow` or `completeCurrentNode` may execute multiple action nodes in sequence.
+After action completion, the engine evaluates edges and enters the next node. Another synchronous action
+executes immediately; chaining continues until parking or termination. One start/completion call can
+therefore execute several actions.
 
-A safety limit of 100 transitions per call prevents infinite loops from automated cycles. If the limit is reached, the workflow fails with a descriptive `failureReason`.
+The shared call-local budget of 100 bounds transitions and recovery. Exhaustion fails the workflow with
+a diagnostic `failureReason`; see [Error Handling](error-handling.md) for the separate action retry limit.
 
 ## Parallel Execution
 
@@ -212,8 +243,8 @@ Key semantics:
 - **Fail-fast.** If any branch fails and is not recovered by an error handler, the whole instance
   transitions to `FAILED`; sibling branches stop.
 - **END cancels siblings.** An `end` node reached on any branch terminates the entire instance.
-- **`currentNodeId` is `null`** whenever zero or more than one branch is active. Use `activeBranches`
-  to inspect concurrent progress.
+- **`currentNodeId` is `null`** during a multi-branch wait. It is a convenience cursor, not the complete
+  execution state; terminal states may retain a final/failing cursor. Use `activeBranches` and status.
 
 Resume a specific parked branch by node id — sibling branches keep waiting:
 
@@ -223,12 +254,21 @@ WorkflowInstance next = engine.completeNode(workflow, instance, "notify-team", r
 ```
 
 `completeCurrentNode` remains available and delegates to `completeNode` for the single-branch case.
-The branch-addressable info accessors (`getHumanTaskInfo`, `getReceiveEventInfo`, `getWaitInfo`,
-`matchesEvent`) take a `nodeId` so concurrent waiting branches can be inspected independently.
+`getActionInfo`, `getHumanTaskInfo`, `getReceiveEventInfo`, `getWaitInfo`, and `matchesEvent` accept a
+`nodeId` so concurrent waiting branches can be inspected independently.
 
 ## Immutability
 
-All engine methods return a new `WorkflowInstance`. The input instance is never mutated:
+Execution snapshots own acyclic JSON-like payloads: nested maps and lists are recursively read-only,
+and Jackson trees are detached on ingress and read. Mutating an original input collection or a tree read
+from the snapshot cannot change its JSON state. Already-owned collections may be shared internally.
+
+Opaque Java objects (including non-JSON extension values) remain host-owned references and must stay
+immutable. Cyclic object graphs are outside this contract. The same ownership applies to definitions,
+history payloads, result values, and typed config adapters; it is not a general-purpose object freezer.
+
+State-changing calls preserve the input snapshot. Terminal cancellation and some parked retry paths can
+return the input object itself, so do not rely on fresh identity:
 
 ```java
 WorkflowInstance waiting = engine.startWorkflow(definition, context);
@@ -241,4 +281,11 @@ assert completed.status() == InstanceStatus.COMPLETED;
 
 ## Threading
 
-All engine methods are synchronous. When the engine invokes a `NodeExecutor`, it blocks until the executor returns. The consuming application can run engine calls on a background thread if async behavior is desired.
+Engine calls and executor invocations are synchronous. A `PENDING` executor can arrange asynchronous work
+outside the call; the engine starts no worker threads. Parallel branches share context and are driven in
+deterministic queue order, not on separate threads. Hosts may call the engine concurrently for different
+instances, but callbacks/providers must be safe for that usage. Serialize updates to the same instance to
+avoid lost writes. Distinct output aliases avoid accidental last-write-wins collisions between branches.
+
+See [executable examples](../developer-guide/documentation-checks.md) for pending actions, serialized
+parallel resumes, input ownership, and error recovery checked against this implementation.

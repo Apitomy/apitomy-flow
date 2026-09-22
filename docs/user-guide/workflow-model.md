@@ -1,6 +1,7 @@
 # Workflow Model
 
-A workflow is a directed graph of **nodes** connected by **edges**. The graph defines the steps a process follows and the conditions that determine which path to take.
+A workflow is a directed graph of **nodes** connected by **edges**. It defines process steps and the
+conditions that determine routing.
 
 ## Workflow Definition
 
@@ -9,6 +10,7 @@ A workflow is a directed graph of **nodes** connected by **edges**. The graph de
 | `id` | String | Unique identifier |
 | `name` | String | Display name |
 | `description` | String | Optional description |
+| `version` | Integer | Optional host-managed revision; instances are not automatically pinned to it |
 | `nodes` | List | The nodes in the graph |
 | `edges` | List | The edges connecting nodes |
 
@@ -44,7 +46,8 @@ Entry point for the workflow. One per workflow.
 Automated work delegated to a `NodeExecutor` provided by the host application.
 
 - **Config**: Must include an `actionType` field matching a registered executor
-- **Behavior**: Invokes the executor synchronously. Output merges into the workflow context.
+- **Behavior**: Invokes the executor synchronously. COMPLETED output is checked/mapped into context;
+  PENDING parks the action for host completion. FAILED enters error recovery.
 
 ```json
 {
@@ -59,18 +62,21 @@ Blocks until a human responds. The engine sets the instance to `WAITING` status.
 
 - **Config**: The engine interprets three keys:
     - `description` (String) — instructions for the person completing the task
-    - `inputs` (Map<String, String>) — map of display label to EL expression, resolved against the workflow context at render time (e.g. `{"Credit Score": "context.creditScore"}`)
+    - `inputs` (Map<String, Object>) — expression strings or JSON literals, resolved on entry and info reads
+      (e.g. `{"Credit Score": "context.creditScore"}`)
     - `outputs` (List of `{name, type, required}`) — defines the form schema for task completion
 
   The validator emits `MISSING_TASK_DESCRIPTION` and `MISSING_TASK_OUTPUTS` warnings when these are absent.
-- **Behavior**: Completes when the consuming application calls `completeCurrentNode` with the human's response.
+- **Behavior**: Completes when the host calls `completeNode` with the response (`completeCurrentNode` for
+  one parked branch). The host validates the submitted form values.
 
 ### Receive Event
 
 Blocks until a matching external event arrives.
 
 - **Config**: `eventType` (required) and `match` expressions (optional) for event correlation
-- **Behavior**: Completes when the consuming application calls `completeCurrentNode` after a matching event is detected via `matchesEvent`
+- **Behavior**: The host uses `matchesEvent` to correlate, then `completeNode` to deliver a matching event.
+  Optional `outputs` expressions map selected event values into context.
 
 See [Event Correlation](event-correlation.md) for details.
 
@@ -78,8 +84,9 @@ See [Event Correlation](event-correlation.md) for details.
 
 Blocks for a configured duration. The engine sets the instance to `WAITING` status.
 
-- **Config**: `duration` (String) — ISO 8601 duration (e.g. `PT30M`, `PT2H`, `P1D`). The validator emits `MISSING_WAIT_DURATION` if absent.
-- **Behavior**: The consuming application reads the duration via `getWaitInfo`, schedules a timer, and calls `completeCurrentNode` when it expires.
+- **Config**: `duration` (String) — ISO 8601, e.g. `PT30M`, `PT2H`, `P1D`.
+  The validator emits `MISSING_WAIT_DURATION` if absent.
+- **Behavior**: The host reads `getWaitInfo`, schedules a timer, then calls `completeNode` when it expires.
 
 ### End
 
@@ -123,7 +130,7 @@ context.approved && context.reviewCount >= 2
 ### Parallel Fork/Join
 
 A node with **two or more outgoing edges that are all unconditional** (no `condition` and
-`isDefault: false`) is a **fork**: entering it activates every outgoing branch concurrently, rather
+`isDefault: false`) is a **fork**: completing it activates every outgoing branch, rather
 than choosing one. This is the parallel counterpart to conditional routing, where exactly one edge is
 taken.
 
@@ -160,25 +167,29 @@ Human Task (approve plan)
 
 ## Workflow Instance
 
-A workflow instance is the runtime state of a workflow execution. It is a single JSON document — the consuming application handles persistence.
+A workflow instance is the execution's runtime state, held in a single JSON document. The host handles
+persistence.
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `id` | String | Instance identifier (UUID by default) |
 | `workflowId` | String | Reference to the workflow definition |
-| `currentNodeId` | String \| null | The node the instance is currently at when exactly one branch is active; `null` when zero or multiple branches are active |
-| `activeBranches` | Array | The branches currently executing, each `{ branchId, nodeId }`. A non-parallel run has a single `root` branch. |
+| `currentNodeId` | String \| null | Convenience cursor for one branch; null during parallel waits. Terminal snapshots may retain a final/failing cursor. |
+| `activeBranches` | Array | Branch records `{ branchId, nodeId }`. Interpret activity together with status; failed/cancelled snapshots may retain records. A sequential run uses `root`. |
 | `joinArrivals` | Object | For each pending join node, the incoming edge ids that have already arrived and are waiting for the rest. |
 | `status` | Enum | `running`, `waiting`, `completed`, `failed`, `cancelled` |
-| `context` | Map | Accumulated data from completed nodes |
+| `context` | Map | Initial data plus mapped completed and partial pending outputs |
 | `history` | List | Record of visited nodes with timestamps and edge info |
 | `failureReason` | String | Why the instance failed (null if not failed) |
 | `createdOn` | Instant | When the instance was created |
 | `updatedOn` | Instant | When the instance was last modified |
 
-When multiple branches are active, `currentNodeId` is `null` (it is a convenience for the
-single-branch case). Each `HistoryEntry` carries an optional `branchId` tagging which branch made the
-visit; a missing `branchId` denotes the `root` branch.
+At a parallel wait, `currentNodeId` is null; it is a convenience for the single-branch case, not a
+substitute for status and branch records. Each `HistoryEntry` has an optional `branchId` tagging its visit;
+a missing history branch ID denotes `root`. Java timestamps serialize as ISO strings with the Jackson
+Java Time module. Old instances missing branch collections normalize to empty collections in Java; that
+alone does not synthesize parked branches for safe resume. Hosts must migrate legacy runtime state and
+retain the correct definition. See [current contracts](current-contracts.md).
 
 ### Status Lifecycle
 

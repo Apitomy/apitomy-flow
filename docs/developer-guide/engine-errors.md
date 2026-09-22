@@ -41,8 +41,9 @@ if input evaluation fails: they cannot update state or apply recovery. Their ine
 is unchanged. `matchesEvent` retains its false-on-evaluation-error policy, and `resolveExpression` retains
 its `ConditionEvaluationException` contract.
 
-Action retries allow ten retries after the initial attempt. Recovery transitions and human input retries
-use the shared 100-unit call-local driver budget alongside ordinary moves and unsuccessful edge selections.
+Each local action execution retry loop allows ten retries after its initial attempt, not ten across all
+actions in a call. Recovery entries, external action retries, and human input retries use the shared
+100-unit call-local driver budget alongside ordinary moves and unsuccessful edge selections.
 Budget failures retain the triggering/last recovery diagnostic when available. Parked sibling branches are
 never selected as runnable just because another branch recovers. These limits are not durable retry policy.
 
@@ -50,6 +51,12 @@ On external ACTION completion, `RETRY` re-executes the action. For non-action co
 output-mapping failures, `RETRY` leaves the instance parked for another delivery. No invalid completion
 output is merged. A completed action must supply each required output as non-null before context-key
 remapping; pending output may be partial.
+
+For `EDGE_CONDITION` and `EDGE_SELECTION`, `RETRY` repeats routing only: it does not re-execute the
+completed action or wait for another delivery. Unsuccessful selections consume the shared driver budget.
+Human-task input retries on entry also use that budget to re-resolve inputs before parking; they differ
+from non-action external completion retries. See
+[phase-specific recovery](../user-guide/error-handling.md#what-retry-repeats).
 
 ## Extension response and registration rules
 
@@ -62,8 +69,9 @@ remapping; pending output may be partial.
 | Listener registration | Null list means no listeners; otherwise the engine copies registrations in order and rejects null elements. |
 
 `NodeResult` and `ErrorResolution` constructors remain permissive for compatibility; validation happens
-at the engine boundary. Output values remain host-defined; this change does not introduce recursive JSON
-schema validation or promise deep immutability. Callers/extensions must not mutate supplied data.
+at the engine boundary. [JSON ownership](../user-guide/engine-usage.md#immutability) recursively protects
+maps/lists and detaches Jackson trees, but does not freeze opaque host objects or recursively validate
+every extension value against a JSON schema. Hosts must keep opaque values immutable.
 Host `Exception`s are handled according to these contracts; JVM `Error`s propagate.
 
 ## Ordering and durability

@@ -77,7 +77,7 @@ in parallel). Both branches converge on `create-report`, which waits for both be
 ## Why this is a valid fork/join
 
 - **`fetch-cve` is a fork:** it has two outgoing edges (`e2`, `e3`), both unconditional
-  (`isDefault: false`, no `condition`). Entering `fetch-cve` activates both branches.
+  (`isDefault: false`, no `condition`). Completing `fetch-cve` activates both branches.
 - **`create-report` is the join:** it is the first node reachable from both branches and has two
   incoming edges (`e4`, `e5`). As an AND-join it runs only after both `analyze-impact` and `notify-team`
   complete.

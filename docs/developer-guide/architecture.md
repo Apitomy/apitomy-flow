@@ -1,109 +1,98 @@
 # Architecture
 
-## Design Principles
+This page describes the combined branch implementation; see
+[current contracts](../user-guide/current-contracts.md) for release status and compatibility boundaries.
 
-- **Stateless engine** — the engine takes a workflow definition and instance state as input, returns updated state as output. No persistence, no background threads, no framework dependencies.
-- **Consumer handles persistence** — the workflow instance is a single JSON document. The consuming application stores it however it chooses (database column, file, etc.).
-- **Explicit wiring** — all dependencies (executors, listeners, error handler) are passed via constructor. No CDI, no service discovery, no classpath scanning.
-- **Immutable state** — all engine methods return new `WorkflowInstance` objects. Input instances are never mutated.
-- **One expression language** — Jakarta EL is used consistently for edge conditions and event correlation.
+## Design principles
 
-## Engine Internals
+- **Stateless execution:** state in, updated state out. No persistence, background threads, or framework.
+- **Host durability:** the host stores definitions and instance JSON, serializes concurrent deliveries,
+  schedules timers, and provides idempotent external work.
+- **Explicit wiring:** executors, listeners, and error handler are constructor dependencies.
+- **Owned JSON snapshots:** nested maps/lists are read-only; Jackson trees are copied on ingress/read.
+  Opaque Java objects remain host-owned immutable references. No-op calls may return the input instance.
+- **Two expression environments:** Java uses Jakarta EL; browser simulation uses a verified subset.
+  [Conformance limits](../user-guide/visual-editor.md#simulation-and-condition-testing) are explicit.
 
-### WorkflowEngine
+## Engine internals
 
-See [Engine errors and host extension contracts](engine-errors.md) for structured diagnostics,
-input-failure recovery, callback ordering, nullability, compatibility, and host durability responsibilities.
-
-See [Indexed execution and semantic editor revisions](indexed-architecture.md) for helper ownership,
-cache invalidation, extracted property forms, and repeatable graph/history benchmark evidence.
-
-The central class. Three categories of methods:
+### Public operations
 
 | Category | Methods |
-|----------|---------|
-| Lifecycle | `startWorkflow`, `completeCurrentNode`, `cancelWorkflow` |
-| Correlation | `matchesEvent` |
-| Expression | `resolveExpression` |
-| Introspection | `getHumanTaskInfo`, `getReceiveEventInfo`, `getWaitInfo` |
-| (Internal) | `advance`, `executeActionNode`, `selectEdge` |
+|---|---|
+| Lifecycle | `startWorkflow`, `completeNode`, `completeCurrentNode`, `cancelWorkflow` |
+| Correlation | `matchesEvent`, including a node-addressed overload |
+| Expressions | `resolveExpression` |
+| Parked-node info | `getActionInfo`, `getHumanTaskInfo`, `getReceiveEventInfo`, `getWaitInfo`; each has a node-addressed overload |
 
-### Transition Loop
+`startWorkflow` validates the definition and initial inputs. The call-local branch work queue then advances
+all runnable branches until they park or the instance terminates. Calls and executor invocations are
+synchronous; parallel tokens do not imply concurrent executor threads.
 
-The `advance()` method is the core execution loop:
-
-```
-Node completes
-  → fire onNodeCompleted
-  → merge output into context
-  → get outgoing edges (sorted by priority)
-  → evaluate each condition (Jakarta EL)
-  → select first match (or default)
-  → fire onEdgeFollowed
-  → record in history
-  → fire onNodeEntered
-  → execute target node:
-      ACTION     → invoke executor, loop back
-      HUMAN_TASK → set WAITING, return
-      RECEIVE    → set WAITING, return
-      END        → set COMPLETED, return
+```text
+Enter node → notify listener → resolve inputs / perform node work
+  ACTION: invoke executor → COMPLETED / FAILED / PENDING
+  HUMAN_TASK / RECEIVE_EVENT / WAIT: park for external completion
+  END: complete the instance
+Successful completion → validate/map output → history/context update → onNodeCompleted
+  → choose priority/default edge OR dispatch all fork edges
+  → onEdgeFollowed → join-arrival accounting / next node entry
 ```
 
-A safety limit of 100 transitions per call prevents infinite loops.
+Forks and joins are derived from validated topology, without dedicated node kinds. Join arrivals use
+incoming edge IDs; each branch must reach its join through one distinct arrival edge. Unsupported crossing,
+unbalanced, or cyclic regions are rejected before executors run. A fail-fast branch failure terminates the
+instance; END terminates sibling work. See [Parallel Fork/Join](../user-guide/parallel-fork-join.md).
 
-### Condition Evaluation
+An action returning `PENDING` parks like other external-input nodes. Completing one node resumes that
+branch, not unanswered siblings. Read-only info calls require an active parked node in a `WAITING`
+instance. Each child edge move consumes one unit of the 100-unit driver budget; successful fork selection
+adds no charge. Recovery entries, external action retries, and unsuccessful routing also consume driver
+units. Each local action execution retry loop allows ten retries after its initial attempt. Routing RETRY
+re-evaluates edges without repeating the completed action. These guards are not a durable backoff policy.
 
-The `ConditionEvaluator` wraps Jakarta EL. Two modes:
+See [Engine errors](engine-errors.md) for structured failures and callback ordering, and
+[indexed architecture](indexed-architecture.md) for graph indexes, value resolution, cache ownership,
+and measured benchmark evidence.
 
-| Context | Root Variables | Used For |
-|---------|---------------|----------|
-| Edge conditions | `context` | Routing decisions after node completion |
-| Event matching | `context`, `event` | Correlating external events to waiting nodes |
+### Validation and expressions
 
-Null or blank conditions evaluate to `true` (unconditional edges always match).
+Both validators perform shape preflight before semantic traversal, followed by graph structure,
+connectivity, conditions, semantic configuration, and parallel-region checks. Do not infer coverage from
+a manually maintained rule total: codes may appear in several phases and severities depend on the failure.
+[Validation](../user-guide/validation.md) links to the authoritative implementations and shared fixtures.
 
-### Validation
+Java binds `context` for routing/input resolution and both `context` and `event` for event correlation and
+output mappings. Blank conditions are unconditional; a conditional edge selects only boolean `true`.
+The browser classifies expressions as supported, malformed subset syntax, or unsupported dialect.
 
-The `WorkflowValidator` runs 55 rules across four categories:
+## UI internals
 
-1. **Structural** (26 rules) — graph integrity (start/end nodes, edge references, duplicates)
-2. **Connectivity** (5 rules) — reachability, dead ends, isolated nodes
-3. **Edge/Condition** (7 rules) — default edges, duplicate priorities, EL syntax
-4. **Semantic** (17 rules) — event receivers, action types, input schemas, wait durations, automated cycles, human-task output metadata
-
-`startWorkflow` runs the validator automatically and rejects definitions with ERROR-level problems.
-
-## UI Internals
-
-### Component Hierarchy
-
-```
-WorkflowEditor (ReactFlowProvider wrapper)
-  └─ WorkflowEditorInner
-       ├─ NodePalette (drag source for new nodes)
-       ├─ ReactFlow canvas
-       │    ├─ Custom node components (6 types)
-       │    └─ ConditionalEdge component
-       ├─ PropertiesPanel (node/edge config form)
-       └─ ProblemsPanel (validation results)
-
-WorkflowViewer (ReactFlowProvider wrapper)
-  └─ WorkflowViewerInner
-       └─ ReactFlow canvas (read-only, styled by instance state)
-```
-
-### Data Flow
-
-The editor maintains internal React Flow state (`useNodesState`, `useEdgesState`) and converts between the `Workflow` model and React Flow's `Node[]`/`Edge[]` model using adapter functions in `utils/conversion.ts`.
-
-```
-Workflow (prop) → toReactFlowNodes/Edges → React Flow state
-                                              ↓ (on change)
-                                         toWorkflow → onChange callback
-                                              ↓
-                                         validateWorkflow → onValidationChange
+```text
+WorkflowEditor (ReactFlowProvider)
+  useEditorState → editorReducer → owned document / past / future / presentation
+  ReactFlow canvas + palette + context menu + import/export/image controls
+  PropertiesPanel → node-kind forms + stable draft rows + value editors
+  ProblemsPanel ← built-in + asynchronous host validation
+  SimulationPanel → subset evaluator + branch-aware simulator
+WorkflowViewer (ReactFlowProvider)
+  read-only canvas + state/definition panel + visit/branch selection + host menu
+WorkflowDiffViewer (ReactFlowProvider)
+  ID-based comparison + combined canvas + field comparison panel
 ```
 
-### TypeScript Validator
+The editor initializes its graph from the mount prop. Subsequent metadata updates apply to that graph;
+host-driven graph replacement requires a React `key` remount. Document commands commit atomically and
+publish `onChange` once per committed revision. Selection, measurements, and drag frames are presentation
+state. Semantic document identity excludes layout-only revisions, avoiding unnecessary validation and
+parallel-analysis reruns. Import and undo/redo preserve workflow metadata with the graph.
 
-A port of the Java `WorkflowValidator` implementing 53 of the 55 rules — it omits only `MISSING_EDGE_SOURCE` and `MISSING_EDGE_TARGET`, which the editor UI cannot produce. `INVALID_CONDITION` is included, using a lightweight balanced-token syntax check rather than a full Jakarta EL parse. Runs synchronously on every edit via `useMemo`. Host applications can contribute additional problems asynchronously through the editor SPI (see [Visual Editor](../user-guide/visual-editor.md)).
+Document history restores panel and canvas selection together, while selection-only actions remain
+presentation state. Host validators receive read-only semantic snapshots with retained coordinates, even
+if a new callback reference causes a run; position-sensitive work uses the current `onChange` document.
+
+Viewer and diff props update live; pass fresh object/array references rather than mutating them in place.
+Neither component edits the host document. Layout can render definitions with absent positions.
+
+Fast Vitest suites cover pure logic; [real-browser contracts](documentation-checks.md#browser-verification)
+cover ReactFlow event ordering, focus, async host responses, and a packed-library consumer with CSS.

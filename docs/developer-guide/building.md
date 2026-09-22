@@ -15,7 +15,9 @@
 This builds both the engine and the UI in sequence:
 
 1. **Engine**: `mvn clean install` — compiles, runs tests, installs to local Maven repo
-2. **UI**: `npm install`, `npm run lint`, `npm run build` — installs deps, lints, runs vitest, builds the library
+2. **UI**: `npm install`, `npm run lint`, `npm run build` — installs deps, lints, builds the library
+
+The script does not run Vitest or Playwright. Run those explicitly as shown below.
 
 The script exits immediately on any failure (`set -euo pipefail`).
 
@@ -26,7 +28,7 @@ cd engine
 mvn clean install
 ```
 
-Runs all 83 JUnit 5 tests covering workflow execution, validation, error handling, and event correlation.
+Runs the JUnit 5 suite covering execution, validation, ownership, errors, and event correlation.
 
 ## UI Only
 
@@ -34,7 +36,8 @@ Runs all 83 JUnit 5 tests covering workflow execution, validation, error handlin
 cd ui
 npm install
 npm run lint       # ESLint with typescript-eslint + react-hooks
-npm test           # Vitest — 17 validation module tests
+npm test           # Vitest pure-logic and shared conformance suites
+npx tsc --noEmit    # Application/test source typecheck
 npm run build      # TypeScript type checking + Vite library build
 ```
 
@@ -45,10 +48,15 @@ cd ui
 npm run dev
 ```
 
-Starts the Vite dev server at **http://localhost:5173** with a sample CVE triage workflow. The dev app has two tabs:
+Starts the Vite dev server at **http://localhost:5173** with selectable sample scenarios:
 
 - **Editor** — renders `WorkflowEditor` with drag-and-drop editing
 - **Viewer** — renders `WorkflowViewer` with a sample workflow instance
+- **Diff** — renders `WorkflowDiffViewer` with before/after definitions
+
+See [Documentation Checks](documentation-checks.md) for focused executable examples, strict MkDocs/link
+checks, and the real-browser packed-consumer suite. Test counts come from runner output rather than this
+guide.
 
 ## Project Structure
 

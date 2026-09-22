@@ -1,5 +1,9 @@
 # Typed configuration and wire contract v1
 
+This is the combined branch contract, including pending
+[#131](https://github.com/Apitomy/apitomy-flow/issues/131). See [current contracts](current-contracts.md)
+for artifact selection, host workflow revisions, instance-version limits, and related pending proposals.
+
 The structural JSON contract is `conformance/workflow-v1.schema.json` (JSON Schema draft 7). Its `$id`
 ends in `workflow-v1.schema.json`; this contract version is independent of `Workflow.version`, which
 remains a host-managed workflow revision. Compatible additions retain v1; incompatible wire changes
@@ -122,6 +126,9 @@ non-JSON opaque Java extension values remain host-owned immutable references. Th
 covers JSON only. Existing executor config maps and SPI signatures remain available.
 
 ## Verification
+
+[Executable documentation examples](../developer-guide/documentation-checks.md) include the actual shared
+config fixture and focused Java/TypeScript runners, plus the built-package browser consumer.
 
 Run `mvn test` in `engine/`; run `npm test`, `npx tsc --noEmit`, `npm run lint`, and `npm run build` in
 `ui/`. Compile-only consumer assertions check discrimination, recursive extensions, nullable/defaulted
