@@ -63,9 +63,11 @@ Keyboard undo/delete belongs to the focused editor; text controls retain native 
 Simulation blocks document mutations and history commands. Manual canvas lock blocks structural canvas
 edits but still allows property edits, import, and history. Inspection remains available.
 
-Input-map rows retain stable identities and unsaved empty/duplicate-key drafts. Empty keys are not saved;
-duplicate keys show a warning and serialize the last entry. Untouched JSON literals retain their types;
-editing a value field makes it an expression string. Drafts reset on selection, import, or history travel.
+Input-map rows retain stable local identities, including separate rows with empty or duplicate keys.
+The persisted map includes the empty-string key (`''`); repeated keys, including empty keys, serialize
+last-entry-wins even though their separate rows remain in the local draft. Empty and duplicate keys show
+warnings. Untouched JSON literals retain their types; editing a value field makes it an expression string.
+Drafts reset on selection, import, or history travel.
 
 ### Node Palette
 
