@@ -342,6 +342,88 @@ class WorkflowEngineParallelTest {
     // --- FIX 1: TRANSITION recovery targets the ACTUAL failing branch inside a parallel region ---
 
     @Test
+    void recoveryToEndStopsForkBeforeLaterSiblingExecutes() {
+        AtomicInteger siblingExecutions = new AtomicInteger();
+        WorkflowEngine engine = new WorkflowEngine(NodeExecutorProvider.fromList(
+            executor("fail", () -> new NodeResult(NodeResultStatus.FAILED, Map.of())),
+            executor("sibling", () -> {
+                siblingExecutions.incrementAndGet();
+                return new NodeResult(NodeResultStatus.COMPLETED, Map.of());
+            }), echo("join", "joined", true)), List.of(), new WorkflowErrorHandler() {
+                /** Terminates immediately through the error END target. */
+                public ErrorResolution handleNodeError(WorkflowInstance i, WorkflowNode n,
+                                                        NodeResult r, Exception e) {
+                    return ErrorResolution.transitionTo("error-end");
+                }
+                /** Fails unexpected routing errors. */
+                public ErrorResolution handleNoMatchingEdge(WorkflowInstance i, WorkflowNode n) {
+                    return ErrorResolution.fail();
+                }
+            });
+        Workflow workflow = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), actionNode("left", "fail"), actionNode("right", "sibling"),
+                actionNode("join", "join"), endNode("end"), endNode("error-end")),
+            List.of(edge("start-left", "start", "left"), edge("start-right", "start", "right"),
+                edge("left-join", "left", "join"), edge("right-join", "right", "join"),
+                edge("join-end", "join", "end", "true", 0),
+                defaultEdge("join-error", "join", "error-end")));
+
+        WorkflowInstance result = engine.startWorkflow(workflow, Map.of());
+
+        assertEquals(InstanceStatus.COMPLETED, result.status());
+        assertEquals("error-end", result.currentNodeId());
+        assertEquals(0, siblingExecutions.get());
+        assertEquals(List.of("start", "left", "error-end"),
+            result.history().stream().map(HistoryEntry::nodeId).toList());
+        assertEquals(latestHistory(result, "left").branchId(), latestHistory(result, "error-end").branchId());
+        assertTrue(result.activeBranches().isEmpty());
+    }
+
+    @Test
+    void recoveryBudgetIsSharedAcrossParallelBranches() {
+        AtomicInteger leftAttempts = new AtomicInteger();
+        AtomicInteger rightAttempts = new AtomicInteger();
+        WorkflowErrorHandler handler = new WorkflowErrorHandler() {
+            /** Retries entry on the actual failing fork child. */
+            public ErrorResolution handleNodeError(WorkflowInstance i, WorkflowNode n,
+                                                    NodeResult r, Exception e) {
+                return ErrorResolution.transitionTo(n.id());
+            }
+            /** Fails unexpected routing errors. */
+            public ErrorResolution handleNoMatchingEdge(WorkflowInstance i, WorkflowNode n) {
+                return ErrorResolution.fail();
+            }
+        };
+        WorkflowEngine engine = new WorkflowEngine(NodeExecutorProvider.fromList(
+            executor("left", () -> new NodeResult(leftAttempts.incrementAndGet() < 60
+                ? NodeResultStatus.FAILED : NodeResultStatus.COMPLETED, Map.of("left", true))),
+            executor("right", () -> new NodeResult(rightAttempts.incrementAndGet() < 60
+                ? NodeResultStatus.FAILED : NodeResultStatus.COMPLETED, Map.of("right", true))),
+            echo("join", "joined", true)), List.of(), handler);
+        Workflow workflow = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), humanTaskNode("sibling"), actionNode("left", "left"),
+                actionNode("right", "right"), actionNode("join", "join"), endNode("end")),
+            List.of(edge("start-sibling", "start", "sibling"), edge("start-left", "start", "left"),
+                edge("start-right", "start", "right"), edge("sibling-join", "sibling", "join"),
+                edge("left-join", "left", "join"), edge("right-join", "right", "join"),
+                edge("join-end", "join", "end")));
+
+        WorkflowInstance result = engine.startWorkflow(workflow, Map.of());
+
+        assertEquals(InstanceStatus.FAILED, result.status());
+        assertTrue(result.failureReason().contains("transition limit"));
+        assertEquals(60, leftAttempts.get());
+        assertEquals(39, rightAttempts.get(), "One shared budget also counts entry to the parked sibling");
+        assertNull(latestHistory(result, "sibling").completedOn());
+        assertTrue(result.activeBranches().contains(new ActiveBranch("root.0", "sibling")));
+        assertFalse(result.context().containsKey("joined"));
+        assertTrue(result.history().stream().filter(entry -> entry.nodeId().equals("left"))
+            .allMatch(entry -> entry.branchId().equals("root.1")));
+        assertTrue(result.history().stream().filter(entry -> entry.nodeId().equals("right"))
+            .allMatch(entry -> entry.branchId().equals("root.2")));
+    }
+
+    @Test
     void transitionRecoveryTargetsFailingBranchInsideParallelRegion() {
         // fork start → a1, a2 → join j → end. a2's executor throws; a custom handler transitions the
         // failing branch to a recovery action that routes to a separate error end. The recovery must be
