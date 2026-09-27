@@ -110,6 +110,7 @@ problems.
 | `MISSING_TASK_OUTPUTS` | Human task node has no outputs defined |
 | `EMPTY_TASK_INPUT_EXPRESSION` | Human task input has an empty or blank EL expression |
 | `MISSING_WAIT_DURATION` | Wait node has no duration configured |
+| `UNSUPPORTED_EXPRESSION_DIALECT` | Browser-only: expression uses syntax outside the supported subset; validate with Java |
 | `WIDGET_TYPE_MISMATCH` | Human-task output declares a `widget` but its `type` is not `string` (widgets apply to string outputs) |
 | `SELECT_MISSING_OPTIONS` | Human-task output uses `widget: select` but declares no options |
 | `MALFORMED_OUTPUT_OPTION` | Human-task output has a `select` option with no value |
@@ -137,12 +138,15 @@ public record ValidationProblem(
 
 ## Rule Coverage
 
-The engine's Java `WorkflowValidator` emits **57** distinct validation codes. The TypeScript validator
-used by the visual editor emits **55** of them — every code except `MISSING_EDGE_SOURCE` and
-`MISSING_EDGE_TARGET`, which cannot occur through the editor UI (it never produces an edge without a
-source and target).
+Both validators check structure and semantics; shared JSON conformance fixtures pin selected problem
+codes, severities and affected node/edge IDs. The Java validator remains authoritative for full EL.
 
-`INVALID_CONDITION` is implemented in **both**. The Java engine parses the expression with Jakarta EL;
-the TypeScript validator applies a lightweight syntax check (balanced parentheses, brackets, and
-quotes) so obviously malformed conditions are caught at design time. A condition that passes the
-editor's check but is still invalid EL will be rejected by the engine at runtime.
+The browser uses one subset parser for edge conditions and event-output mappings. Malformed supported
+syntax produces `INVALID_CONDITION` (warning) or `INVALID_OUTPUT_EXPRESSION` (error). Valid common
+ternaries are supported. Recognized engine-only syntax instead produces the browser-only warning
+`UNSUPPORTED_EXPRESSION_DIALECT`, preserving the expression and allowing import. This warning does not
+certify validity: malformed full-EL constructs may also require Java to diagnose them.
+
+See [Simulation and Condition Testing](visual-editor.md#simulation-and-condition-testing) for the subset
+and simulation limits. The repository's `conformance/README.md` describes the executable contract and
+intentional differences, including numeric and duration limits.

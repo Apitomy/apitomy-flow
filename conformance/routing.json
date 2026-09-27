@@ -1,0 +1,62 @@
+[
+    {
+        "name": "event mappings, nulls, literal inputs, aliases and persisted fork arrivals",
+        "problems": ["MISSING_ACTION_INPUTS:warning:join"],
+        "workflow": {
+            "id": "shared", "name": "Shared", "version": 1,
+            "nodes": [
+                { "id": "start", "name": "Start", "type": "start", "config": { "inputs": [] }, "position": { "x": 0, "y": 0 } },
+                { "id": "event", "name": "Event", "type": "receive-event", "config": { "eventType": "test", "outputs": [{ "contextKey": "total", "expression": "event.amount + context.offset" }, { "contextKey": "optional", "expression": "null" }, { "contextKey": "old", "expression": "context.total" }] }, "position": { "x": 100, "y": 0 } },
+                { "id": "fork", "name": "Fork", "type": "action", "config": { "actionType": "pending", "inputs": { "number": 42, "boolean": false, "object": { "nested": null }, "array": [1, null], "expression": "context.total" }, "outputs": [], "hostExtension": { "keep": true } }, "position": { "x": 200, "y": 0 } },
+                { "id": "left", "name": "Left", "type": "human-task", "config": { "description": "Left", "outputs": [{ "name": "answer", "contextKey": "leftAnswer", "type": "boolean" }] }, "position": { "x": 300, "y": 0 } },
+                { "id": "right", "name": "Right", "type": "human-task", "config": { "description": "Right", "outputs": [{ "name": "answer", "contextKey": "rightAnswer", "type": "number" }] }, "position": { "x": 300, "y": 100 } },
+                { "id": "join", "name": "Join", "type": "action", "config": { "actionType": "pending", "outputs": [] }, "position": { "x": 400, "y": 0 } },
+                { "id": "end", "name": "End", "type": "end", "config": {}, "position": { "x": 500, "y": 0 } }
+            ],
+            "edges": [
+                { "id": "begin", "source": "start", "target": "event", "priority": 0 },
+                { "id": "mapped", "source": "event", "target": "fork", "priority": 0 },
+                { "id": "fork-left", "source": "fork", "target": "left", "priority": 0 },
+                { "id": "fork-right", "source": "fork", "target": "right", "priority": 1 },
+                { "id": "left-join", "source": "left", "target": "join", "priority": 0 },
+                { "id": "right-join", "source": "right", "target": "join", "priority": 0 },
+                { "id": "done", "source": "join", "target": "end", "priority": 0 }
+            ]
+        },
+        "context": { "offset": 2, "total": 10 },
+        "inputs": { "fork": { "number": 42, "boolean": false, "object": { "nested": null }, "array": [1, null], "expression": 42 } },
+        "steps": [
+            { "activeBranches": [{ "branchId": "root", "nodeId": "event" }], "joinArrivals": {}, "context": { "offset": 2, "total": 10 }, "visited": ["start", "event"] },
+            { "resume": "event", "output": { "amount": 40 }, "activeBranches": [{ "branchId": "root", "nodeId": "fork" }], "joinArrivals": {}, "context": { "offset": 2, "total": 42, "optional": null, "old": 10 }, "visited": ["start", "event", "fork"] },
+            { "resume": "fork", "output": {}, "activeBranches": [{ "branchId": "root.0", "nodeId": "left" }, { "branchId": "root.1", "nodeId": "right" }], "joinArrivals": {}, "context": { "offset": 2, "total": 42, "optional": null, "old": 10 }, "visited": ["start", "event", "fork", "left", "right"] },
+            { "resume": "right", "output": { "answer": 7 }, "activeBranches": [{ "branchId": "root.0", "nodeId": "left" }], "joinArrivals": { "join": ["right-join"] }, "context": { "offset": 2, "total": 42, "optional": null, "old": 10, "rightAnswer": 7 }, "visited": ["start", "event", "fork", "left", "right"] },
+            { "resume": "left", "output": { "answer": false }, "activeBranches": [{ "branchId": "join#join", "nodeId": "join" }], "joinArrivals": {}, "context": { "offset": 2, "total": 42, "optional": null, "old": 10, "rightAnswer": 7, "leftAnswer": false }, "visited": ["start", "event", "fork", "left", "right", "join"] },
+            { "resume": "join", "output": {}, "activeBranches": [], "joinArrivals": {}, "context": { "offset": 2, "total": 42, "optional": null, "old": 10, "rightAnswer": 7, "leftAnswer": false }, "visited": ["start", "event", "fork", "left", "right", "join", "end"], "completed": true }
+        ]
+    },
+    {
+        "name": "priority, strict boolean conditions, lazy ternary and default fallback",
+        "problems": ["SELF_LOOP_EDGE:warning:repeat", "DUPLICATE_EDGE:warning:nonboolean", "DUPLICATE_EDGE:warning:later"],
+        "workflow": {
+            "id": "routing", "name": "Routing",
+            "nodes": [
+                { "id": "start", "name": "Start", "type": "start", "config": { "inputs": [] }, "position": { "x": 0, "y": 0 } },
+                { "id": "task", "name": "Task", "type": "human-task", "config": { "description": "Loop", "outputs": [] }, "position": { "x": 100, "y": 0 } },
+                { "id": "end", "name": "End", "type": "end", "config": {}, "position": { "x": 200, "y": 0 } }
+            ],
+            "edges": [
+                { "id": "begin", "source": "start", "target": "task", "priority": 0 },
+                { "id": "default", "source": "task", "target": "end", "priority": -10, "isDefault": true },
+                { "id": "repeat", "source": "task", "target": "task", "priority": 2, "condition": "context.repeat ? true : false" },
+                { "id": "nonboolean", "source": "task", "target": "end", "priority": 0, "condition": "1" },
+                { "id": "later", "source": "task", "target": "end", "priority": 3, "condition": "context.repeat ? unknown.value : false" }
+            ]
+        },
+        "context": {},
+        "steps": [
+            { "activeBranches": [{ "branchId": "root", "nodeId": "task" }], "joinArrivals": {}, "context": {}, "visited": ["start", "task"] },
+            { "resume": "task", "output": { "repeat": true }, "activeBranches": [{ "branchId": "root", "nodeId": "task" }], "joinArrivals": {}, "context": { "repeat": true }, "visited": ["start", "task", "task"] },
+            { "resume": "task", "output": { "repeat": false }, "activeBranches": [], "joinArrivals": {}, "context": { "repeat": false }, "visited": ["start", "task", "task", "end"], "completed": true }
+        ]
+    }
+]

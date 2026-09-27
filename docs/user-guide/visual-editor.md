@@ -175,9 +175,9 @@ if (result.workflow) {
 The **Simulate** button in the toolbar opens an interactive simulation of the workflow's routing
 logic against a sample context — without deploying or running a real instance. It answers "which
 branch does this input take?" and "does my condition evaluate the way I think?" entirely at
-authoring time. The routing and condition semantics match the Java engine exactly (priority-ordered
-edge selection, `isDefault` fallback, and Jakarta EL condition evaluation), so the path you see in
-the editor is the path a real instance would take.
+authoring time. Shared Java/TypeScript fixtures verify priority-ordered edge selection, `isDefault`
+fallback, structured fork/join routing, and a browser subset of Jakarta EL. Simulation is an authoring
+aid; host execution and full Jakarta EL behavior require verification with the Java engine.
 
 **Running a simulation:**
 
@@ -187,8 +187,25 @@ the editor is the path a real instance would take.
    terminal state). **Reset** clears the run.
 4. Where a node would block for real work — `action`, `human-task`, or `receive-event` — the
    simulation pauses so you can supply a **mock output** (JSON). The output is merged into the
-   context, exactly as a real node's output would be, and the run continues. `wait` nodes route
-   through immediately (no input needed).
+   context using declared output aliases and receive-event mappings, and the run continues. `wait`
+   nodes route through immediately (no input needed); real engine waits pause for external completion.
+
+**Expression support:** the browser supports JSON property/index access, literals, arithmetic,
+comparisons, logical operators, `empty`, and lazy ternary expressions (`condition ? yes : no`).
+Conditions select an edge only when the result is boolean `true`. Method/function calls, collection
+literals, lambdas, assignments, sequences and concatenation require the engine's full Jakarta EL.
+The editor retains such expressions and reports `UNSUPPORTED_EXPRESSION_DIALECT`, rather than calling
+them malformed. This warning means the browser cannot validate them; Java validation remains authoritative.
+Trying to simulate them produces an explicit unsupported-dialect error. Edge conditions and event-output
+mappings use the same parser; malformed supported syntax such as `1e` or `1 +` is diagnosed in both.
+Unquoted Unicode identifiers such as `context.café` also receive the advisory unsupported warning and
+remain importable. Use quoted keys such as `context['café']` for browser evaluation.
+
+**Loop guard:** each advancement allows 100 transitions across runnable branches. Resuming a blocked
+node starts a fresh budget; repeated Step/Run calls do not. Actions always pause in the simulator,
+while real synchronous actions can run uninterrupted, so budget placement can differ from a real run.
+Simulation does not exercise event correlation, timers, required-output enforcement or error-handler
+retries. Numeric extremes and Java-specific coercions are outside the verified browser contract.
 
 **What the canvas shows:**
 

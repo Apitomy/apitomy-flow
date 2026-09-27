@@ -39,7 +39,11 @@
         "name": "exclusive paths merge before join",
         "nodes": ["start", "a", "b", "x", "y", "merge", "end"],
         "edges": [["start", "a"], ["start", "b"], ["a", "x", "context.choose"], ["a", "y", "default"], ["x", "merge"], ["y", "merge"], ["merge", "end"], ["b", "end"]],
-        "visits": {"a": 1, "b": 1, "merge": 1, "end": 1}
+        "outputs": {"x": {"selected": "x", "xOnly": 42}, "y": {"selected": "y", "yOnly": 7}},
+        "cases": [
+            {"choose": true, "visits": {"start": 1, "a": 1, "b": 1, "x": 1, "y": 0, "merge": 1, "end": 1}, "context": {"choose": true, "selected": "x", "xOnly": 42}},
+            {"choose": false, "visits": {"start": 1, "a": 1, "b": 1, "x": 0, "y": 1, "merge": 1, "end": 1}, "context": {"choose": false, "selected": "y", "yOnly": 7}}
+        ]
     },
     {
         "name": "direct fork to join branch",
