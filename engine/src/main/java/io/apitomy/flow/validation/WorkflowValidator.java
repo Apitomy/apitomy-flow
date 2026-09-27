@@ -12,8 +12,10 @@ public class WorkflowValidator {
 
     private final ConditionEvaluator conditionEvaluator = new ConditionEvaluator();
 
+    /** Returns structural problems before attempting semantic traversal of malformed model data. */
     public List<ValidationProblem> validate(Workflow workflow) {
-        List<ValidationProblem> problems = new ArrayList<>();
+        List<ValidationProblem> problems = WorkflowShape.validate(workflow);
+        if (!problems.isEmpty()) return problems;
         validateStructure(workflow, problems);
         validateConnectivity(workflow, problems);
         validateEdgeConditions(workflow, problems);
@@ -22,6 +24,7 @@ public class WorkflowValidator {
         return problems;
     }
 
+    /** Returns whether validation found any error-severity problems. */
     public boolean hasErrors(List<ValidationProblem> problems) {
         return problems.stream().anyMatch(p -> p.severity() == ValidationSeverity.ERROR);
     }
@@ -699,13 +702,14 @@ public class WorkflowValidator {
             case "FORK_WITHOUT_JOIN" ->
                 "Parallel branches from this fork do not re-converge at a single join";
             case "UNBALANCED_PARALLEL" ->
-                "Parallel branches from this fork converge at different points (unbalanced)";
+                "Each parallel branch must reach its join through one distinct incoming edge; merge "
+                    + "exclusive paths and finish nested regions before the join";
             case "CROSSING_PARALLEL_REGIONS" ->
                 "An edge crosses a parallel region boundary (regions must be well-nested)";
             case "PARALLEL_BRANCH_REACHES_END" ->
                 "A parallel branch can reach an end node without first joining";
             case "PARALLEL_REGION_CYCLE" ->
-                "A cycle exists inside a parallel region";
+                "A parallel branch can re-enter its fork before joining; repeat regions only after their join";
             default -> "Invalid parallel structure";
         };
     }

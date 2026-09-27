@@ -275,7 +275,7 @@ describe('validateWorkflow', () => {
       expect(hasProblem(validateWorkflow(w), 'MISSING_TASK_DESCRIPTION')).toBe(true);
     });
 
-    it('DUPLICATE_EVENT_RECEIVER with different key order in match config', () => {
+    it('rejects object match configs before checking duplicate receivers', () => {
       const w = workflow(
         [
           node('start', 'start'),
@@ -285,7 +285,10 @@ describe('validateWorkflow', () => {
         ],
         [edge('e1', 'start', 'r1'), edge('e2', 'r1', 'end'), edge('e3', 'start', 'r2'), edge('e4', 'r2', 'end')],
       );
-      expect(hasProblem(validateWorkflow(w), 'DUPLICATE_EVENT_RECEIVER')).toBe(true);
+      expect(validateWorkflow(w)).toEqual(expect.arrayContaining([
+        expect.objectContaining({ code: 'INVALID_MATCH_TYPE', severity: 'error', nodeId: 'r1' }),
+        expect.objectContaining({ code: 'INVALID_MATCH_TYPE', severity: 'error', nodeId: 'r2' }),
+      ]));
     });
   });
 

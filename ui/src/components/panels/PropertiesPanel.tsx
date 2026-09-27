@@ -16,7 +16,7 @@ import { type EditorSpi } from '../../types/spi.ts';
 import { type ActionTypeDescriptor } from '../../types/spi.ts';
 import { type HumanTaskOutput, type OutputOption, type OutputWidget, type ActionOutputConfig, type EventOutputMapping } from '../../types/workflow.ts';
 import { type ValidationProblem } from '../../types/validation.ts';
-import { duplicateKeys, nextPairId } from '../../utils/mapInputs.ts';
+import { duplicateKeys, nextPairId, inputValueText } from '../../utils/mapInputs.ts';
 import { createMapDraft, editMapDraft, syncMapDraft, type MapDraftPair } from '../../utils/mapInputDraft.ts';
 import { evaluateCondition, ElEvaluationError } from '../../simulation/elEvaluator.ts';
 import { JsonCodeEditor } from '../common/JsonCodeEditor.tsx';
@@ -950,7 +950,7 @@ function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading,
               <label>Inputs</label>
               <div className="properties-panel__inputs-list">
                 {descriptor.inputs.map((field) => {
-                  const inputs = (node.data.config.inputs as Record<string, string>) || {};
+                  const inputs = (node.data.config.inputs as Record<string, unknown>) || {};
                   return (
                     <div key={field.name} className="properties-panel__input-item">
                       <div className="properties-panel__spi-field-header">
@@ -965,7 +965,7 @@ function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading,
                       )}
                       <input
                         type="text"
-                        value={inputs[field.name] ?? ''}
+                        value={inputValueText(inputs[field.name])}
                         placeholder={`e.g. context.${field.name}`}
                         onChange={(e) => {
                           const updated = { ...inputs, [field.name]: e.target.value };

@@ -75,6 +75,7 @@ public final class ParallelRegions {
         for (String forkId : forks) {
             String join = findJoin(workflow, forkId, problems);
             if (join != null) {
+                validateRegion(workflow, forkId, join, problems);
                 forkToJoin.put(forkId, join);
                 joins.add(join);
                 Set<String> incoming = new LinkedHashSet<>();
@@ -86,6 +87,60 @@ public final class ParallelRegions {
         }
 
         return new ParallelRegions(forks, forkToJoin, joins, joinIncoming, problems);
+    }
+
+    /**
+     * The persisted runtime tracks arrivals by join/edge, not by activated fork obligations. Each
+     * fork branch must therefore own exactly one distinct join edge, and the region must be closed
+     * to outside arrivals. Exclusive paths may merge before that edge. Nested forks are checked
+     * independently and must finish at their own join before reaching the enclosing join.
+     */
+    private static void validateRegion(Workflow workflow, String forkId, String join, List<Problem> problems) {
+        Set<String> regionNodes = new LinkedHashSet<>();
+        Set<String> arrivalEdges = new LinkedHashSet<>();
+        boolean unbalanced = false;
+        boolean crossing = false;
+        boolean reentry = false;
+        for (WorkflowEdge branch : workflow.getOutgoingEdges(forkId)) {
+            Set<String> branchNodes = new LinkedHashSet<>();
+            Set<String> branchArrivals = new LinkedHashSet<>();
+            Deque<WorkflowEdge> queue = new ArrayDeque<>();
+            queue.add(branch);
+            while (!queue.isEmpty()) {
+                WorkflowEdge edge = queue.poll();
+                String target = edge.target();
+                if (target.equals(join)) {
+                    branchArrivals.add(edge.id());
+                } else if (target.equals(forkId)) {
+                    reentry = true;
+                } else if (branchNodes.add(target)) {
+                    queue.addAll(workflow.getOutgoingEdges(target));
+                }
+            }
+            unbalanced |= branchArrivals.size() != 1
+                || branchArrivals.stream().anyMatch(arrivalEdges::contains);
+            crossing |= branchNodes.stream().anyMatch(regionNodes::contains);
+            arrivalEdges.addAll(branchArrivals);
+            regionNodes.addAll(branchNodes);
+        }
+        for (WorkflowEdge edge : workflow.edges()) {
+            if (edge.target().equals(join) && !arrivalEdges.contains(edge.id())) {
+                crossing = true;
+            }
+            if (regionNodes.contains(edge.target())
+                && !edge.source().equals(forkId) && !regionNodes.contains(edge.source())) {
+                crossing = true;
+            }
+        }
+        if (reentry) {
+            problems.add(new Problem("PARALLEL_REGION_CYCLE", forkId));
+        }
+        if (unbalanced) {
+            problems.add(new Problem("UNBALANCED_PARALLEL", forkId));
+        }
+        if (crossing) {
+            problems.add(new Problem("CROSSING_PARALLEL_REGIONS", forkId));
+        }
     }
 
     private static boolean isUnconditional(WorkflowEdge e) {
@@ -108,7 +163,9 @@ public final class ParallelRegions {
             queue.add(branch.target());
             while (!queue.isEmpty()) {
                 String current = queue.poll();
-                if (!reachable.add(current)) {
+                // A later activation of this fork is not part of this region. Traversing through it
+                // would make sibling branch nodes look like joins on a balanced loop-back.
+                if (current.equals(forkId) || !reachable.add(current)) {
                     continue;
                 }
                 WorkflowNode node = workflow.findNodeById(current).orElse(null);
