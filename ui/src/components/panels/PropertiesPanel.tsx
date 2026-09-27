@@ -17,6 +17,7 @@ import { type ActionTypeDescriptor } from '../../types/spi.ts';
 import { type HumanTaskOutput, type OutputOption, type OutputWidget, type ActionOutputConfig, type EventOutputMapping } from '../../types/workflow.ts';
 import { type ValidationProblem } from '../../types/validation.ts';
 import { mapToPairs, pairsToMap, duplicateKeys, nextPairId, type KeyValuePair } from '../../utils/mapInputs.ts';
+import { filterActionTypeOptions } from '../../utils/actionTypeFilter.ts';
 import { evaluateCondition, ElEvaluationError } from '../../simulation/elEvaluator.ts';
 import { JsonCodeEditor } from '../common/JsonCodeEditor.tsx';
 import './PropertiesPanel.css';
@@ -1163,13 +1164,10 @@ function ActionTypeSelect({ value, actionTypes, loading, onSelect, onClear }: {
 
   const inputValue = isOpen ? filterText : displayValue;
 
-  const filteredOptions = useMemo(() => {
-    if (!filterText) return actionTypes;
-    const lower = filterText.toLowerCase();
-    return actionTypes.filter(at =>
-      at.label.toLowerCase().includes(lower) || at.value.toLowerCase().includes(lower),
-    );
-  }, [filterText, actionTypes]);
+  const { filterEnabled, options: filteredOptions } = useMemo(
+    () => filterActionTypeOptions(actionTypes, filterText),
+    [filterText, actionTypes],
+  );
 
   const isCustom = isOpen && filterText && !actionTypes.some(at =>
     at.value === filterText || at.label.toLowerCase() === filterText.toLowerCase(),
@@ -1221,7 +1219,7 @@ function ActionTypeSelect({ value, actionTypes, loading, onSelect, onClear }: {
           onClick={() => { if (!isOpen) setIsOpen(true); }}
           onChange={onInputChange}
           innerRef={textInputRef}
-          placeholder={loading ? 'Loading...' : 'Select or type an action type'}
+          placeholder={loading ? 'Loading...' : filterEnabled ? 'Filter action types...' : 'Select or type an action type'}
           autoComplete="off"
         />
         {(value || inputValue) && (
@@ -1256,7 +1254,7 @@ function ActionTypeSelect({ value, actionTypes, loading, onSelect, onClear }: {
           </SelectOption>
         )}
         {filteredOptions.length === 0 && !isCustom && (
-          <SelectOption isDisabled>No results found</SelectOption>
+          <SelectOption isDisabled>{filterEnabled ? 'No matching action types' : 'No results found'}</SelectOption>
         )}
       </SelectList>
     </Select>
