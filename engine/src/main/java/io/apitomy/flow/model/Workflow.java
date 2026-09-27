@@ -12,9 +12,10 @@ public record Workflow(
     List<WorkflowNode> nodes,
     List<WorkflowEdge> edges
 ) {
+    /** Owns definition collections, including when constructed directly or deserialized. */
     public Workflow {
-        if (nodes == null) nodes = List.of();
-        if (edges == null) edges = List.of();
+        nodes = JsonSnapshots.list(nodes == null ? List.of() : nodes);
+        edges = JsonSnapshots.list(edges == null ? List.of() : edges);
     }
 
     public Optional<WorkflowNode> findNodeById(String nodeId) {

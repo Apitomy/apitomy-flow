@@ -2,6 +2,13 @@ import { describe, it, expect } from 'vitest';
 import { mapToPairs, pairsToMap, duplicateKeys, nextPairId, type KeyValuePair } from './mapInputs.ts';
 
 describe('mapToPairs', () => {
+  it('displays literals as JSON while preserving their types when another row is edited', () => {
+    const pairs = mapToPairs({ count: 3, enabled: false, data: { x: [1, null] }, expr: 'context.x' });
+    expect(pairs.map(pair => pair.value)).toEqual(['3', 'false', '{"x":[1,null]}', 'context.x']);
+    pairs[3].value = 'context.y';
+    pairs[0].key = 'renamed';
+    expect(pairsToMap(pairs)).toEqual({ renamed: 3, enabled: false, data: { x: [1, null] }, expr: 'context.y' });
+  });
   it('converts a map to pairs preserving insertion order', () => {
     expect(mapToPairs({ a: '1', b: '2' }).map(({ key, value }) => ({ key, value }))).toEqual([
       { key: 'a', value: '1' },
