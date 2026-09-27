@@ -438,7 +438,7 @@ describe('fork / AND-join', () => {
                 node('j', 'wait'), node('dead', 'wait'), node('end', 'end')],
             [edge('s', 'start', 'f'), edge('fa', 'f', 'a'), edge('fb', 'f', 'b'),
                 edge('aj', 'a', 'j'), edge('bd', 'b', 'dead', { condition: 'context.never == true' }),
-                edge('je', 'j', 'end')],
+                edge('dj', 'dead', 'j'), edge('je', 'j', 'end')],
         );
         const state = runSimulation(wf, startSimulation(wf, {}));
         expect(state.status).toBe('failed');
