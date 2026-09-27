@@ -1,4 +1,5 @@
 import { type Workflow, type WorkflowEdge, type WorkflowNode } from '../types/workflow.ts';
+import { jsonEqual } from '../utils/jsonEqual.ts';
 import {
   type DiffStatus,
   type DiffWarning,
@@ -47,11 +48,19 @@ function indexEdges(edges: WorkflowEdge[]): { map: Map<string, WorkflowEdge>; du
   return { map, duplicates: [...duplicates] };
 }
 
+function validPosition(node?: WorkflowNode): WorkflowNode['position'] | undefined {
+  const position = node?.position;
+  // Match the layout contract: missing or nonfinite coordinates require auto-layout.
+  return position && Number.isFinite(position.x) && Number.isFinite(position.y) ? position : undefined;
+}
+
 function samePosition(a?: WorkflowNode, b?: WorkflowNode): boolean {
-  if (!a || !b) {
-    return false;
+  const before = validPosition(a);
+  const after = validPosition(b);
+  if (!before || !after) {
+    return before === after;
   }
-  return a.position.x === b.position.x && a.position.y === b.position.y;
+  return before.x === after.x && before.y === after.y;
 }
 
 function nodeDiff(baseNode?: WorkflowNode, compareNode?: WorkflowNode): NodeDiffRecord {
@@ -69,7 +78,7 @@ function nodeDiff(baseNode?: WorkflowNode, compareNode?: WorkflowNode): NodeDiff
   if (baseNode!.name !== compareNode!.name) {
     changes.push('name');
   }
-  if (JSON.stringify(baseNode!.config) !== JSON.stringify(compareNode!.config)) {
+  if (!jsonEqual(baseNode!.config, compareNode!.config)) {
     changes.push('config');
   }
   if (!samePosition(baseNode, compareNode)) {
