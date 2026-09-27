@@ -10,8 +10,11 @@ export interface FlowNodeData extends Record<string, unknown> {
   validationProblems?: ValidationProblem[];
   /** Static fork/join role for the authoring hint, if any (editor only). */
   parallelRole?: ParallelRole;
+  /** Wire fields retained for host extensions when converting back from the canvas. */
+  definition?: WorkflowNode;
 }
 
+/** Converts wire nodes to canvas nodes while retaining host extension fields for export. */
 export function toReactFlowNodes(nodes: WorkflowNode[]): Node<FlowNodeData>[] {
   return nodes.map(node => ({
     id: node.id,
@@ -21,10 +24,12 @@ export function toReactFlowNodes(nodes: WorkflowNode[]): Node<FlowNodeData>[] {
       name: node.name,
       nodeType: node.type,
       config: node.config,
+      definition: node,
     },
   }));
 }
 
+/** Converts wire edges to canvas edges while retaining host extension fields for export. */
 export function toReactFlowEdges(edges: WorkflowEdge[]): Edge[] {
   return edges.map(edge => ({
     id: edge.id,
@@ -39,12 +44,15 @@ export function toReactFlowEdges(edges: WorkflowEdge[]): Edge[] {
       priority: edge.priority,
       isDefault: edge.isDefault,
       label: edge.label,
+      definition: edge,
     },
   }));
 }
 
+/** Applies edited canvas fields over the original node definition and its host extensions. */
 export function toWorkflowNodes(nodes: Node<FlowNodeData>[]): WorkflowNode[] {
   return nodes.map(node => ({
+    ...node.data.definition,
     id: node.id,
     type: node.data.nodeType,
     name: node.data.name,
@@ -53,8 +61,10 @@ export function toWorkflowNodes(nodes: Node<FlowNodeData>[]): WorkflowNode[] {
   }));
 }
 
+/** Applies edited canvas fields over the original edge definition and its host extensions. */
 export function toWorkflowEdges(edges: Edge[]): WorkflowEdge[] {
   return edges.map(edge => ({
+    ...(edge.data?.definition as WorkflowEdge | undefined),
     id: edge.id,
     source: edge.source,
     target: edge.target,
@@ -65,12 +75,10 @@ export function toWorkflowEdges(edges: Edge[]): WorkflowEdge[] {
   }));
 }
 
+/** Reassembles the edited graph without discarding host metadata from the base definition. */
 export function toWorkflow(base: Pick<Workflow, 'id' | 'name' | 'description' | 'version'>, nodes: Node<FlowNodeData>[], edges: Edge[]): Workflow {
   return {
-    id: base.id,
-    name: base.name,
-    description: base.description,
-    version: base.version,
+    ...base,
     nodes: toWorkflowNodes(nodes),
     edges: toWorkflowEdges(edges),
   };

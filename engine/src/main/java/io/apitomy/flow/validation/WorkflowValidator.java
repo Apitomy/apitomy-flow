@@ -12,8 +12,10 @@ public class WorkflowValidator {
 
     private final ConditionEvaluator conditionEvaluator = new ConditionEvaluator();
 
+    /** Returns structural problems before attempting semantic traversal of malformed model data. */
     public List<ValidationProblem> validate(Workflow workflow) {
-        List<ValidationProblem> problems = new ArrayList<>();
+        List<ValidationProblem> problems = WorkflowShape.validate(workflow);
+        if (!problems.isEmpty()) return problems;
         validateStructure(workflow, problems);
         validateConnectivity(workflow, problems);
         validateEdgeConditions(workflow, problems);
@@ -22,6 +24,7 @@ public class WorkflowValidator {
         return problems;
     }
 
+    /** Returns whether validation found any error-severity problems. */
     public boolean hasErrors(List<ValidationProblem> problems) {
         return problems.stream().anyMatch(p -> p.severity() == ValidationSeverity.ERROR);
     }
