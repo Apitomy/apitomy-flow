@@ -85,9 +85,11 @@ export interface SimMock {
 // Lifecycle
 // ---------------------------------------------------------------------------
 
+/** Starts a simulation, rejecting unsupported parallel topology before entering any node. */
 export function startSimulation(workflow: Workflow, context: Record<string, unknown>): SimState {
     const startNode = workflow.nodes.find(n => n.type === 'start');
-    if (!startNode) {
+    const problem = startNode ? analyzeParallelRegions(workflow).problems[0] : undefined;
+    if (!startNode || problem) {
         return {
             status: 'failed',
             activeBranches: [],
@@ -98,7 +100,9 @@ export function startSimulation(workflow: Workflow, context: Record<string, unkn
             visitedNodeIds: [],
             history: [],
             edgeEvaluations: {},
-            error: { message: 'No start node found' },
+            error: problem
+                ? { message: `Invalid parallel structure: ${problem.code}`, nodeId: problem.nodeId }
+                : { message: 'No start node found' },
             transitions: 0,
         };
     }
