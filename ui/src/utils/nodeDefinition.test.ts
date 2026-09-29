@@ -16,6 +16,24 @@ function node(overrides: Omit<Partial<WorkflowNode>, 'config'> & { config?: unkn
 }
 
 describe('getNodeDefinition', () => {
+    describe.each(['start', 'human-task', 'action', 'receive-event'] as const)('%s host-loaded nodes', type => {
+        it.each([
+            { state: 'null', fields: { config: null } },
+            { state: 'omitted', fields: {} },
+        ])('returns an empty definition view when config is $state', ({ fields }) => {
+            // Hosts can supply wire-schema nodes directly, without parseWorkflow normalization.
+            const hostNode = { id: 'n1', type, name: 'My Node', ...fields } as unknown as WorkflowNode;
+
+            expect(getNodeDefinition(hostNode)).toEqual({
+                id: 'n1',
+                type,
+                name: 'My Node',
+                description: undefined,
+                sections: [],
+            });
+        });
+    });
+
     it.each(['action', 'human-task'])('formats imported %s literals safely for the Viewer', type => {
         const result = parseWorkflow(JSON.stringify({
             id: 'w', name: 'Workflow',
