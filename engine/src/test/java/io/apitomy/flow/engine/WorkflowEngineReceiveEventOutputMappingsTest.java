@@ -178,19 +178,16 @@ class WorkflowEngineReceiveEventOutputMappingsTest {
     }
 
     @Test
-    void mappingEntriesWithNonStringContextKeyOrExpressionAreSkippedAtRuntime() {
+    void rejectsNonStringMappingExpressionBeforeStarting() {
         WorkflowEngine engine = engine();
         WorkflowNode receive = receiveEventNode("wait", "order.created", List.of(),
             List.of(Map.of("contextKey", "answer", "expression", 42)));
         Workflow workflow = new Workflow("wf", "W", null, null,
             List.of(startNode("start"), receive, endNode("end")),
             List.of(edge("e1", "start", "wait"), edge("e2", "wait", "end")));
-        WorkflowInstance waiting = engine.startWorkflow(workflow, Map.of());
-
-        WorkflowInstance completed = engine.completeNode(workflow, waiting, "wait",
-            new NodeResult(NodeResultStatus.COMPLETED, Map.of("x", "y")));
-
-        assertEquals(InstanceStatus.COMPLETED, completed.status());
-        assertFalse(completed.context().containsKey("answer"), "non-string expression entries must be skipped, not stringified");
+        WorkflowValidationException failure = assertThrows(WorkflowValidationException.class,
+            () -> engine.startWorkflow(workflow, Map.of()));
+        assertTrue(failure.getProblems().stream().anyMatch(problem ->
+            problem.code().equals("MISSING_OUTPUT_EXPRESSION") && "wait".equals(problem.nodeId())));
     }
 }

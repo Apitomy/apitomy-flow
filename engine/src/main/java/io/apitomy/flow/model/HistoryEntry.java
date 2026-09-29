@@ -15,6 +15,11 @@ public record HistoryEntry(
     Map<String, Object> output,
     String branchId
 ) {
+    /** Owns output data while preserving null output for an entry without a result. */
+    public HistoryEntry {
+        output = JsonSnapshots.map(output);
+    }
+
     /**
      * Back-compat constructor for callers that predate branch attribution; sets {@code branchId} to
      * {@code null} (the root/non-parallel branch).
