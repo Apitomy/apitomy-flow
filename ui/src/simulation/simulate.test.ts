@@ -17,7 +17,8 @@ import {
  */
 
 function node(id: string, type: WorkflowNode['type'], config: Record<string, unknown> = {}): WorkflowNode {
-    return { id, type, name: id, config, position: { x: 0, y: 0 } };
+    // Runtime fixtures intentionally include malformed configs to verify defensive execution.
+    return { id, type, name: id, config, position: { x: 0, y: 0 } } as WorkflowNode;
 }
 
 function edge(id: string, source: string, target: string, extra: Partial<WorkflowEdge> = {}): WorkflowEdge {

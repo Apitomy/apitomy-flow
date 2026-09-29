@@ -51,7 +51,7 @@ function samePosition(a?: WorkflowNode, b?: WorkflowNode): boolean {
   if (!a || !b) {
     return false;
   }
-  return a.position.x === b.position.x && a.position.y === b.position.y;
+  return a.position?.x === b.position?.x && a.position?.y === b.position?.y;
 }
 
 function nodeDiff(baseNode?: WorkflowNode, compareNode?: WorkflowNode): NodeDiffRecord {

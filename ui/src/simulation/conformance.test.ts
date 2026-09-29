@@ -92,7 +92,7 @@ describe('shared routing and serialization conformance', () => {
                 expect(state.visitedNodeIds).toEqual(step.visited);
                 if (fixture.inputs && state.currentNodeId === 'fork') {
                     const node = workflow.nodes.find(node => node.id === 'fork')!;
-                    const inputs = node.config.inputs as Record<string, unknown>;
+                    const inputs = node.config.inputs as import('../types/workflow.ts').JsonObject;
                     expect(pairsToMap(mapToPairs(inputs))).toEqual(inputs);
                     expect(resolveExpression(inputs.expression as string, { context: state.context }))
                         .toEqual(fixture.inputs.fork.expression);

@@ -134,7 +134,7 @@ describe('nodeFieldComparisons', () => {
         name: 'Receive',
         config: {
           eventType: 'repo.merged',
-          outputs: [{ name: 'status', type: 'string', required: true }],
+          outputs: [{ contextKey: 'status', expression: 'event.status' }],
         },
         position: { x: 1, y: 2 },
       },
@@ -144,7 +144,7 @@ describe('nodeFieldComparisons', () => {
         name: 'Receive',
         config: {
           eventType: 'repo.closed',
-          outputs: [{ name: 'status', type: 'string', required: true }, { name: 'id', type: 'string', required: false }],
+          outputs: [{ contextKey: 'status', expression: 'event.status' }, { contextKey: 'id', expression: 'event.id' }],
         },
         position: { x: 1, y: 2 },
       },

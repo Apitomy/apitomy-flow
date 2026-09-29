@@ -294,29 +294,21 @@ public class WorkflowEngine {
             return null;
         }
 
-        String description = node.config().get("description") instanceof String d ? d : null;
+        NodeConfig.HumanTask config = (NodeConfig.HumanTask) node.typedConfig();
+        String description = config.description();
 
         Map<String, Object> resolvedInputs = new LinkedHashMap<>();
-        if (node.config().get("inputs") instanceof Map<?, ?> inputExprs) {
-            for (Map.Entry<?, ?> entry : inputExprs.entrySet()) {
-                String label = String.valueOf(entry.getKey());
-                try {
-                    resolvedInputs.put(label, resolveInputValue(entry.getValue(), instance.context()));
-                } catch (Exception e) {
-                    log.warn("Failed to resolve human task input '{}': {}", label, e.getMessage());
-                    resolvedInputs.put(label, null);
-                }
+        for (Map.Entry<String, Object> entry : config.inputs().entrySet()) {
+            String label = entry.getKey();
+            try {
+                resolvedInputs.put(label, resolveInputValue(entry.getValue(), instance.context()));
+            } catch (Exception e) {
+                log.warn("Failed to resolve human task input '{}': {}", label, e.getMessage());
+                resolvedInputs.put(label, null);
             }
         }
 
-        List<OutputDefinition> outputs = List.of();
-        if (node.config().get("outputs") instanceof List<?> outputDefs) {
-            outputs = outputDefs.stream()
-                .filter(Map.class::isInstance)
-                .map(o -> (Map<?, ?>) o)
-                .map(this::mapHumanTaskOutput)
-                .toList();
-        }
+        List<OutputDefinition> outputs = config.outputs().stream().map(this::mapHumanTaskOutput).toList();
 
         return new HumanTaskInfo(node.id(), node.name(), description,
             Collections.unmodifiableMap(resolvedInputs), outputs);
@@ -366,27 +358,11 @@ public class WorkflowEngine {
             return null;
         }
 
-        String eventType = node.config().get("eventType") instanceof String et ? et : null;
-
-        List<String> matchExpressions = List.of();
-        if (node.config().get("match") instanceof List<?> matchList) {
-            matchExpressions = matchList.stream()
-                .filter(String.class::isInstance)
-                .map(String.class::cast)
-                .toList();
-        }
-
-        List<EventOutputMapping> outputMappings = List.of();
-        if (node.config().get("outputs") instanceof List<?> outputDefs) {
-            outputMappings = outputDefs.stream()
-                .filter(Map.class::isInstance)
-                .map(o -> (Map<?, ?>) o)
-                .map(o -> new EventOutputMapping(
-                    o.get("contextKey") != null ? String.valueOf(o.get("contextKey")) : null,
-                    o.get("expression") != null ? String.valueOf(o.get("expression")) : null
-                ))
-                .toList();
-        }
+        NodeConfig.ReceiveEvent config = (NodeConfig.ReceiveEvent) node.typedConfig();
+        String eventType = config.eventType();
+        List<String> matchExpressions = config.match();
+        List<EventOutputMapping> outputMappings = config.outputs().stream()
+            .map(o -> new EventOutputMapping(o.contextKey(), o.expression())).toList();
 
         return new ReceiveEventInfo(node.id(), node.name(), eventType, matchExpressions, outputMappings);
     }
@@ -435,7 +411,8 @@ public class WorkflowEngine {
         }
 
         Duration duration = null;
-        if (node.config().get("duration") instanceof String d) {
+        String d = ((NodeConfig.Wait) node.typedConfig()).duration();
+        if (d != null) {
             try {
                 duration = Duration.parse(d);
             } catch (Exception e) {
@@ -489,24 +466,18 @@ public class WorkflowEngine {
             return null;
         }
 
-        String actionType = node.config().get("actionType") instanceof String at ? at : null;
+        NodeConfig.Action config = (NodeConfig.Action) node.typedConfig();
+        String actionType = config.actionType();
 
         Map<String, Object> resolvedInputs = resolveNodeInputs(node, instance.context());
 
-        List<OutputDefinition> expectedOutputs = List.of();
-        if (node.config().get("outputs") instanceof List<?> outputDefs) {
-            expectedOutputs = outputDefs.stream()
-                .filter(Map.class::isInstance)
-                .map(o -> (Map<?, ?>) o)
-                .map(o -> new OutputDefinition(
-                    String.valueOf(o.get("name")),
-                    o.get("type") != null ? String.valueOf(o.get("type")) : "string",
-                    Boolean.TRUE.equals(o.get("required")),
-                    null, null, null, null, null,
-                    o.get("contextKey") instanceof String ck && !ck.isBlank() ? ck : null
-                ))
-                .toList();
-        }
+        List<OutputDefinition> expectedOutputs = config.outputs().stream()
+            .map(o -> new OutputDefinition(
+                o.name(), o.type(), o.required(),
+                null, null, null, null, null,
+                o.contextKey() != null && !o.contextKey().isBlank() ? o.contextKey() : null
+            ))
+            .toList();
 
         return new ActionInfo(node.id(), node.name(), actionType,
             resolvedInputs, expectedOutputs);
@@ -560,7 +531,8 @@ public class WorkflowEngine {
         }
 
         // Check event type
-        String expectedType = currentNode.config().get("eventType") instanceof String et ? et : null;
+        NodeConfig.ReceiveEvent config = (NodeConfig.ReceiveEvent) currentNode.typedConfig();
+        String expectedType = config.eventType();
         if (expectedType == null) {
             return false;
         }
@@ -570,19 +542,14 @@ public class WorkflowEngine {
         }
 
         // Check match expressions
-        Object matchConfig = currentNode.config().get("match");
-        if (matchConfig instanceof List<?> matchExpressions) {
-            for (Object expr : matchExpressions) {
-                if (expr instanceof String expression) {
-                    try {
-                        if (!conditionEvaluator.evaluate(expression, instance.context(), event)) {
-                            return false;
-                        }
-                    } catch (ConditionEvaluationException e) {
-                        log.warn("Event match expression failed: {}", e.getMessage());
-                        return false;
-                    }
+        for (String expression : config.match()) {
+            try {
+                if (!conditionEvaluator.evaluate(expression, instance.context(), event)) {
+                    return false;
                 }
+            } catch (ConditionEvaluationException e) {
+                log.warn("Event match expression failed: {}", e.getMessage());
+                return false;
             }
         }
 
@@ -901,7 +868,7 @@ public class WorkflowEngine {
 
     private WorkflowInstance executeActionNode(Workflow workflow, WorkflowInstance instance,
                                                String branchId, WorkflowNode actionNode) {
-        String actionType = actionNode.config().get("actionType") instanceof String at ? at : null;
+        String actionType = ((NodeConfig.Action) actionNode.typedConfig()).actionType();
         NodeExecutor executor = executorProvider.getExecutor(actionType);
         if (executor == null) {
             return failWorkflow(instance, "No executor found for action type: " + actionType, null);
@@ -1128,27 +1095,25 @@ public class WorkflowEngine {
      */
     private Map<String, Object> resolveMergeOutput(WorkflowInstance instance, WorkflowNode node,
                                                     Map<String, Object> rawOutput) {
-        if (node.type() == NodeType.RECEIVE_EVENT
-            && node.config().get("outputs") instanceof List<?> outputDefs && !outputDefs.isEmpty()) {
-            return applyEventOutputMappings(outputDefs, instance.context(), rawOutput == null ? Map.of() : rawOutput);
+        if (node.typedConfig() instanceof NodeConfig.ReceiveEvent config && !config.outputs().isEmpty()) {
+            return applyEventOutputMappings(config.outputs(), instance.context(), rawOutput == null ? Map.of() : rawOutput);
         }
         return resolveContextKeys(node, rawOutput);
     }
 
     /**
-     * Evaluates each raw {@code {contextKey, expression}} mapping entry against the given
+     * Evaluates each typed {@code {contextKey, expression}} mapping entry against the given
      * {@code event} and {@code context}, building the map of resolved values keyed by
-     * {@code contextKey}. Entries missing either field, or with a non-string {@code contextKey}
-     * or {@code expression}, are skipped (flagged separately by validation) rather than coerced
-     * via {@code String.valueOf}, matching the UI simulator's equivalent runtime check.
+     * {@code contextKey}. Entries missing either field are skipped (flagged separately by validation).
+     * Wrong structural types are rejected by preflight before execution.
      */
-    private Map<String, Object> applyEventOutputMappings(List<?> outputDefs, Map<String, Object> context,
+    private Map<String, Object> applyEventOutputMappings(List<NodeConfig.Mapping> outputDefs, Map<String, Object> context,
                                                           Map<String, Object> event) {
         Map<String, Object> mapped = new HashMap<>();
-        for (Object defObj : outputDefs) {
-            if (defObj instanceof Map<?, ?> def
-                && def.get("contextKey") instanceof String contextKey && !contextKey.isBlank()
-                && def.get("expression") instanceof String expression && !expression.isBlank()) {
+        for (NodeConfig.Mapping def : outputDefs) {
+            String contextKey = def.contextKey();
+            String expression = def.expression();
+            if (contextKey != null && !contextKey.isBlank() && expression != null && !expression.isBlank()) {
                 mapped.put(contextKey, conditionEvaluator.resolve(expression, context, event));
             }
         }
@@ -1170,18 +1135,11 @@ public class WorkflowEngine {
             return rawOutput;
         }
         Map<String, String> renames = new HashMap<>();
-        if (node.config().get("outputs") instanceof List<?> outputDefs) {
-            for (Object defObj : outputDefs) {
-                if (defObj instanceof Map<?, ?> def) {
-                    Object nameVal = def.get("name");
-                    if (nameVal == null) {
-                        continue;
-                    }
-                    String name = String.valueOf(nameVal);
-                    if (def.get("contextKey") instanceof String ck && !ck.isBlank() && !ck.equals(name)) {
-                        renames.put(name, ck);
-                    }
-                }
+        for (NodeConfig.Field def : outputFields(node)) {
+            String name = def.name();
+            String key = def.effectiveContextKey();
+            if (name != null && !name.equals(key)) {
+                renames.put(name, key);
             }
         }
         if (renames.isEmpty()) {
@@ -1211,29 +1169,22 @@ public class WorkflowEngine {
      * {@code name}, {@code widget} is inferred from {@code type} when omitted, and {@code options}
      * are parsed into {@link OutputOption} records. Unknown/omitted metadata is left {@code null}.
      *
-     * @param o the raw output definition map
+     * @param o the typed output declaration
      * @return the resolved output definition
      */
-    private OutputDefinition mapHumanTaskOutput(Map<?, ?> o) {
-        String name = String.valueOf(o.get("name"));
-        String type = o.get("type") != null ? String.valueOf(o.get("type")) : "string";
-        boolean required = Boolean.TRUE.equals(o.get("required"));
-        String label = o.get("label") instanceof String l && !l.isBlank() ? l : name;
-        String description = o.get("description") instanceof String d ? d : null;
-        String widget = o.get("widget") instanceof String w && !w.isBlank() ? w : inferWidget(type);
-        Object defaultValue = o.get("defaultValue");
-        String contextKey = o.get("contextKey") instanceof String ck && !ck.isBlank() ? ck : null;
+    private OutputDefinition mapHumanTaskOutput(NodeConfig.Field o) {
+        String name = o.name();
+        String type = o.type();
+        boolean required = o.required();
+        String label = o.label() != null && !o.label().isBlank() ? o.label() : name;
+        String description = o.description();
+        String widget = o.widget() != null && !o.widget().isBlank() ? o.widget() : inferWidget(type);
+        Object defaultValue = o.defaultValue();
+        String contextKey = o.contextKey() != null && !o.contextKey().isBlank() ? o.contextKey() : null;
 
         List<OutputOption> options = null;
-        if (o.get("options") instanceof List<?> rawOptions) {
-            options = rawOptions.stream()
-                .filter(Map.class::isInstance)
-                .map(opt -> (Map<?, ?>) opt)
-                .map(opt -> new OutputOption(
-                    opt.get("label") != null ? String.valueOf(opt.get("label")) : null,
-                    opt.get("value") != null ? String.valueOf(opt.get("value")) : null
-                ))
-                .toList();
+        if (o.wire().get("options") != null) {
+            options = o.options().stream().map(opt -> new OutputOption(opt.label(), opt.value())).toList();
         }
 
         return new OutputDefinition(name, type, required, label, description, widget, defaultValue, options,
@@ -1257,13 +1208,14 @@ public class WorkflowEngine {
     }
 
     private Map<String, Object> resolveNodeInputs(WorkflowNode node, Map<String, Object> context) {
-        Object inputConfig = node.config().get("inputs");
-        if (!(inputConfig instanceof Map<?, ?> inputExprs)) {
-            return Map.of();
-        }
+        Map<String, Object> inputExprs = switch (node.typedConfig()) {
+            case NodeConfig.Action config -> config.inputs();
+            case NodeConfig.HumanTask config -> config.inputs();
+            default -> Map.of();
+        };
         Map<String, Object> resolved = new LinkedHashMap<>();
-        for (Map.Entry<?, ?> entry : inputExprs.entrySet()) {
-            String label = String.valueOf(entry.getKey());
+        for (Map.Entry<String, Object> entry : inputExprs.entrySet()) {
+            String label = entry.getKey();
             try {
                 resolved.put(label, resolveInputValue(entry.getValue(), context));
             } catch (Exception e) {
@@ -1288,37 +1240,32 @@ public class WorkflowEngine {
     }
 
     private String validateNodeOutputs(WorkflowNode node, Map<String, Object> output) {
-        Object outputConfig = node.config().get("outputs");
-        if (!(outputConfig instanceof List<?> outputDefs)) {
-            return null;
-        }
-        for (Object defObj : outputDefs) {
-            if (defObj instanceof Map<?, ?> def) {
-                String name = String.valueOf(def.get("name"));
-                boolean required = Boolean.TRUE.equals(def.get("required"));
-                if (required && (output == null || !output.containsKey(name) || output.get(name) == null)) {
-                    return "Missing required output: " + name;
-                }
+        for (NodeConfig.Field def : outputFields(node)) {
+            String name = def.name();
+            if (def.required() && (output == null || !output.containsKey(name) || output.get(name) == null)) {
+                return "Missing required output: " + name;
             }
         }
         return null;
     }
 
     private void validateInputs(WorkflowNode startNode, Map<String, Object> initialContext) {
-        Object inputsDef = startNode.config().get("inputs");
-        if (inputsDef instanceof List<?> inputs) {
-            for (Object inputObj : inputs) {
-                if (inputObj instanceof Map<?, ?> input) {
-                    String name = (String) input.get("name");
-                    Object required = input.get("required");
-                    if (Boolean.TRUE.equals(required) && !initialContext.containsKey(name)) {
-                        throw new IllegalArgumentException("Missing required input: " + name);
-                    }
-                    if (Boolean.TRUE.equals(required) && initialContext.get(name) == null) {
-                        throw new IllegalArgumentException("Required input is null: " + name);
-                    }
-                }
+        for (NodeConfig.Field input : ((NodeConfig.Start) startNode.typedConfig()).inputs()) {
+            String name = input.name();
+            if (input.required() && !initialContext.containsKey(name)) {
+                throw new IllegalArgumentException("Missing required input: " + name);
+            }
+            if (input.required() && initialContext.get(name) == null) {
+                throw new IllegalArgumentException("Required input is null: " + name);
             }
         }
+    }
+
+    private List<NodeConfig.Field> outputFields(WorkflowNode node) {
+        return switch (node.typedConfig()) {
+            case NodeConfig.Action config -> config.outputs();
+            case NodeConfig.HumanTask config -> config.outputs();
+            default -> List.of();
+        };
     }
 }

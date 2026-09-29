@@ -1,4 +1,4 @@
-import { type Workflow } from '../types/workflow.ts';
+import { type Workflow, type WorkflowNode } from '../types/workflow.ts';
 import { cveTriage, loopWorkflow, parallelForkJoinWorkflow } from './sampleWorkflows.ts';
 
 export interface WorkflowDiffScenario {
@@ -16,7 +16,7 @@ const cveTriageSemanticAndCosmeticBase: Workflow = {
 const cveTriageSemanticAndCosmeticCompare: Workflow = {
   ...cveTriage,
   version: 2,
-  nodes: cveTriage.nodes.map((node) => {
+  nodes: cveTriage.nodes.map((node): WorkflowNode => {
     if (node.id === 'analyze') {
       return {
         ...node,
@@ -24,7 +24,7 @@ const cveTriageSemanticAndCosmeticCompare: Workflow = {
       };
     }
 
-    if (node.id === 'triage') {
+    if (node.id === 'triage' && node.type === 'human-task') {
       return {
         ...node,
         name: 'Triage Assessment',
@@ -168,8 +168,8 @@ const forkJoinMajorRevisionCompare: Workflow = {
   nodes: [
     ...parallelForkJoinWorkflow.nodes
       .filter((node) => node.id !== 'notify')
-      .map((node) => {
-        if (node.id === 'analyze') {
+      .map((node): WorkflowNode => {
+        if (node.id === 'analyze' && node.type === 'human-task') {
           return {
             ...node,
             config: {

@@ -66,7 +66,7 @@ function sameWorkflowBase(left: WorkflowBase, right: WorkflowBase): boolean {
 }
 
 /** A plausible sample value for a declared start-node input, based on its type (and name hints). */
-function sampleValueForInput(input: { name: string; type?: string }): unknown {
+function sampleValueForInput(input: { name: string; type?: string | null }): unknown {
   switch (input.type) {
     case 'number': return 0;
     case 'boolean': return true;
@@ -303,12 +303,12 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
     event.dataTransfer.dropEffect = 'move';
   }, []);
 
-  const onNodeClick = useCallback((_: any, node: Node) => {
+  const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     setSelectedNodeId(node.id);
     setSelectedEdgeId(null);
   }, []);
 
-  const onEdgeClick = useCallback((_: any, edge: Edge) => {
+  const onEdgeClick = useCallback((_: React.MouseEvent, edge: Edge) => {
     setSelectedEdgeId(edge.id);
     setSelectedNodeId(null);
   }, []);
@@ -329,7 +329,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
       id: generateNodeId(node.data.nodeType),
       type: node.type,
       position: { x: node.position.x + 40, y: node.position.y + 40 },
-      data: { ...node.data, name: `${node.data.name} (copy)`, config: { ...node.data.config } },
+      data: { ...node.data, name: `${node.data.name} (copy)`, config: { ...node.data.config } } as FlowNodeData,
     };
     snapshotNeededRef.current = true;
     setNodes(nds => [...nds, newNode]);
@@ -423,7 +423,8 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
   }, [getNodes, currentWorkflow, theme]);
 
   const onNodeDataChange = useCallback((id: string, dataUpdate: Partial<FlowNodeData>) => {
-    setNodes(nds => nds.map(n => n.id === id ? { ...n, data: { ...n.data, ...dataUpdate } } : n));
+    // Property edits retain the selected node kind; TypeScript cannot correlate partial union spreads.
+    setNodes(nds => nds.map(n => n.id === id ? { ...n, data: { ...n.data, ...dataUpdate } as FlowNodeData } : n));
     changeNeededRef.current = true;
   }, [setNodes]);
 
@@ -441,7 +442,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
     changeNeededRef.current = true;
   }, [setNodes, setEdges, selectedNodeId]);
 
-  const onEdgeDataChange = useCallback((id: string, dataUpdate: Record<string, any>) => {
+  const onEdgeDataChange = useCallback((id: string, dataUpdate: Record<string, unknown>) => {
     setEdges(eds => eds.map(e => e.id === id ? { ...e, data: { ...e.data, ...dataUpdate } } : e));
     changeNeededRef.current = true;
   }, [setEdges]);

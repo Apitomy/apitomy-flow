@@ -1,3 +1,5 @@
+import type { JsonObject, JsonValue } from '../types/workflow.ts';
+
 /**
  * Helpers for editing map-based inputs (expressions or JSON literals) as an ordered array of
  * `{ key, value }` pairs.
@@ -20,7 +22,7 @@ export interface KeyValuePair {
   key: string;
   value: string;
   /** Original literal, retained while the displayed text is unchanged. */
-  literal?: unknown;
+  literal?: JsonValue;
 }
 
 let pairIdCounter = 0;
@@ -42,7 +44,7 @@ export function nextPairId(): string {
  * @param map the serialized map, or `undefined`/`null`
  * @return the entries as pairs, in insertion order
  */
-export function mapToPairs(map: Record<string, unknown> | null | undefined): KeyValuePair[] {
+export function mapToPairs(map: JsonObject | null | undefined): KeyValuePair[] {
   if (!map) {
     return [];
   }
@@ -62,7 +64,7 @@ export function inputValueText(value: unknown): string {
  * @param pairs the edited pairs
  * @return the pairs as a map keyed by `key`
  */
-export function pairsToMap(pairs: KeyValuePair[]): Record<string, unknown> {
+export function pairsToMap(pairs: KeyValuePair[]): JsonObject {
   return Object.fromEntries(pairs.map(pair => [pair.key,
     'literal' in pair && pair.value === inputValueText(pair.literal) ? pair.literal : pair.value]));
 }

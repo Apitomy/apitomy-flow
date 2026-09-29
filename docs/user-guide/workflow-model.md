@@ -14,9 +14,13 @@ A workflow is a directed graph of **nodes** connected by **edges**. The graph de
 
 Workflow definitions are JSON-serializable. The consuming application stores them however it chooses.
 
+See [typed configuration and wire contract v1](typed-configuration.md) for the shared schema, per-node
+TypeScript/Java APIs, host extension fields, defaults, and source-compatibility guidance.
+
 ## Node Types
 
-Every node has an `id`, `type`, `name`, `config` (type-specific configuration), and `position` (visual coordinates).
+Every node has an `id`, `type`, `name`, and `config` (type-specific configuration). `position` (visual
+coordinates) is optional and nullable; the browser can lay out definitions that omit it.
 
 ### Start
 
