@@ -1,5 +1,6 @@
 import { type NodeType } from '../types/workflow.ts';
 import { type EdgeDiffRecord, type NodeDiffRecord } from '../diff/workflowDiffTypes.ts';
+import { jsonEqual } from '../utils/jsonEqual.ts';
 
 export interface FieldComparison {
   field: string;
@@ -15,14 +16,6 @@ const NODE_CONFIG_FIELDS: Record<NodeType, string[]> = {
   'receive-event': ['eventType', 'description', 'inputs', 'outputs'],
   wait: ['duration'],
 };
-
-function areEqual(before: unknown, after: unknown): boolean {
-  try {
-    return JSON.stringify(before) === JSON.stringify(after);
-  } catch {
-    return Object.is(before, after);
-  }
-}
 
 function changedConfigFields(record: NodeDiffRecord): FieldComparison[] {
   const baseConfig = record.baseNode?.config;
@@ -41,7 +34,7 @@ function changedConfigFields(record: NodeDiffRecord): FieldComparison[] {
   for (const field of orderedFields) {
     const before = (baseConfig as Record<string, unknown>)[field];
     const after = (compareConfig as Record<string, unknown>)[field];
-    if (areEqual(before, after)) {
+    if (jsonEqual(before, after)) {
       continue;
     }
     comparisons.push({
