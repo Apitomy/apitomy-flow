@@ -198,6 +198,85 @@ class WorkflowEngineStructuredErrorTest {
         assertFalse(result.context().containsKey("leaked"));
     }
 
+    @ParameterizedTest
+    @CsvSource({"throwing, fail", "throwing, transition", "normal, fail", "normal, transition",
+        "null, fail", "null, transition"})
+    void failedExternalCompletionPreservesRecoveryWhenOutputFormattingThrows(String outputKind, String recovery) {
+        Object outputValue = outputKind.equals("throwing") ? new Object() {
+            /** Simulates a host value that cannot be rendered for diagnostics. */
+            @Override
+            public String toString() { throw new IllegalStateException("formatter unavailable"); }
+        } : "remote rejected";
+        NodeResult original = new NodeResult(NodeResultStatus.FAILED,
+            outputKind.equals("null") ? null : Map.of("reason", outputValue));
+        AtomicInteger structuredCalls = new AtomicInteger();
+        AtomicInteger legacyCalls = new AtomicInteger();
+        AtomicReference<WorkflowError> captured = new AtomicReference<>();
+        List<Exception> notified = new ArrayList<>();
+        List<WorkflowInstance> failedInstances = new ArrayList<>();
+        WorkflowEngine engine = new WorkflowEngine(provider(context -> new NodeResult(NodeResultStatus.PENDING, null)),
+            List.of(new WorkflowEventListener() {
+                /** Records terminal failure notifications from external completion. */
+                @Override
+                public void onWorkflowFailed(WorkflowInstance instance, Exception error) {
+                    failedInstances.add(instance);
+                    notified.add(error);
+                }
+            }), new DefaultErrorHandler() {
+                /** Captures the diagnostic and delegates through the public legacy adapter. */
+                @Override
+                public ErrorResolution handleError(WorkflowInstance instance, WorkflowNode node,
+                                                   NodeResult result, WorkflowError error) {
+                    structuredCalls.incrementAndGet();
+                    assertSame(original, result);
+                    captured.set(error);
+                    return super.handleError(instance, node, result, error);
+                }
+                /** Chooses policy while retaining the original FAILED result and null legacy exception. */
+                @Override
+                public ErrorResolution handleNodeError(WorkflowInstance instance, WorkflowNode node,
+                                                       NodeResult result, Exception error) {
+                    legacyCalls.incrementAndGet();
+                    assertSame(original, result);
+                    assertNull(error);
+                    return recovery.equals("transition") ? ErrorResolution.transitionTo("end") : ErrorResolution.fail();
+                }
+            });
+        Workflow workflow = simpleActionWorkflow("test");
+        WorkflowInstance waiting = engine.startWorkflow(workflow, Map.of());
+        assertEquals(InstanceStatus.WAITING, waiting.status());
+        assertEquals("action", waiting.currentNodeId());
+        assertNull(waiting.history().getLast().completedOn());
+        assertEquals(0, structuredCalls.get());
+
+        WorkflowInstance result = assertDoesNotThrow(() -> engine.completeNode(workflow, waiting, "action", original));
+
+        assertEquals(1, structuredCalls.get());
+        assertEquals(1, legacyCalls.get());
+        WorkflowError error = captured.get();
+        assertEquals(WorkflowError.Phase.EXECUTION, error.phase());
+        assertEquals("action", error.nodeId());
+        assertNull(error.getCause());
+        assertEquals(switch (outputKind) {
+            case "throwing" -> "Node returned FAILED: <output unavailable>";
+            case "normal" -> "Node returned FAILED: {reason=remote rejected}";
+            default -> "Node returned FAILED";
+        }, error.getMessage());
+        assertTrue(result.context().isEmpty(), "Failed output must not be merged");
+        if (recovery.equals("transition")) {
+            assertEquals(InstanceStatus.COMPLETED, result.status());
+            assertEquals("end", result.currentNodeId());
+            assertNull(result.failureReason());
+            assertTrue(notified.isEmpty());
+        } else {
+            assertEquals(InstanceStatus.FAILED, result.status());
+            assertEquals(1, notified.size());
+            assertSame(error, notified.getFirst());
+            assertSame(result, failedInstances.getFirst());
+            assertEquals(error.diagnostic(), result.failureReason());
+        }
+    }
+
     @Test
     void malformedHumanCompletionRetryAwaitsAnotherDelivery() {
         Workflow workflow = new Workflow("w", "W", null, null,

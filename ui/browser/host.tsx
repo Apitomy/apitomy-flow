@@ -37,6 +37,12 @@ function EditorHost({ id }: { id: string }) {
             <button onClick={() => pending.actions.filter(item => item.generation === provider).forEach(item => item.resolve([
                 { value: 'noop', label: 'Current action', description: 'Current provider description' },
             ]))}>Resolve current actions</button>
+            <button onClick={() => pending.actions.filter(item => item.generation === provider).forEach(item => item.resolve(
+                Array.from({ length: Number(params.get('actionCount') ?? 9) }, (_, index) => ({
+                    value: `action.${index}`, label: `Action ${index}`,
+                    description: index === 0 ? 'Send a notification' : `Description ${index}`,
+                })),
+            ))}>Resolve action catalog</button>
             <button onClick={() => pending.actions.filter(item => item.generation !== provider).forEach(item => item.resolve([
                 { value: 'noop', label: 'Stale action', description: 'Stale provider description' },
             ]))}>Resolve stale actions</button>

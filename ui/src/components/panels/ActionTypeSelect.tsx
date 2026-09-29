@@ -5,6 +5,7 @@ import {
 } from '@patternfly/react-core';
 import { TimesIcon } from '@patternfly/react-icons';
 import type { ActionTypeDescriptor } from '../../types/spi.ts';
+import { filterActionTypeOptions } from '../../utils/actionTypeFilter.ts';
 
 /** Owns action-menu filtering, custom values, clear/open state and focus restoration. */
 export function ActionTypeSelect({ value, actionTypes, loading, onSelect, onClear }: {
@@ -22,12 +23,8 @@ export function ActionTypeSelect({ value, actionTypes, loading, onSelect, onClea
         return match ? match.label : value;
     }, [value, actionTypes]);
     const inputValue = isOpen ? filterText : displayValue;
-    const filteredOptions = useMemo(() => {
-        if (!filterText) return actionTypes;
-        const lower = filterText.toLowerCase();
-        return actionTypes.filter(action => action.label.toLowerCase().includes(lower)
-            || action.value.toLowerCase().includes(lower));
-    }, [filterText, actionTypes]);
+    const { filterEnabled, options: filteredOptions } = useMemo(
+        () => filterActionTypeOptions(actionTypes, filterText), [filterText, actionTypes]);
     const isCustom = isOpen && filterText && !actionTypes.some(action => action.value === filterText
         || action.label.toLowerCase() === filterText.toLowerCase());
 
@@ -58,7 +55,8 @@ export function ActionTypeSelect({ value, actionTypes, loading, onSelect, onClea
             <TextInputGroup isPlain>
                 <TextInputGroupMain value={inputValue} onClick={() => { if (!isOpen) setIsOpen(true); }}
                     onChange={onInputChange} innerRef={textInputRef}
-                    placeholder={loading ? 'Loading...' : 'Select or type an action type'} autoComplete="off" />
+                    placeholder={loading ? 'Loading...' : filterEnabled ? 'Filter action types...' : 'Select or type an action type'}
+                    autoComplete="off" />
                 {(value || inputValue) && <TextInputGroupUtilities>
                     <Button variant="plain" onClick={handleClear} aria-label="Clear action type"><TimesIcon /></Button>
                 </TextInputGroupUtilities>}
@@ -77,7 +75,9 @@ export function ActionTypeSelect({ value, actionTypes, loading, onSelect, onClea
                 {isCustom && <SelectOption value={`__create__:${inputValue}`}>
                     {`Use custom type "${inputValue}"`}
                 </SelectOption>}
-                {filteredOptions.length === 0 && !isCustom && <SelectOption isDisabled>No results found</SelectOption>}
+                {filteredOptions.length === 0 && !isCustom && <SelectOption isDisabled>
+                    {filterEnabled ? 'No matching action types' : 'No results found'}
+                </SelectOption>}
             </SelectList>
         </Select>
     );

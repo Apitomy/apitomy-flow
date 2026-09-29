@@ -48,9 +48,18 @@ final class NodeValueResolver {
         }
         if (result.status() == NodeResultStatus.FAILED) {
             return new WorkflowError(WorkflowError.Phase.EXECUTION, node.id(), null, null, null,
-                "Node returned FAILED" + (result.output() == null ? "" : ": " + result.output()), null);
+                "Node returned FAILED" + (result.output() == null ? "" : ": " + diagnosticOutput(result.output())), null);
         }
         return null;
+    }
+
+    /** Keeps host value formatting exceptions from bypassing recovery; JVM Errors still propagate. */
+    private String diagnosticOutput(Map<String, Object> output) {
+        try {
+            return output.toString();
+        } catch (Exception ignored) {
+            return "<output unavailable>";
+        }
     }
 
     WorkflowError validateOutputs(WorkflowNode node, Map<String, Object> output) {
