@@ -6,13 +6,19 @@ Lightweight visual workflow engine for orchestrating long-running project lifecy
 Designed as a standalone library that integrates into Apitomy products (starting with
 [Axiom](https://github.com/Apitomy/apitomy-axiom)).
 
+These documents describe the source on this branch, including the combined C1–C14 work. They do not
+assert that pending changes are available in a published artifact. Consult the
+[current-contract guide](docs/user-guide/current-contracts.md) and
+[GitHub issues](https://github.com/Apitomy/apitomy-flow/issues) for compatibility and delivery status.
+
 ## What It Does
 
 - Defines workflows as directed graphs with conditional edge routing
 - Executes workflows through a stateless engine (state in, state out)
 - Supports human-in-the-loop tasks and external event correlation
-- Provides a visual drag-and-drop editor and read-only instance viewer
-- Validates workflow definitions with 27 structural and semantic rules
+- Supports structured parallel fork/join and asynchronous actions that return `PENDING`
+- Provides a visual drag-and-drop editor, routing simulator, instance viewer, and definition diff viewer
+- Validates workflow definitions with [structural and semantic checks](docs/user-guide/validation.md)
 
 ## Architecture
 
@@ -27,7 +33,7 @@ The engine is a pure Java library with no framework dependencies (no Quarkus, CD
 All dependencies (node executors, event listeners, error handler) are passed via constructor.
 Workflow instance state is a single JSON document — the consuming application handles persistence.
 
-The visual editor is a React component library exporting `WorkflowEditor` and `WorkflowViewer`.
+The UI library exports `WorkflowEditor`, `WorkflowViewer`, and `WorkflowDiffViewer`.
 It uses [@xyflow/react](https://reactflow.dev/) for the canvas and [PatternFly 6](https://www.patternfly.org/)
 for UI chrome.
 
@@ -76,8 +82,8 @@ npm install
 npm run dev
 ```
 
-The dev server starts at **http://localhost:5173** with a sample CVE triage workflow
-loaded in both the editor and viewer tabs.
+The dev server starts at **http://localhost:5173** with selectable editor, viewer, and diff scenarios.
+Viewer scenarios have their own definitions/instances rather than previewing the current editor graph.
 
 ## Engine Usage
 
@@ -101,16 +107,20 @@ WorkflowEngine engine = new WorkflowEngine(
 // Start a workflow
 WorkflowInstance instance = engine.startWorkflow(workflowDefinition, Map.of("cveId", "CVE-2024-1234"));
 
-// Complete a human task
-instance = engine.completeCurrentNode(workflowDefinition, instance,
+// Complete a parked human task by node ID (also works with parallel waits)
+instance = engine.completeNode(workflowDefinition, instance, "review",
     new NodeResult(NodeResultStatus.COMPLETED, Map.of("affected", true)));
 
 // Check if an event matches a waiting instance
-boolean matches = engine.matchesEvent(workflowDefinition, instance, eventPayload);
+boolean matches = engine.matchesEvent(workflowDefinition, instance, "await-event", eventPayload);
 
 // Cancel a workflow
 instance = engine.cancelWorkflow(workflowDefinition, instance);
 ```
+
+The sketch assumes the named parked nodes exist in your definition. See
+[Engine Usage](docs/user-guide/engine-usage.md) for branch enumeration, pending actions, and host duties;
+[executable examples](docs/developer-guide/documentation-checks.md) link to runnable fixtures and tests.
 
 ## Project Structure
 
@@ -120,11 +130,11 @@ engine/                  Java workflow engine library
     model/               Workflow, WorkflowNode, WorkflowEdge, WorkflowInstance, HumanTaskInfo, ReceiveEventInfo
     engine/              WorkflowEngine, ConditionEvaluator, JsonNodeELResolver
     spi/                 NodeExecutor, WorkflowEventListener, WorkflowErrorHandler
-    validation/          WorkflowValidator (47 rules)
+    validation/          WorkflowShape preflight and WorkflowValidator
 ui/                      React visual editor components
   src/
-    components/          WorkflowEditor, WorkflowViewer, custom nodes/edges, panels
-    validation/          TypeScript workflow validator (46 rules)
+    components/          Editor, instance/diff viewers, custom nodes/edges, panels
+    validation/          Shape normalization and semantic workflow validator
     types/               TypeScript types mirroring the Java model
 ```
 
@@ -135,6 +145,8 @@ ui/                      React visual editor components
 ## Links
 
 - [GitHub Repository](https://github.com/Apitomy/apitomy-flow)
+- [Documentation](docs/index.md)
+- [Historical audit and current backlog](BACKLOG.md)
 - [Apitomy Website](https://www.apitomy.io)
 - [Apitomy Axiom](https://github.com/Apitomy/apitomy-axiom)
 

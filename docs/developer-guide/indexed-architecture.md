@@ -15,8 +15,11 @@ C13 (#136) builds on the C1–C12 fixes. The public workflow record and wire fie
 - `NodeValueResolver` owns typed input interpretation, result/required-output validation, event
   mappings, context-key remapping and human-task output defaults. Both synchronous execution and
   external completion use it. It produces values/structured errors and cannot drive branches,
-  change instance status, publish callbacks or invoke recovery. The bounded iterative driver and
-  recovery sequencing remain in `WorkflowEngine`.
+  change instance status, publish callbacks or invoke recovery.
+- `RecoveryPolicy` invokes and validates host recovery decisions, contextualizes diagnostics, retains
+  original and handler causes, and identifies retries that await another external delivery. This is an
+  internal extraction, not a public SPI or wire change. `WorkflowEngine` still owns branch queues,
+  budgets, history, callbacks, state application, and recovery sequencing.
 - `MapInputsEditor` owns the shared action/human-task row draft lifecycle; its existing pure
   `mapInputDraft` protocol owns reconciliation. `HumanTaskOutputFields` owns typed default and
   option controls. `ActionTypeSelect` owns menu filtering, custom values, open/clear state and focus.
@@ -30,14 +33,21 @@ it explicitly. Imports compare all fields except node coordinates; config, routi
 and host extension changes invalidate it. Undo/redo restore the corresponding semantic input.
 
 Built-in validation, parallel-role analysis and debounced host validation depend on that stable
-input. A host semantic validator therefore does not run for coordinates alone; positions in its
-input are those captured at the last semantic revision. Export, simulation and `onChange` still
-receive the current full document. No cache is keyed by mutable caller-owned TypeScript definitions.
+input. A stable host semantic validator therefore does not run for coordinates alone; positions in its
+input are those captured at the last semantic revision, including when replacing the callback schedules
+a new run. The next semantic edit captures current coordinates. Validation must be pure and treat this
+input as read-only. Position-sensitive work uses the latest full `onChange` document; export and simulation
+also receive the current document. No cache is keyed by mutable caller-owned TypeScript definitions.
+
+Document snapshots retain panel selection and canvas selected-node/edge IDs, restoring them together on
+undo/redo. Selection-only actions still do not create history or publish document changes. Live measurements
+are preserved independently from restored selection.
 
 ## Repeatable measurements
 
 Baseline: `0159ee0`, containing dependency merges `88737f5` and `5c8342b` plus benchmark sources,
-before production optimizations. Run the same commands on the baseline and current revision:
+before production optimizations. The recorded indexed samples below are from `0966e0e`, before the later
+recovery/selection corrections. Run the same commands on a selected revision for a fresh measurement:
 
 ```bash
 # From engine/
@@ -48,8 +58,10 @@ FLOW_BENCHMARK=1 npx vitest run src/hooks/editorBenchmark.test.ts
 ```
 
 Java uses a 1,000-node/999-edge sequential graph: 20 full node/incoming/outgoing lookup passes and
-parallel analyses per sample. A separate workload resolves a parked wait across a 10,001-entry
-interleaved history 1,000 times. Three warmups precede five samples; checksum 60,960 is asserted.
+parallel analyses per sample. A separate workload resolves a parked wait in a 10,001-entry history with
+one parked entry followed by 10,000 completed entries, 1,000 times. The reverse lookup scans those completed
+entries to reach the parked entry; this workload does not alternate active branches.
+Three warmups precede five samples; checksum 60,960 is asserted.
 
 The editor uses 300 nodes/299 edges, 60 position commits and the actual 50-entry undo history cap.
 It executes real validation/parallel analysis whenever the editor's semantic memo input changes.
