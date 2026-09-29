@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import expressions from '../../../conformance/expressions.json';
 import routing from '../../../conformance/routing.json';
 import budgets from '../../../conformance/budgets.json';
+import forkBudgets from '../../../conformance/fork-budgets.json';
 import validation from '../../../conformance/validation.json';
 import { classifyExpression, evaluateCondition, isValidExpression, resolveExpression } from './elEvaluator.ts';
 import { validateWorkflow } from '../validation/validateWorkflow.ts';
@@ -120,6 +121,61 @@ function budgetWorkflow(transitions: number): Workflow {
 }
 
 describe('shared advancement budgets', () => {
+    for (const fixture of forkBudgets) {
+        for (const stepping of [false, true]) {
+            it(`${fixture.name}: ${stepping ? 'step' : 'run'}`, () => {
+                const workflow: Workflow = { id: 'fork-budget', name: 'Fork budget', nodes: [
+                    { id: 'start', name: 'Start', type: 'start', config: {} },
+                    { id: 'end', name: 'End', type: 'end', config: {} },
+                ], edges: [] };
+                let source = 'start';
+                for (let i = 1; i <= fixture.prefixMoves; i++) {
+                    const id = `auto${i}`;
+                    workflow.nodes.push({ id, name: id, type: 'wait', config: {} });
+                    workflow.edges.push({ id: `prefix${i}`, source, target: id, priority: 0, isDefault: false });
+                    source = id;
+                }
+                // Reverse declaration order to assert priority order, branch identity and failure prefix.
+                for (let i = fixture.children - 1; i >= 0; i--) {
+                    const id = `task${i}`;
+                    workflow.nodes.push({ id, name: id, type: 'human-task', config: {} });
+                    workflow.edges.push({ id: `child${i}`, source, target: id, priority: i, isDefault: false },
+                        { id: `finish${i}`, source: id, target: 'end', priority: 0, isDefault: false });
+                }
+                expect(validateWorkflow(workflow).filter(problem => problem.severity === 'error')).toEqual([]);
+                const initial = startSimulation(workflow, { retained: 'context' });
+                let state = initial;
+                if (stepping) {
+                    while (state.status === 'running') state = stepSimulation(workflow, state);
+                } else {
+                    state = runSimulation(workflow, state);
+                }
+                expect(state.status).toBe(fixture.status);
+                expect(state.transitions).toBe(fixture.transitions);
+                const branches = Array.from({ length: fixture.arrived }, (_, i) => ({ branchId: `root.${i}`, nodeId: `task${i}` }));
+                expect(state.activeBranches).toEqual(branches);
+                expect(state.parkedBranchIds).toEqual(branches.map(branch => branch.branchId));
+                expect(state.context).toEqual({ retained: 'context' });
+                expect(state.joinArrivals).toEqual({});
+                expect(state.visitedNodeIds).toEqual(['start',
+                    ...Array.from({ length: fixture.prefixMoves }, (_, i) => `auto${i + 1}`),
+                    ...branches.map(branch => branch.nodeId)]);
+                expect(state.history.map(entry => ({ nodeId: entry.nodeId, branchId: entry.branchId,
+                    completed: !!entry.completedOn }))).toEqual([
+                    ...['start', ...Array.from({ length: fixture.prefixMoves }, (_, i) => `auto${i + 1}`)]
+                        .map(nodeId => ({ nodeId, branchId: 'root', completed: true })),
+                    ...branches.map(branch => ({ ...branch, completed: false })),
+                ]);
+                expect(state.history.slice(1 + fixture.prefixMoves).map(entry => entry.edgeId))
+                    .toEqual(Array.from({ length: fixture.arrived }, (_, i) => `child${i}`));
+                if (fixture.status === 'failed') expect(state.error?.message).toContain('transition limit');
+                expect(stepSimulation(workflow, state)).toBe(state);
+                expect(initial.visitedNodeIds).toEqual(['start']);
+                expect(initial.transitions).toBe(0);
+            });
+        }
+    }
+
     for (const fixture of budgets) {
         for (const stepping of [false, true]) {
             it(`${fixture.name}: ${stepping ? 'step' : 'run'}`, () => {

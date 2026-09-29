@@ -160,13 +160,21 @@ export function stepSimulation(workflow: Workflow, state: SimState): SimState {
             ...state,
             history: completeBranchEntry(state.history, branch.branchId, node.id),
             edgeEvaluations: mergeEvaluations(state.edgeEvaluations, forkEvals),
-            transitions: state.transitions + 1,
             activeBranches: state.activeBranches.filter(b => b.branchId !== branch.branchId),
         };
         let childIndex = 0;
         for (const edge of forkEdges) {
+            // Match the driver's queued MOVE units: selection itself is free, and an
+            // unentered child must not appear in branches/history when the budget fails.
+            if (next.transitions >= MAX_TRANSITIONS) {
+                return derive(workflow, fail(next, {
+                    message: `Exceeded transition limit (${MAX_TRANSITIONS}) — possible infinite loop`,
+                    nodeId: node.id,
+                }));
+            }
             const childBranchId = `${branch.branchId}.${childIndex++}`;
-            next = { ...next, activeBranches: [...next.activeBranches, { branchId: childBranchId, nodeId: node.id }] };
+            next = { ...next, transitions: next.transitions + 1,
+                activeBranches: [...next.activeBranches, { branchId: childBranchId, nodeId: node.id }] };
             next = moveBranch(workflow, next, childBranchId, edge, regions);
             if (next.status !== 'running') {
                 return derive(workflow, next); // END/failure inside a branch cancels the rest

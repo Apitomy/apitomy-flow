@@ -31,6 +31,7 @@ class ConformanceTest {
     static Stream<Fixture> expressions() throws Exception { return fixtures("expressions"); }
     static Stream<Fixture> routing() throws Exception { return fixtures("routing"); }
     static Stream<Fixture> budgets() throws Exception { return fixtures("budgets"); }
+    static Stream<Fixture> forkBudgets() throws Exception { return fixtures("fork-budgets"); }
     static Stream<Fixture> validation() throws Exception { return fixtures("validation"); }
 
     private static Stream<Fixture> fixtures(String file) throws Exception {
@@ -159,6 +160,67 @@ class ConformanceTest {
                 Map.of("repeat", i < data.path("resumes").asInt() - 1)));
         }
         assertEquals(data.path("status").asText(), instance.status().toString().toLowerCase());
+        if (instance.status() == InstanceStatus.FAILED) assertTrue(instance.failureReason().contains("transition limit"));
+    }
+
+    @ParameterizedTest(name = "fork budget: {0}")
+    @MethodSource("forkBudgets")
+    void forkBudgetContract(Fixture fixture) {
+        JsonNode data = fixture.data();
+        int prefixMoves = data.path("prefixMoves").asInt();
+        int arrived = data.path("arrived").asInt();
+        List<WorkflowNode> nodes = new ArrayList<>(List.of(
+            node("start", NodeType.START, Map.of()), node("end", NodeType.END, Map.of())));
+        List<WorkflowEdge> edges = new ArrayList<>();
+        List<String> prefix = new ArrayList<>(List.of("start"));
+        String source = "start";
+        for (int i = 1; i <= prefixMoves; i++) {
+            String id = "auto" + i;
+            nodes.add(node(id, NodeType.ACTION, Map.of("actionType", "complete")));
+            edges.add(new WorkflowEdge("prefix" + i, source, id, null, 0, false, null));
+            prefix.add(id);
+            source = id;
+        }
+        // Reverse declaration order; arrivals must follow priority, including at budget failure.
+        for (int i = data.path("children").asInt() - 1; i >= 0; i--) {
+            String id = "task" + i;
+            nodes.add(node(id, NodeType.HUMAN_TASK, Map.of()));
+            edges.add(new WorkflowEdge("child" + i, source, id, null, i, false, null));
+            edges.add(new WorkflowEdge("finish" + i, id, "end", null, 0, false, null));
+        }
+        Workflow workflow = new Workflow("fork-budget", "Fork budget", null, null, nodes, edges);
+        WorkflowValidator validator = new WorkflowValidator();
+        assertFalse(validator.hasErrors(validator.validate(workflow)));
+        NodeExecutor executor = new NodeExecutor() {
+            /** Identifies automatic prefix work (browser waits substitute for these immediate actions). */
+            public String actionType() { return "complete"; }
+            /** Completes without changing context. */
+            public NodeResult execute(NodeExecutionContext context) {
+                return new NodeResult(NodeResultStatus.COMPLETED, Map.of());
+            }
+        };
+        WorkflowEngine engine = new WorkflowEngine(NodeExecutorProvider.fromList(executor), List.of(), null);
+        WorkflowInstance instance = engine.startWorkflow(workflow, Map.of("retained", "context"));
+        assertEquals(data.path("status").asText().equals("blocked") ? InstanceStatus.WAITING : InstanceStatus.FAILED,
+            instance.status());
+        List<ActiveBranch> branches = java.util.stream.IntStream.range(0, arrived)
+            .mapToObj(i -> new ActiveBranch("root." + i, "task" + i)).toList();
+        assertEquals(branches, instance.activeBranches());
+        assertEquals(Map.of("retained", "context"), instance.context());
+        assertEquals(Map.of(), instance.joinArrivals());
+        assertEquals(Stream.concat(prefix.stream(), branches.stream().map(ActiveBranch::nodeId)).toList(),
+            instance.history().stream().map(HistoryEntry::nodeId).toList());
+        assertEquals(prefixMoves + 1 + arrived, instance.history().size());
+        for (int i = 0; i <= prefixMoves; i++) {
+            assertEquals("root", instance.history().get(i).branchId());
+            assertNotNull(instance.history().get(i).completedOn());
+        }
+        for (int i = 0; i < arrived; i++) {
+            HistoryEntry entry = instance.history().get(prefixMoves + 1 + i);
+            assertEquals("root." + i, entry.branchId());
+            assertEquals("child" + i, entry.edgeId());
+            assertNull(entry.completedOn());
+        }
         if (instance.status() == InstanceStatus.FAILED) assertTrue(instance.failureReason().contains("transition limit"));
     }
 

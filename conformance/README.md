@@ -13,6 +13,7 @@ language-specific fixture is required.
 | `validation.json` | Common duration validation examples and problem codes/severities |
 | `routing.json` | Priority/default routing, event mappings, pre-merge context, output aliases, literal inputs, workflow round trips, parked branches and join arrivals across serialized resumes |
 | `budgets.json` | Fresh budget per advancement, repeated resumes, exact limit and one-over-limit, browser Step and Run |
+| `fork-budgets.json` | Per-MOVE fork budget, initial 100/101 children, partial-budget exact/excess forks, ordered arrivals and retained failure state |
 | `parallel-topology.json` | C2 topology acceptance/rejection, conditional parallel paths, nested regions, loops and branch completion orders |
 | `workflow-v1.schema.json` | Versioned structural wire schema; semantic validation remains in the runtime validators |
 | `config-v1.json`, `config-invalid-v1.json` | All built-in configs, nullability/defaults, optional positions, nested host extensions, and shared rejection cases |
@@ -60,7 +61,10 @@ The Unicode fixtures exercise Java compilation/evaluation and browser condition/
 - Event payload mocks are delivered as `SimMock.output`, as in the simulation panel. `SimMock.event`
   remains informational. All event mappings resolve against the same pre-merge context.
 - Each successful resume resets the 100-transition advancement budget, shared by all runnable branches.
-  Step and Run calls within one advancement do not reset it. Fork dispatch counts once, as in Java.
+   Step and Run calls within one advancement do not reset it. Each fork child edge MOVE consumes one
+   unit, as in Java; successful fork selection has no extra charge. Exactly 100 moves may park all
+   children successfully. A further move fails before adding that child, preserving prior arrivals,
+   branch order, context and history. Shared fork fixtures cover both initial and partial-budget forks.
   Browser waits substitute for immediate Java actions in the uninterrupted budget fixtures because
   browser actions always park and Java waits always park. Thus timing/budget placement can differ in
   a real graph containing synchronous actions or timers even though advancement reset rules agree.

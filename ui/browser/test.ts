@@ -18,6 +18,23 @@ export const test = base.extend<{ browserErrors: string[] }>({
 });
 export { expect };
 
+/** Waits for a scheduled viewport change to start and then stop moving before pointer input. */
+export async function waitForViewportChange(viewport: Locator, before: string | null): Promise<void> {
+    // A stable pre-animation viewport is not ready: first observe the scheduled fit starting.
+    await expect(viewport).not.toHaveAttribute('style', before ?? '');
+    let previous: string | null = null;
+    let unchangedSince = Date.now();
+    await expect.poll(async () => {
+        const current = await viewport.getAttribute('style');
+        if (current !== previous) {
+            previous = current;
+            unchangedSince = Date.now();
+        }
+        // Require a quiet window, resetting it on every change rather than sleeping for fitView's duration.
+        return Date.now() - unchangedSince >= 100;
+    }, { message: 'import viewport has stopped moving', intervals: [50] }).toBe(true);
+}
+
 /** Reads host-observed public onChange payloads, never internal React/reducer state. */
 export async function changes(editor: Locator): Promise<Workflow[]> {
     return JSON.parse(await editor.getByTestId('changes').textContent() ?? '[]');
