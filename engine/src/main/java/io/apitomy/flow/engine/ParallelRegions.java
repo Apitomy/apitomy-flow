@@ -4,6 +4,7 @@ import io.apitomy.flow.model.NodeType;
 import io.apitomy.flow.model.Workflow;
 import io.apitomy.flow.model.WorkflowEdge;
 import io.apitomy.flow.model.WorkflowNode;
+import io.apitomy.flow.model.WeakIdentityCache;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -22,6 +23,7 @@ import java.util.Set;
  * what a fork is, what its join is, and what a well-formed region looks like.
  */
 public final class ParallelRegions {
+    private static final WeakIdentityCache<Workflow, ParallelRegions> CACHE = new WeakIdentityCache<>();
 
     /** A structural problem discovered during analysis. */
     public record Problem(String code, String nodeId) {}
@@ -48,6 +50,10 @@ public final class ParallelRegions {
      * @return the computed regions and any structural problems
      */
     public static ParallelRegions analyze(Workflow workflow) {
+        return CACHE.get(workflow, ParallelRegions::compute);
+    }
+
+    private static ParallelRegions compute(Workflow workflow) {
         Set<String> forks = new LinkedHashSet<>();
         Map<String, String> forkToJoin = new LinkedHashMap<>();
         Set<String> joins = new LinkedHashSet<>();

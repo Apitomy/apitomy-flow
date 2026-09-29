@@ -50,7 +50,7 @@ import './WorkflowEditor.css';
 export type FlowTheme = 'light' | 'dark';
 
 /** A plausible sample value for a declared start-node input, based on its type (and name hints). */
-function sampleValueForInput(input: { name: string; type?: string }): unknown {
+function sampleValueForInput(input: { name: string; type?: string | null }): unknown {
   switch (input.type) {
     case 'number': return 0;
     case 'boolean': return true;
@@ -96,6 +96,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
   const { state, dispatch } = useEditorState(workflow, onChange);
   const { nodes, edges, selectedNodeId, selectedEdgeId, simulating: simActive, interactive } = state;
   const currentWorkflow = state.document;
+  const semanticWorkflow = state.semanticDocument;
   const { screenToFlowPosition, fitView, getNodes } = useReactFlow();
   const canUndo = state.past.length > 0 && !simActive;
   const canRedo = state.future.length > 0 && !simActive;
@@ -119,16 +120,16 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
   const selectedEdge = edges.find(e => e.id === selectedEdgeId);
 
   const builtInProblems = useMemo(
-    () => validateWorkflow(currentWorkflow),
-    [currentWorkflow],
+    () => validateWorkflow(semanticWorkflow),
+    [semanticWorkflow],
   );
 
   const parallelAnalysis = useMemo(
-    () => analyzeParallelRegions(currentWorkflow),
-    [currentWorkflow],
+    () => analyzeParallelRegions(semanticWorkflow),
+    [semanticWorkflow],
   );
 
-  const hostProblems = useHostValidation(currentWorkflow, spi?.validate);
+  const hostProblems = useHostValidation(semanticWorkflow, spi?.validate);
 
   const validationProblems = useMemo(
     () => [...builtInProblems, ...hostProblems],
@@ -192,11 +193,11 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
     event.dataTransfer.dropEffect = 'move';
   }, []);
 
-  const onNodeClick = useCallback((_: any, node: Node) => {
+  const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     dispatch({ type: 'select', nodeId: node.id });
   }, [dispatch]);
 
-  const onEdgeClick = useCallback((_: any, edge: Edge) => {
+  const onEdgeClick = useCallback((_: React.MouseEvent, edge: Edge) => {
     dispatch({ type: 'select', edgeId: edge.id });
   }, [dispatch]);
 
@@ -293,7 +294,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
     dispatch({ type: 'renameNode', id: oldId, newId, group: typingGroup('nodeId') });
   }, [dispatch, typingGroup]);
 
-  const onEdgeDataChange = useCallback((id: string, dataUpdate: Record<string, any>) => {
+  const onEdgeDataChange = useCallback((id: string, dataUpdate: Record<string, unknown>) => {
     dispatch({ type: 'edgeData', id, data: dataUpdate,
       group: typingGroup(`edge:${id}:${Object.keys(dataUpdate).join(',')}`) });
   }, [dispatch, typingGroup]);

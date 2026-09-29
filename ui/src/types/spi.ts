@@ -25,7 +25,14 @@ export type ActionTypeProvider =
  * synchronously or return a Promise (e.g. for server-backed checks). Its
  * problems are merged, additively, with the editor's built-in validation.
  *
- * @param workflow the current workflow definition being edited
+ * Validation is semantic-only: selection, dragging, layout edits and layout-only
+ * undo/redo do not invoke a stable validator again. Coordinates remain those from
+ * the last semantic revision; the next semantic edit includes current coordinates.
+ * Treat the supplied workflow as read-only and keep validation pure (do not mutate
+ * the workflow or editor state). Use the current onChange document for
+ * position-sensitive work, rather than this semantic validation hook.
+ *
+ * @param workflow the owned workflow snapshot from the current semantic revision
  * @returns host validation problems, or a Promise resolving to them
  */
 export type WorkflowValidator =

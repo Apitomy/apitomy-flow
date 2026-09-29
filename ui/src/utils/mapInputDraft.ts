@@ -1,18 +1,18 @@
 export interface MapDraftPair {
     id: string;
     key: string;
-    value: unknown;
+    value: JsonValue | undefined;
 }
 
 export interface MapDraft {
     identity: string;
     generation: number;
-    map: Record<string, unknown>;
+    map: JsonObject;
     pairs: MapDraftPair[];
 }
 
 /** Creates stable row identities for one explicit draft session. */
-export function createMapDraft(map: Record<string, unknown> | undefined, identity: string, generation = 0): MapDraft {
+export function createMapDraft(map: JsonObject | null | undefined, identity: string, generation = 0): MapDraft {
     return { identity, generation, map: map ?? {}, pairs: Object.entries(map ?? {}).map(([key, value], index) => ({
         id: `${identity}:${generation}:${index}`, key, value,
     })) };
@@ -37,7 +37,8 @@ function sameValue(left: unknown, right: unknown): boolean {
 }
 
 /** Reconciles cloned echoes with explicit selection/history reset identities. */
-export function syncMapDraft(draft: MapDraft, map: Record<string, unknown> | undefined, identity: string): MapDraft {
+export function syncMapDraft(draft: MapDraft, map: JsonObject | null | undefined, identity: string): MapDraft {
     if (draft.identity === identity && sameValue(draft.map, map ?? {})) return draft;
     return createMapDraft(map, identity, draft.generation + 1);
 }
+import type { JsonObject, JsonValue } from '../types/workflow.ts';

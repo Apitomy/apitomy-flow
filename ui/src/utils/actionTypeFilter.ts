@@ -12,7 +12,7 @@ export interface ActionTypeFilterResult {
 }
 
 /**
- * Narrows `actionTypes` by `filterText`, matching against each type's label or value
+ * Narrows `actionTypes` by `filterText`, matching against each type's label, value or description
  * case-insensitively. Filtering only applies once the list exceeds
  * {@link ACTION_TYPE_FILTER_THRESHOLD}; shorter lists are always returned in full so a stray
  * keystroke can't hide an option the user still wants to click.
@@ -25,6 +25,7 @@ export function filterActionTypeOptions(actionTypes: ActionTypeDescriptor[], fil
     const lower = filterText.toLowerCase();
     return {
         filterEnabled,
-        options: actionTypes.filter(at => at.label.toLowerCase().includes(lower) || at.value.toLowerCase().includes(lower)),
+        options: actionTypes.filter(at => at.label.toLowerCase().includes(lower)
+            || at.value.toLowerCase().includes(lower) || at.description?.toLowerCase().includes(lower)),
     };
 }

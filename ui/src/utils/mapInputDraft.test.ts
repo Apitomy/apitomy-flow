@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createMapDraft, editMapDraft, syncMapDraft } from './mapInputDraft.ts';
 import { createEditorState, editorReducer } from '../hooks/editorState.ts';
-import type { Workflow } from '../types/workflow.ts';
+import type { HumanTaskConfig, Workflow } from '../types/workflow.ts';
 
 const workflow: Workflow = { id: 'drafts', name: 'Drafts', nodes: [
     { id: 'a', name: 'A', type: 'human-task', position: { x: 0, y: 0 }, config: { inputs: { a: 'one', b: 'two' } } },
@@ -25,16 +25,17 @@ describe('map input draft protocol', () => {
 
     it('retains row keys and duplicate/empty drafts through cloned echoes and unrelated commits', () => {
         let editor = createEditorState(workflow);
-        let draft = createMapDraft(editor.document.nodes[0].config.inputs, 'a:0');
+        const inputs = () => (editor.document.nodes[0].config as HumanTaskConfig).inputs;
+        let draft = createMapDraft(inputs(), 'a:0');
         const ids = draft.pairs.map(pair => pair.id);
         for (const key of ['b', '', 'renamed']) {
             draft = editMapDraft(draft, draft.pairs.map((pair, index) => index === 0 ? { ...pair, key } : pair));
             editor = editorReducer(editor, { type: 'nodeData', id: 'a', data: { config: { inputs: draft.map } } });
-            draft = syncMapDraft(draft, editor.document.nodes[0].config.inputs, 'a:0');
+            draft = syncMapDraft(draft, inputs(), 'a:0');
             expect(draft.pairs.map(pair => pair.id)).toEqual(ids);
             expect(draft.pairs.map(pair => pair.key)).toEqual([key, 'b']);
             editor = editorReducer(editor, { type: 'nodeData', id: 'b', data: { name: 'Unrelated' } });
-            expect(syncMapDraft(draft, editor.document.nodes[0].config.inputs, 'a:0')).toBe(draft);
+            expect(syncMapDraft(draft, inputs(), 'a:0')).toBe(draft);
         }
     });
 

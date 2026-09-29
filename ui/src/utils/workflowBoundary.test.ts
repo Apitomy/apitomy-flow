@@ -27,10 +27,10 @@ describe('workflow JSON boundary', () => {
         expect(result.workflow).toBeDefined();
         expect(result.workflow!.nodes.map(node => node.id)).toEqual(['s', id, 'e']);
         expect(result.workflow!.edges).toMatchObject(raw.edges);
-        expect(result.workflow!.nodes.every(node => Number.isFinite(node.position.x)
-            && Number.isFinite(node.position.y))).toBe(true);
-        expect(result.workflow!.nodes[0].position.x).toBeLessThan(result.workflow!.nodes[1].position.x);
-        expect(result.workflow!.nodes[1].position.x).toBeLessThan(result.workflow!.nodes[2].position.x);
+        expect(result.workflow!.nodes.every(node => Number.isFinite(node.position?.x)
+            && Number.isFinite(node.position?.y))).toBe(true);
+        expect(result.workflow!.nodes[0].position!.x).toBeLessThan(result.workflow!.nodes[1].position!.x);
+        expect(result.workflow!.nodes[1].position!.x).toBeLessThan(result.workflow!.nodes[2].position!.x);
     });
 
     it.each([null, 3, true, 'workflow', [], {}, { id: 'x', name: 'X', nodes: {}, edges: [] },
@@ -132,7 +132,7 @@ describe('workflow JSON boundary', () => {
         expect(workflow.nodes[0].config).toEqual({});
         expect(workflow.nodes[0].name).toBe('');
         expect(workflow.edges[0]).toMatchObject({ priority: 0, isDefault: false });
-        expect(new Set(workflow.nodes.map(node => `${node.position.x},${node.position.y}`)).size).toBe(3);
+        expect(new Set(workflow.nodes.map(node => `${node.position?.x},${node.position?.y}`)).size).toBe(3);
         const edited = toWorkflow(workflow, toReactFlowNodes(workflow.nodes), toReactFlowEdges(workflow.edges));
         expect(JSON.parse(serializeWorkflow(edited))).toMatchObject({
             host: { theme: 'dark' },

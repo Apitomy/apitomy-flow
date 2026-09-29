@@ -1,9 +1,9 @@
 /**
  * A small, dependency-free evaluator for the subset of Jakarta EL used by workflow edge
  * conditions and node input expressions. It exists so the editor can simulate routing and test
- * conditions in the browser with semantics that match the Java engine's
+ * conditions in the browser with a tested subset of the Java engine's
  * {@code io.apitomy.flow.engine.ConditionEvaluator} (which delegates to a real Jakarta
- * {@code ELProcessor}). Parity is enforced by tests that mirror {@code ConditionEvaluatorTest}.
+ * {@code ELProcessor}). Shared fixtures in `conformance/` pin the supported examples and differences.
  *
  * Supported grammar:
  *  - property access (`a.b.c`) and bracket access (`a[0]`, `a['k']`) over plain JS objects/arrays;
@@ -11,6 +11,7 @@
  *  - logical `&& || !` and aliases `and or not`;
  *  - arithmetic `+ - * / %` and aliases `div mod`, plus unary minus;
  *  - the `empty` operator;
+ *  - lazy, right-associative conditional expressions (`condition ? yes : no`);
  *  - literals: single/double-quoted strings, numbers, `true`, `false`, `null`;
  *  - the `context` and (optionally) `event` root beans.
  *
@@ -38,6 +39,28 @@ export class ElEvaluationError extends Error {
         super(`Failed to evaluate expression "${expression}": ${message}`);
         this.name = 'ElEvaluationError';
         this.expression = expression;
+    }
+}
+
+/** Signals syntax outside the browser dialect, whose validity must be checked by Jakarta EL. */
+class UnsupportedSyntaxError extends Error {
+    /** Explains that full EL validation and execution require the engine. */
+    constructor() {
+        super('Unsupported expression dialect in browser; validate and execute with the Java engine');
+    }
+}
+
+/** Parse-only classification; unsupported syntax is not a claim that the expression is valid EL. */
+export type ExpressionSyntax = 'supported' | 'invalid' | 'unsupported';
+
+/** Distinguishes malformed supported syntax from syntax requiring the engine's full EL parser. */
+export function classifyExpression(expression: string | null | undefined): ExpressionSyntax {
+    if (expression == null || expression.trim() === '') return 'supported';
+    try {
+        parse(expression);
+        return 'supported';
+    } catch (error) {
+        return error instanceof UnsupportedSyntaxError ? 'unsupported' : 'invalid';
     }
 }
 
@@ -87,20 +110,11 @@ export function resolveExpression(expression: string | null | undefined, scope: 
 }
 
 /**
- * Returns whether an expression is syntactically valid EL (parse-only, no evaluation). Used by
- * the workflow validator to flag malformed conditions, closer to the Java validator's compile
- * check than the previous paren/quote balance heuristic.
+ * Returns whether an expression parses in the supported browser subset (no evaluation).
+ * Use {@link classifyExpression} when unsupported engine syntax must be distinguished from invalid syntax.
  */
 export function isValidExpression(expression: string | null | undefined): boolean {
-    if (expression == null || expression.trim() === '') {
-        return true;
-    }
-    try {
-        parse(expression);
-        return true;
-    } catch {
-        return false;
-    }
+    return classifyExpression(expression) === 'supported';
 }
 
 // ---------------------------------------------------------------------------
@@ -121,7 +135,7 @@ interface Token {
 
 /** Multi-character symbolic operators, matched longest-first. */
 const SYMBOL_OPERATORS = ['==', '!=', '<=', '>=', '&&', '||'];
-const SINGLE_OPERATORS = new Set(['<', '>', '!', '+', '-', '*', '/', '%']);
+const SINGLE_OPERATORS = new Set(['<', '>', '!', '+', '-', '*', '/', '%', '?', ':']);
 
 /** Keyword operators (Jakarta EL aliases). */
 const KEYWORD_OPERATORS = new Set([
@@ -182,6 +196,9 @@ function tokenize(input: string): Token[] {
             if (input[j] === 'e' || input[j] === 'E') {
                 j++;
                 if (input[j] === '+' || input[j] === '-') j++;
+                if (!isDigit(input[j])) {
+                    throw new Error(`Expected exponent digits at position ${j}`);
+                }
                 while (j < n && isDigit(input[j])) j++;
             }
             const raw = input.slice(i, j);
@@ -213,6 +230,11 @@ function tokenize(input: string): Token[] {
 
         // Operators
         const two = input.slice(i, i + 2);
+        // Do not label full-EL constructs as malformed merely because this parser cannot check them.
+        if (two === '->' || two === '+=' || '{};,'.includes(ch)
+            || (ch === '=' && two !== '==')) {
+            throw new UnsupportedSyntaxError();
+        }
         if (SYMBOL_OPERATORS.includes(two)) {
             tokens.push({ type: 'op', value: two, pos: i });
             i += 2;
@@ -224,6 +246,9 @@ function tokenize(input: string): Token[] {
             continue;
         }
 
+        // The browser lexer is ASCII-only outside strings. Non-ASCII syntax (including Java's
+        // Unicode identifiers) needs full EL validation, not an import-blocking malformed diagnosis.
+        if (input.codePointAt(i)! > 0x7f) throw new UnsupportedSyntaxError();
         throw new Error(`Unexpected character '${ch}' at position ${i}`);
     }
 
@@ -253,6 +278,7 @@ type Node =
     | { kind: 'property'; object: Node; name: string }
     | { kind: 'index'; object: Node; index: Node }
     | { kind: 'unary'; op: string; operand: Node }
+    | { kind: 'conditional'; condition: Node; yes: Node; no: Node }
     | { kind: 'binary'; op: string; left: Node; right: Node };
 
 class Parser {
@@ -264,8 +290,9 @@ class Parser {
     }
 
     parse(): Node {
-        const node = this.parseOr();
+        const node = this.parseConditional();
         if (this.peek().type !== 'eof') {
+            if (this.peek().value === ':') throw new UnsupportedSyntaxError();
             throw new Error(`Unexpected token '${this.peek().value}' at position ${this.peek().pos}`);
         }
         return node;
@@ -294,6 +321,17 @@ class Parser {
             left = { kind: 'binary', op: '||', left, right };
         }
         return left;
+    }
+
+    private parseConditional(): Node {
+        const condition = this.parseOr();
+        if (!this.matchOp('?')) return condition;
+        const yes = this.parseConditional();
+        if (!this.matchOp(':')) {
+            throw new Error(`Expected ':' at position ${this.peek().pos}`);
+        }
+        const no = this.parseConditional();
+        return { kind: 'conditional', condition, yes, no };
     }
 
     private parseAnd(): Node {
@@ -371,12 +409,14 @@ class Parser {
                 node = { kind: 'property', object: node, name: name.value };
             } else if (t.type === 'lbracket') {
                 this.next();
-                const index = this.parseOr();
+                const index = this.parseConditional();
                 const close = this.next();
                 if (close.type !== 'rbracket') {
                     throw new Error(`Expected ']' at position ${close.pos}`);
                 }
                 node = { kind: 'index', object: node, index };
+            } else if (t.type === 'lparen') {
+                throw new UnsupportedSyntaxError();
             } else {
                 break;
             }
@@ -396,13 +436,15 @@ class Parser {
                 if (t.value === 'null') return { kind: 'literal', value: null };
                 return { kind: 'identifier', name: t.value };
             case 'lparen': {
-                const node = this.parseOr();
+                const node = this.parseConditional();
                 const close = this.next();
                 if (close.type !== 'rparen') {
                     throw new Error(`Expected ')' at position ${close.pos}`);
                 }
                 return node;
             }
+            case 'lbracket':
+                throw new UnsupportedSyntaxError();
             default:
                 throw new Error(`Unexpected token '${t.value}' at position ${t.pos}`);
         }
@@ -431,6 +473,8 @@ function evaluate(node: Node, scope: ElScope): unknown {
             return evalUnary(node.op, node.operand, scope);
         case 'binary':
             return evalBinary(node.op, node.left, node.right, scope);
+        case 'conditional':
+            return evaluate(coerceToBoolean(evaluate(node.condition, scope)) ? node.yes : node.no, scope);
     }
 }
 

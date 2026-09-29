@@ -1,5 +1,6 @@
 package io.apitomy.flow.engine;
 
+import io.apitomy.flow.engine.RecoveryPolicy.Recovery;
 import io.apitomy.flow.model.*;
 import io.apitomy.flow.spi.*;
 import io.apitomy.flow.validation.ValidationProblem;
@@ -10,6 +11,8 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
+
+import static io.apitomy.flow.engine.RecoveryPolicy.contextualError;
 
 /**
  * Stateless, synchronous workflow driver. Definitions and instances must be non-null and callers must not
@@ -35,15 +38,12 @@ public class WorkflowEngine {
         }
     }
 
-    private record Recovery(ErrorResolution resolution, WorkflowError error) {
-        private ErrorAction action() { return resolution.action(); }
-    }
-
     private final NodeExecutorProvider executorProvider;
     private final List<WorkflowEventListener> listeners;
-    private final WorkflowErrorHandler errorHandler;
+    private final RecoveryPolicy recoveryPolicy;
     private final WorkflowValidator validator;
     private final ConditionEvaluator conditionEvaluator;
+    private final NodeValueResolver values;
 
     /**
      * Creates an engine. Null provider means no executors; null handler selects fail-by-default recovery.
@@ -53,9 +53,10 @@ public class WorkflowEngine {
                           WorkflowErrorHandler errorHandler) {
         this.executorProvider = executorProvider != null ? executorProvider : actionType -> null;
         this.listeners = listeners != null ? List.copyOf(listeners) : List.of();
-        this.errorHandler = errorHandler != null ? errorHandler : new DefaultErrorHandler();
+        this.recoveryPolicy = new RecoveryPolicy(errorHandler);
         this.validator = new WorkflowValidator();
         this.conditionEvaluator = new ConditionEvaluator();
+        this.values = new NodeValueResolver(conditionEvaluator);
     }
 
     /** Starts a validated workflow with a generated id; null initialContext means empty context. */
@@ -83,7 +84,7 @@ public class WorkflowEngine {
         // Find start node and validate inputs
         WorkflowNode startNode = workflow.findStartNode()
             .orElseThrow(() -> new IllegalStateException("No start node found"));
-        validateInputs(startNode, initialContext);
+        values.validateStartInputs(startNode, initialContext);
 
         // Create instance
         Instant now = Instant.now();
@@ -138,7 +139,7 @@ public class WorkflowEngine {
         WorkflowNode node = workflow.findNodeById(nodeId)
             .orElseThrow(() -> new IllegalStateException("Node not found: " + nodeId));
 
-        WorkflowError resultError = validateResult(node, result);
+        WorkflowError resultError = values.validateResult(node, result);
         if (resultError != null) {
             return handleFailedCompletion(workflow, instance, branch.branchId(), node, result, resultError);
         }
@@ -147,9 +148,10 @@ public class WorkflowEngine {
             if (result.output() != null && !result.output().isEmpty()) {
                 Map<String, Object> resolvedOutput;
                 try {
-                    resolvedOutput = resolveMergeOutput(instance, node, result.output());
+                    resolvedOutput = values.mergeOutput(instance, node, result.output());
                 } catch (Exception e) {
-                    return resolveMergeOutputError(workflow, instance, branch.branchId(), node, result, e);
+                    return handleFailedCompletion(workflow, instance, branch.branchId(), node, result,
+                        contextualError(WorkflowError.Phase.OUTPUT_MAPPING, node, e));
                 }
                 reparked = reparked.toBuilder().mergeContext(resolvedOutput).build();
             }
@@ -158,7 +160,7 @@ public class WorkflowEngine {
 
         // COMPLETED actions use the synchronous contract, before remapping or merging output.
         // PENDING payloads above are intentionally partial and do not require all declared outputs.
-        WorkflowError outputError = node.type() == NodeType.ACTION ? validateNodeOutputs(node, result.output()) : null;
+        WorkflowError outputError = node.type() == NodeType.ACTION ? values.validateOutputs(node, result.output()) : null;
         if (outputError != null) {
             return handleFailedCompletion(workflow, instance, branch.branchId(), node, result, outputError);
         }
@@ -166,9 +168,10 @@ public class WorkflowEngine {
         // COMPLETED — record output on the branch's history entry, merge context, then continue this branch.
         Map<String, Object> resolvedOutput;
         try {
-            resolvedOutput = resolveMergeOutput(instance, node, result.output());
+            resolvedOutput = values.mergeOutput(instance, node, result.output());
         } catch (Exception e) {
-            return resolveMergeOutputError(workflow, instance, branch.branchId(), node, result, e);
+            return handleFailedCompletion(workflow, instance, branch.branchId(), node, result,
+                contextualError(WorkflowError.Phase.OUTPUT_MAPPING, node, e));
         }
         WorkflowInstance updated = completeHistoryEntry(instance, branch.branchId(), nodeId,
             Instant.now(), resolvedOutput);
@@ -204,38 +207,15 @@ public class WorkflowEngine {
         return completeNode(workflow, instance, nodeId, result);
     }
 
-    /**
-     * Reuses the existing error handler when {@link #resolveMergeOutput} throws (e.g. a receive-event
-     * output mapping's expression fails to evaluate against the delivered event/context), instead of
-     * letting the exception propagate out of {@link #completeNode} and leave the instance stuck in
-     * WAITING. Mirrors {@link #resolveEdgeError}'s handler-dispatch/fail-safe pattern.
-     *
-     * @param workflow the workflow definition
-     * @param instance the instance being completed
-     * @param branchId the id of the branch whose node's output failed to resolve
-     * @param node     the node whose output mapping failed to resolve
-     * @param result   the node result that was being merged
-     * @param e        the failure that occurred while resolving the merge output
-     * @return the resolved instance
-     */
-    private WorkflowInstance resolveMergeOutputError(Workflow workflow, WorkflowInstance instance, String branchId,
-                                                      WorkflowNode node, NodeResult result, Exception e) {
-        Recovery resolution = recover(workflow, instance, node, result,
-            contextualError(WorkflowError.Phase.OUTPUT_MAPPING, node, e));
-        if (resolution.action() == ErrorAction.RETRY) {
-            return instance; // Keep the failed delivery parked for another external completion.
-        }
-        return resumeResolution(workflow, instance, branchId, node, resolution);
-    }
-
+    /** Applies the shared completion policy before seeding the iterative recovery driver. */
     private WorkflowInstance handleFailedCompletion(Workflow workflow, WorkflowInstance instance,
-                                                    String branchId, WorkflowNode actionNode,
+                                                    String branchId, WorkflowNode node,
                                                     NodeResult result, WorkflowError error) {
-        Recovery resolution = recover(workflow, instance, actionNode, result, error);
-        if (resolution.action() == ErrorAction.RETRY && actionNode.type() != NodeType.ACTION) {
+        Recovery resolution = recoveryPolicy.resolve(workflow, instance, node, result, error);
+        if (resolution.awaitsExternalDelivery(node)) {
             return instance; // External tasks require another delivery, never action-executor dispatch.
         }
-        return resumeResolution(workflow, instance, branchId, actionNode, resolution);
+        return resumeResolution(workflow, instance, branchId, node, resolution);
     }
 
     /** Seeds one driver for an external completion's recovery and any already runnable siblings. */
@@ -329,18 +309,12 @@ public class WorkflowEngine {
             return null;
         }
 
-        String description = node.config().get("description") instanceof String d ? d : null;
+        NodeConfig.HumanTask config = (NodeConfig.HumanTask) node.typedConfig();
+        String description = config.description();
 
-        Map<String, Object> resolvedInputs = resolveNodeInputs(node, instance.context());
+        Map<String, Object> resolvedInputs = values.inputs(node, instance.context());
 
-        List<OutputDefinition> outputs = List.of();
-        if (node.config().get("outputs") instanceof List<?> outputDefs) {
-            outputs = outputDefs.stream()
-                .filter(Map.class::isInstance)
-                .map(o -> (Map<?, ?>) o)
-                .map(this::mapHumanTaskOutput)
-                .toList();
-        }
+        List<OutputDefinition> outputs = config.outputs().stream().map(values::humanTaskOutput).toList();
 
         return new HumanTaskInfo(node.id(), node.name(), description,
             Collections.unmodifiableMap(resolvedInputs), outputs);
@@ -390,27 +364,11 @@ public class WorkflowEngine {
             return null;
         }
 
-        String eventType = node.config().get("eventType") instanceof String et ? et : null;
-
-        List<String> matchExpressions = List.of();
-        if (node.config().get("match") instanceof List<?> matchList) {
-            matchExpressions = matchList.stream()
-                .filter(String.class::isInstance)
-                .map(String.class::cast)
-                .toList();
-        }
-
-        List<EventOutputMapping> outputMappings = List.of();
-        if (node.config().get("outputs") instanceof List<?> outputDefs) {
-            outputMappings = outputDefs.stream()
-                .filter(Map.class::isInstance)
-                .map(o -> (Map<?, ?>) o)
-                .map(o -> new EventOutputMapping(
-                    o.get("contextKey") != null ? String.valueOf(o.get("contextKey")) : null,
-                    o.get("expression") != null ? String.valueOf(o.get("expression")) : null
-                ))
-                .toList();
-        }
+        NodeConfig.ReceiveEvent config = (NodeConfig.ReceiveEvent) node.typedConfig();
+        String eventType = config.eventType();
+        List<String> matchExpressions = config.match();
+        List<EventOutputMapping> outputMappings = config.outputs().stream()
+            .map(o -> new EventOutputMapping(o.contextKey(), o.expression())).toList();
 
         return new ReceiveEventInfo(node.id(), node.name(), eventType, matchExpressions, outputMappings);
     }
@@ -459,7 +417,8 @@ public class WorkflowEngine {
         }
 
         Duration duration = null;
-        if (node.config().get("duration") instanceof String d) {
+        String d = ((NodeConfig.Wait) node.typedConfig()).duration();
+        if (d != null) {
             try {
                 duration = Duration.parse(d);
             } catch (Exception e) {
@@ -514,24 +473,18 @@ public class WorkflowEngine {
             return null;
         }
 
-        String actionType = node.config().get("actionType") instanceof String at ? at : null;
+        NodeConfig.Action config = (NodeConfig.Action) node.typedConfig();
+        String actionType = config.actionType();
 
-        Map<String, Object> resolvedInputs = resolveNodeInputs(node, instance.context());
+        Map<String, Object> resolvedInputs = values.inputs(node, instance.context());
 
-        List<OutputDefinition> expectedOutputs = List.of();
-        if (node.config().get("outputs") instanceof List<?> outputDefs) {
-            expectedOutputs = outputDefs.stream()
-                .filter(Map.class::isInstance)
-                .map(o -> (Map<?, ?>) o)
-                .map(o -> new OutputDefinition(
-                    String.valueOf(o.get("name")),
-                    o.get("type") != null ? String.valueOf(o.get("type")) : "string",
-                    Boolean.TRUE.equals(o.get("required")),
-                    null, null, null, null, null,
-                    o.get("contextKey") instanceof String ck && !ck.isBlank() ? ck : null
-                ))
-                .toList();
-        }
+        List<OutputDefinition> expectedOutputs = config.outputs().stream()
+            .map(o -> new OutputDefinition(
+                o.name(), o.type(), o.required(),
+                null, null, null, null, null,
+                o.contextKey() != null && !o.contextKey().isBlank() ? o.contextKey() : null
+            ))
+            .toList();
 
         return new ActionInfo(node.id(), node.name(), actionType,
             resolvedInputs, expectedOutputs);
@@ -586,7 +539,8 @@ public class WorkflowEngine {
         }
 
         // Check event type
-        String expectedType = currentNode.config().get("eventType") instanceof String et ? et : null;
+        NodeConfig.ReceiveEvent config = (NodeConfig.ReceiveEvent) currentNode.typedConfig();
+        String expectedType = config.eventType();
         if (expectedType == null) {
             return false;
         }
@@ -596,19 +550,14 @@ public class WorkflowEngine {
         }
 
         // Check match expressions
-        Object matchConfig = currentNode.config().get("match");
-        if (matchConfig instanceof List<?> matchExpressions) {
-            for (Object expr : matchExpressions) {
-                if (expr instanceof String expression) {
-                    try {
-                        if (!conditionEvaluator.evaluate(expression, instance.context(), event)) {
-                            return false;
-                        }
-                    } catch (ConditionEvaluationException e) {
-                        log.warn("Event match expression failed: {}", e.getMessage());
-                        return false;
-                    }
+        for (String expression : config.match()) {
+            try {
+                if (!conditionEvaluator.evaluate(expression, instance.context(), event)) {
+                    return false;
                 }
+            } catch (ConditionEvaluationException e) {
+                log.warn("Event match expression failed: {}", e.getMessage());
+                return false;
             }
         }
 
@@ -732,7 +681,8 @@ public class WorkflowEngine {
                 } catch (WorkflowError e) {
                     transitions++;
                     lastError = e;
-                    instance = resolveEdgeError(workflow, instance, branch.branchId(), node, null, e, work);
+                    instance = applyResolution(workflow, instance, branch.branchId(), node,
+                        recoveryPolicy.resolve(workflow, instance, node, null, e), work);
                     if (instance.status() != InstanceStatus.RUNNING) return instance;
                     enqueueContinuation(instance, branch.branchId(), work);
                     continue;
@@ -741,7 +691,8 @@ public class WorkflowEngine {
                     transitions++;
                     lastError = new WorkflowError(WorkflowError.Phase.EDGE_SELECTION, node.id(), null,
                         null, null, "No matching outgoing edge", null);
-                    instance = resolveNoEdge(workflow, instance, branch.branchId(), node, lastError, work);
+                    instance = applyResolution(workflow, instance, branch.branchId(), node,
+                        recoveryPolicy.resolve(workflow, instance, node, null, lastError), work);
                     if (instance.status() != InstanceStatus.RUNNING) return instance;
                     enqueueContinuation(instance, branch.branchId(), work);
                     continue;
@@ -861,9 +812,9 @@ public class WorkflowEngine {
             }
             case HUMAN_TASK -> {
                 try {
-                    resolveNodeInputs(node, instance.context());
+                    values.inputs(node, instance.context());
                 } catch (WorkflowError error) {
-                    Recovery recovery = recover(workflow, instance, node, null, error);
+                    Recovery recovery = recoveryPolicy.resolve(workflow, instance, node, null, error);
                     if (recovery.action() == ErrorAction.RETRY) {
                         recovery = new Recovery(ErrorResolution.transitionTo(node.id()), error);
                     }
@@ -954,111 +905,9 @@ public class WorkflowEngine {
         return false;
     }
 
-    /**
-     * Reuses the existing error handler for a failed edge-condition evaluation on the sequential path.
-     *
-     * @param workflow the workflow definition
-     * @param instance the instance being advanced
-     * @param branchId the id of the branch whose edge condition failed
-     * @param node     the node whose outgoing edge condition failed
-     * @param result   the node result (may be {@code null})
-     * @param e        the failure that occurred
-     * @param work     the call-local queue receiving recovery entry work
-     * @return the resolved instance
-     */
-    private WorkflowInstance resolveEdgeError(Workflow workflow, WorkflowInstance instance,
-                                              String branchId, WorkflowNode node, NodeResult result,
-                                              Exception e, Deque<BranchWork> work) {
-        Recovery resolution = recover(workflow, instance, node, result,
-            contextualError(WorkflowError.Phase.EDGE_CONDITION, node, e));
-        return applyResolution(workflow, instance, branchId, node, resolution, work);
-    }
-
-    /**
-     * Reuses the existing error handler for the "no matching edge" case on the sequential path.
-     *
-     * @param workflow the workflow definition
-     * @param instance the instance being advanced
-     * @param branchId the id of the branch with no matching outgoing edge
-     * @param node     the node with no matching outgoing edge
-     * @param error    the selection diagnostic already recorded by the call-local driver
-     * @param work     the call-local queue receiving recovery entry work
-     * @return the resolved instance
-     */
-    private WorkflowInstance resolveNoEdge(Workflow workflow, WorkflowInstance instance, String branchId,
-                                           WorkflowNode node, WorkflowError error, Deque<BranchWork> work) {
-        Recovery resolution = recover(workflow, instance, node, null, error);
-        return applyResolution(workflow, instance, branchId, node, resolution, work);
-    }
-
-    private WorkflowError contextualError(WorkflowError.Phase phase, WorkflowNode node, Exception error) {
-        return phase != WorkflowError.Phase.EXECUTION && phase != WorkflowError.Phase.EXECUTOR_LOOKUP
-            && error instanceof WorkflowError diagnostic ? diagnostic : new WorkflowError(
-            phase, node.id(), null, null, null,
-            error.getMessage() == null ? error.getClass().getName() : error.getMessage(), error);
-    }
-
-    private WorkflowError validateResult(WorkflowNode node, NodeResult result) {
-        if (result == null || result.status() == null) {
-            return new WorkflowError(WorkflowError.Phase.RESULT_VALIDATION, node.id(), null, null,
-                result == null ? "result" : "status", "Node result and status must not be null", null);
-        }
-        if (result.output() != null
-                && ((Map<?, ?>) result.output()).keySet().stream().anyMatch(key -> !(key instanceof String))) {
-            return new WorkflowError(WorkflowError.Phase.RESULT_VALIDATION, node.id(), null, null,
-                "output", "Node result output keys must be non-null strings", null);
-        }
-        if (result.status() == NodeResultStatus.FAILED) {
-            return new WorkflowError(WorkflowError.Phase.EXECUTION, node.id(), null, null, null,
-                "Node returned FAILED" + (result.output() == null ? "" : ": " + diagnosticOutput(result.output())), null);
-        }
-        return null;
-    }
-
-    /** Keeps host value formatting exceptions from bypassing recovery; JVM Errors still propagate. */
-    private String diagnosticOutput(Map<String, Object> output) {
-        try {
-            return output.toString();
-        } catch (Exception ignored) {
-            return "<output unavailable>";
-        }
-    }
-
-    /** Dispatches once and validates the host response before any recovery side effects. */
-    private Recovery recover(Workflow workflow, WorkflowInstance instance, WorkflowNode node,
-                             NodeResult result, WorkflowError error) {
-        try {
-            ErrorResolution resolution = errorHandler.handleError(instance, node, result, error);
-            if (resolution == null || resolution.action() == null) {
-                throw new IllegalArgumentException("Error resolution and action must not be null");
-            }
-            String targetId = resolution.targetNodeId();
-            if (resolution.action() == ErrorAction.TRANSITION) {
-                if (targetId == null || targetId.isBlank()) {
-                    throw new IllegalArgumentException("Error handler TRANSITION target must not be null or blank");
-                }
-                WorkflowNode target = workflow.findNodeById(targetId).orElseThrow(() ->
-                    new IllegalArgumentException("Error handler TRANSITION target not found: " + targetId));
-                if (target.type() == NodeType.START) {
-                    throw new IllegalArgumentException("Cannot transition to node type: START");
-                }
-            } else if (targetId != null) {
-                throw new IllegalArgumentException("Only TRANSITION accepts targetNodeId");
-            }
-            return new Recovery(resolution, error);
-        } catch (Exception handlerError) {
-            WorkflowError failure = new WorkflowError(WorkflowError.Phase.ERROR_HANDLER, node.id(),
-                error.edgeId(), error.expression(), error.field(),
-                "Error handler threw or returned an invalid resolution: " + handlerError
-                    + "; original: " + error.diagnostic(), handlerError);
-            failure.addSuppressed(error);
-            return new Recovery(ErrorResolution.fail(), failure);
-        }
-    }
-
     private WorkflowInstance executeActionNode(Workflow workflow, WorkflowInstance instance,
                                                String branchId, WorkflowNode actionNode, Deque<BranchWork> work) {
-        String actionType = actionNode.config().get("actionType") instanceof String at ? at : null;
+        String actionType = ((NodeConfig.Action) actionNode.typedConfig()).actionType();
         int retries = 0;
 
         while (true) {
@@ -1066,7 +915,7 @@ public class WorkflowEngine {
             WorkflowError error = null;
             WorkflowError.Phase phase = WorkflowError.Phase.INPUT_RESOLUTION;
             try {
-                Map<String, Object> resolvedInputs = resolveNodeInputs(actionNode, instance.context());
+                Map<String, Object> resolvedInputs = values.inputs(actionNode, instance.context());
                 phase = WorkflowError.Phase.EXECUTOR_LOOKUP;
                 NodeExecutor executor = executorProvider.getExecutor(actionType);
                 if (executor == null) {
@@ -1075,16 +924,16 @@ public class WorkflowEngine {
                 phase = WorkflowError.Phase.EXECUTION;
                 result = executor.execute(new NodeExecutionContext(
                     actionNode, resolvedInputs, actionNode.config()));
-                error = validateResult(actionNode, result);
+                error = values.validateResult(actionNode, result);
                 if (error == null && result.status() == NodeResultStatus.COMPLETED) {
-                    error = validateNodeOutputs(actionNode, result.output());
+                    error = values.validateOutputs(actionNode, result.output());
                 }
             } catch (Exception e) {
                 error = contextualError(phase, actionNode, e);
             }
 
             if (error != null) {
-                Recovery resolution = recover(workflow, instance, actionNode, result, error);
+                Recovery resolution = recoveryPolicy.resolve(workflow, instance, actionNode, result, error);
                 if (resolution.action() == ErrorAction.RETRY) {
                     if (++retries > MAX_RETRIES) {
                         return failWorkflow(instance,
@@ -1104,7 +953,7 @@ public class WorkflowEngine {
                 // entered (see issue #105).
                 if (result.output() != null && !result.output().isEmpty()) {
                     instance = instance.toBuilder()
-                        .mergeContext(resolveContextKeys(actionNode, result.output()))
+                        .mergeContext(values.contextKeys(actionNode, result.output()))
                         .build();
                 }
                 return instance.toBuilder()
@@ -1113,7 +962,7 @@ public class WorkflowEngine {
             }
 
             // Success — record output on history, merge into context, fire completed
-            Map<String, Object> resolvedOutput = resolveContextKeys(actionNode, result.output());
+            Map<String, Object> resolvedOutput = values.contextKeys(actionNode, result.output());
             instance = completeHistoryEntry(instance, branchId, actionNode.id(), Instant.now(),
                 resolvedOutput);
             instance = instance.toBuilder()
@@ -1236,94 +1085,6 @@ public class WorkflowEngine {
         return instance.toBuilder().history(history).build();
     }
 
-    /**
-     * Resolves what should actually be merged into context for a completed node's raw output:
-     * for a {@code receive-event} node with a non-empty {@code config.outputs} (output mappings),
-     * evaluates each mapping's expression against the incoming event and the instance's current
-     * (pre-merge) context; for every other node — including a receive-event node with no
-     * mappings declared — falls through to the existing {@link #resolveContextKeys} rename logic,
-     * which is a no-op when the node declares no {@code outputs} at all (preserving today's flat
-     * merge for receive-event nodes with no mappings).
-     *
-     * @param instance  the instance being completed (its pre-merge context is available to mapping expressions)
-     * @param node      the node that produced the output
-     * @param rawOutput the raw output map (for receive-event, the raw event payload)
-     * @return the map to actually merge into context
-     */
-    private Map<String, Object> resolveMergeOutput(WorkflowInstance instance, WorkflowNode node,
-                                                    Map<String, Object> rawOutput) {
-        if (node.type() == NodeType.RECEIVE_EVENT
-            && node.config().get("outputs") instanceof List<?> outputDefs && !outputDefs.isEmpty()) {
-            return applyEventOutputMappings(node, outputDefs, instance.context(), rawOutput == null ? Map.of() : rawOutput);
-        }
-        return resolveContextKeys(node, rawOutput);
-    }
-
-    /**
-     * Evaluates each raw {@code {contextKey, expression}} mapping entry against the given
-     * {@code event} and {@code context}, building the map of resolved values keyed by
-     * {@code contextKey}. Entries missing either field, or with a non-string {@code contextKey}
-     * or {@code expression}, are skipped (flagged separately by validation) rather than coerced
-     * via {@code String.valueOf}, matching the UI simulator's equivalent runtime check.
-     */
-    private Map<String, Object> applyEventOutputMappings(WorkflowNode node, List<?> outputDefs, Map<String, Object> context,
-                                                          Map<String, Object> event) {
-        Map<String, Object> mapped = new HashMap<>();
-        for (Object defObj : outputDefs) {
-            if (defObj instanceof Map<?, ?> def
-                && def.get("contextKey") instanceof String contextKey && !contextKey.isBlank()
-                && def.get("expression") instanceof String expression && !expression.isBlank()) {
-                try {
-                    mapped.put(contextKey, conditionEvaluator.resolve(expression, context, event));
-                } catch (Exception e) {
-                    throw new WorkflowError(WorkflowError.Phase.OUTPUT_MAPPING, node.id(), null,
-                        expression, contextKey, e.getMessage(), e);
-                }
-            }
-        }
-        return mapped;
-    }
-
-    /**
-     * Remaps a node's raw produced output map so each value is keyed by its declared output's
-     * effective context key (the {@code contextKey} override when present, else the declared
-     * {@code name}) rather than always by {@code name}. Keys not matching any declared output for
-     * this node (or present when the node declares no {@code outputs}) pass through unchanged.
-     *
-     * @param node      the node that produced the output
-     * @param rawOutput the raw output map, keyed by declared output name
-     * @return a new map with keys renamed to their effective context keys
-     */
-    private Map<String, Object> resolveContextKeys(WorkflowNode node, Map<String, Object> rawOutput) {
-        if (rawOutput == null || rawOutput.isEmpty()) {
-            return rawOutput;
-        }
-        Map<String, String> renames = new HashMap<>();
-        if (node.config().get("outputs") instanceof List<?> outputDefs) {
-            for (Object defObj : outputDefs) {
-                if (defObj instanceof Map<?, ?> def) {
-                    Object nameVal = def.get("name");
-                    if (nameVal == null) {
-                        continue;
-                    }
-                    String name = String.valueOf(nameVal);
-                    if (def.get("contextKey") instanceof String ck && !ck.isBlank() && !ck.equals(name)) {
-                        renames.put(name, ck);
-                    }
-                }
-            }
-        }
-        if (renames.isEmpty()) {
-            return rawOutput;
-        }
-        Map<String, Object> remapped = new HashMap<>();
-        for (Map.Entry<String, Object> entry : rawOutput.entrySet()) {
-            String key = renames.getOrDefault(entry.getKey(), entry.getKey());
-            remapped.put(key, entry.getValue());
-        }
-        return remapped;
-    }
-
     private void fireEvent(java.util.function.Consumer<WorkflowEventListener> action) {
         for (WorkflowEventListener listener : listeners) {
             try {
@@ -1334,121 +1095,4 @@ public class WorkflowEngine {
         }
     }
 
-    /**
-     * Maps a single raw {@code config.outputs} entry for a human-task node into an
-     * {@link OutputDefinition}, applying the documented defaults: {@code label} falls back to
-     * {@code name}, {@code widget} is inferred from {@code type} when omitted, and {@code options}
-     * are parsed into {@link OutputOption} records. Unknown/omitted metadata is left {@code null}.
-     *
-     * @param o the raw output definition map
-     * @return the resolved output definition
-     */
-    private OutputDefinition mapHumanTaskOutput(Map<?, ?> o) {
-        String name = String.valueOf(o.get("name"));
-        String type = o.get("type") != null ? String.valueOf(o.get("type")) : "string";
-        boolean required = Boolean.TRUE.equals(o.get("required"));
-        String label = o.get("label") instanceof String l && !l.isBlank() ? l : name;
-        String description = o.get("description") instanceof String d ? d : null;
-        String widget = o.get("widget") instanceof String w && !w.isBlank() ? w : inferWidget(type);
-        Object defaultValue = o.get("defaultValue");
-        String contextKey = o.get("contextKey") instanceof String ck && !ck.isBlank() ? ck : null;
-
-        List<OutputOption> options = null;
-        if (o.get("options") instanceof List<?> rawOptions) {
-            options = rawOptions.stream()
-                .filter(Map.class::isInstance)
-                .map(opt -> (Map<?, ?>) opt)
-                .map(opt -> new OutputOption(
-                    opt.get("label") != null ? String.valueOf(opt.get("label")) : null,
-                    opt.get("value") != null ? String.valueOf(opt.get("value")) : null
-                ))
-                .toList();
-        }
-
-        return new OutputDefinition(name, type, required, label, description, widget, defaultValue, options,
-            contextKey);
-    }
-
-    /**
-     * Infers the default rendering widget for a human-task output from its semantic type when no
-     * explicit {@code widget} is declared.
-     *
-     * @param type the semantic type ({@code string}/{@code number}/{@code boolean}/{@code object})
-     * @return the inferred widget hint
-     */
-    private String inferWidget(String type) {
-        return switch (type == null ? "string" : type) {
-            case "number" -> "number";
-            case "boolean" -> "checkbox";
-            case "object" -> "textarea";
-            default -> "text";
-        };
-    }
-
-    private Map<String, Object> resolveNodeInputs(WorkflowNode node, Map<String, Object> context) {
-        Object inputConfig = node.config().get("inputs");
-        if (!(inputConfig instanceof Map<?, ?> inputExprs)) {
-            return Map.of();
-        }
-        Map<String, Object> resolved = new LinkedHashMap<>();
-        for (Map.Entry<?, ?> entry : inputExprs.entrySet()) {
-            String label = String.valueOf(entry.getKey());
-            try {
-                resolved.put(label, resolveInputValue(entry.getValue(), context));
-            } catch (Exception e) {
-                throw new WorkflowError(WorkflowError.Phase.INPUT_RESOLUTION, node.id(), null,
-                    entry.getValue() instanceof String expression ? expression : null, label, e.getMessage(), e);
-            }
-        }
-        return Collections.unmodifiableMap(resolved);
-    }
-
-    /**
-     * Resolves a single input value. Only {@link String} values are treated as EL
-     * expressions and passed to the condition evaluator. Non-string values (such as
-     * {@link Map}, {@link List}, numbers or booleans) are literal values and are
-     * returned as-is, avoiding corruption via {@code String.valueOf}.
-     */
-    private Object resolveInputValue(Object rawValue, Map<String, Object> context) {
-        if (rawValue instanceof String expression) {
-            return conditionEvaluator.resolve(expression, context);
-        }
-        return rawValue;
-    }
-
-    private WorkflowError validateNodeOutputs(WorkflowNode node, Map<String, Object> output) {
-        Object outputConfig = node.config().get("outputs");
-        if (!(outputConfig instanceof List<?> outputDefs)) {
-            return null;
-        }
-        for (Object defObj : outputDefs) {
-            if (defObj instanceof Map<?, ?> def) {
-                String name = String.valueOf(def.get("name"));
-                boolean required = Boolean.TRUE.equals(def.get("required"));
-                if (required && (output == null || !output.containsKey(name) || output.get(name) == null)) {
-                    return new WorkflowError(WorkflowError.Phase.OUTPUT_VALIDATION, node.id(), null,
-                        null, name, "Missing required output: " + name, null);
-                }
-            }
-        }
-        return null;
-    }
-
-    private void validateInputs(WorkflowNode startNode, Map<String, Object> initialContext) {
-        Object inputsDef = startNode.config().get("inputs");
-        if (inputsDef instanceof List<?> inputs) {
-            for (Object inputObj : inputs) {
-                if (inputObj instanceof Map<?, ?> input) {
-                    String name = (String) input.get("name");
-                    Object required = input.get("required");
-                    if (Boolean.TRUE.equals(required) && !initialContext.containsKey(name)) {
-                        throw new IllegalArgumentException("Missing required input: " + name);
-                    }
-                    if (Boolean.TRUE.equals(required) && initialContext.get(name) == null) {
-                        throw new IllegalArgumentException("Required input is null: " + name);
-                    }
-                }
-            }
-        }
-    }
 }

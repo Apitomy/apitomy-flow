@@ -9,7 +9,7 @@ export function jsonEqual(before: unknown, after: unknown): boolean {
     if (Array.isArray(before) || Array.isArray(after)) {
         return Array.isArray(before) && Array.isArray(after)
             && before.length === after.length
-            && before.every((value, index) => jsonEqual(value, after[index]));
+            && Array.from(before).every((value, index) => jsonEqual(value, after[index]));
     }
 
     const beforeObject = before as Record<string, unknown>;

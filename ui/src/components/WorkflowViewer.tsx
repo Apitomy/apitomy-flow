@@ -169,7 +169,7 @@ function WorkflowViewerInner({ workflow, instance, theme = 'light', nodeContextM
     return workflow.nodes.find(n => n.id === selectedNodeId) ?? null;
   }, [selectedNodeId, workflow.nodes]);
 
-  const onNodeClick = useCallback((_: any, node: Node) => {
+  const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     setSelectedNodeId(node.id);
     setSelectedVisitIndex(null);
     if (collapsed) setCollapsed(false);
@@ -426,7 +426,7 @@ function NodeDetail({ node, history, visits, visitsByBranch, visitIndex, onSelec
           {node.type === 'start' && Array.isArray(node.config.inputs) && node.config.inputs.length > 0 && (
             <>
               <div className="workflow-viewer__section-label">Inputs</div>
-              {(node.config.inputs as { name: string; type: string; required: boolean }[]).map((input) => (
+              {node.config.inputs.map((input) => (
                 <div key={input.name} className="workflow-viewer__context-entry">
                   <span className="workflow-viewer__context-key">
                     {input.name} <span className="workflow-viewer__type-badge">{input.type}{input.required ? '' : '?'}</span>

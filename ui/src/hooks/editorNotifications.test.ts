@@ -55,7 +55,7 @@ describe('committed document notifications', () => {
         publish(state, document => received.push(document));
         publish(state, document => received.push(document));
         expect(received).toHaveLength(1);
-        expect(received[0].nodes[1].position.x).toBeGreaterThan(received[0].nodes[0].position.x);
+        expect(received[0].nodes[1].position!.x).toBeGreaterThan(received[0].nodes[0].position!.x);
         expect(editorReducer(state, { type: 'undo' })).toBe(state);
     });
 });

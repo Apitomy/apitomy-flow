@@ -1,7 +1,45 @@
-# Apitomy Flow — Project Audit Backlog
+# Apitomy Flow — Historical Audit and Current Backlog Links
 
-Full audit of both the engine (Java) and UI (React/TypeScript) components, covering correctness,
-state management, type safety, cross-component consistency, and test coverage.
+**GitHub issues are the actionable backlog.** The tables under “Original audit” preserve the older audit's
+wording, line numbers, and statuses for provenance. In particular, “Open” there is an historical label,
+not a current issue status. Use the links below and inspect code at your selected revision.
+
+- [Current open issues](https://github.com/Apitomy/apitomy-flow/issues?q=is%3Aissue+is%3Aopen)
+- September code-quality findings: [C1 #124](https://github.com/Apitomy/apitomy-flow/issues/124) through
+  [C14 #137](https://github.com/Apitomy/apitomy-flow/issues/137).
+- Product follow-ups: [#115](https://github.com/Apitomy/apitomy-flow/issues/115) through
+  [#123](https://github.com/Apitomy/apitomy-flow/issues/123), plus timer
+  [#85](https://github.com/Apitomy/apitomy-flow/issues/85) and retry
+  [#86](https://github.com/Apitomy/apitomy-flow/issues/86).
+- [Current branch contracts](docs/user-guide/current-contracts.md)
+
+## Reconciliation against the combined branch
+
+Reviewed at integration `7da7f64`, including C13 corrections through `24644df`.
+C1–C14 work is present in this branch, but those issues are pending;
+this table describes observed behavior, not release/merge status. Issue links supply their live status.
+
+| Historical entry | Observed code / follow-up |
+|---|---|
+| Bug 14: numeric dot access | [#47](https://github.com/Apitomy/apitomy-flow/issues/47) tracks the decision. `JsonNodeELResolver` supports numeric bracket indexes; use `arr[0]`, not an assumed `arr.0` extension. |
+| Bugs 15–16; improvement 8: map inputs | [#54](https://github.com/Apitomy/apitomy-flow/issues/54), [#73](https://github.com/Apitomy/apitomy-flow/issues/73), [#74](https://github.com/Apitomy/apitomy-flow/issues/74). `MapInputsEditor` has stable local draft rows, empty/duplicate warnings, and literal preservation. Separate rows remain in the local draft, but the persisted map includes the empty-string key (`''`) and resolves repeated keys, including empty keys, last-entry-wins. It does not ban collisions. |
+| Bug 17; improvement 12: property undo | [#48](https://github.com/Apitomy/apitomy-flow/issues/48) added earlier history support. This branch's transactional reducer covers properties, IDs, structural edits, import metadata, and completed drags ([#132](https://github.com/Apitomy/apitomy-flow/issues/132)); broader host synchronization remains [#121](https://github.com/Apitomy/apitomy-flow/issues/121). |
+| Bug 20: literal inputs | [#49](https://github.com/Apitomy/apitomy-flow/issues/49). `NodeValueResolver` evaluates strings and preserves non-string literals; nested ownership is covered by [#130](https://github.com/Apitomy/apitomy-flow/issues/130). |
+| Bug 21; improvement 20: error context/SPI docs | [#50](https://github.com/Apitomy/apitomy-flow/issues/50). Branch work [#135](https://github.com/Apitomy/apitomy-flow/issues/135) adds structured phases/identities and explicit callback/null contracts. |
+| Bug 22: cycle reporting | [#51](https://github.com/Apitomy/apitomy-flow/issues/51). Java reports cyclic action SCCs; the browser still stops after its first detected automated cycle. Do not infer full validator diagnostic parity. |
+| Bug 26: viewer visits | [#52](https://github.com/Apitomy/apitomy-flow/issues/52). `WorkflowViewer` follows the latest visit by default, permits older-visit selection, and groups branch history. |
+| Bug 27: demo viewer | [#53](https://github.com/Apitomy/apitomy-flow/issues/53). Current demo uses separate selectable editor/viewer scenarios; it is not hardcoded to `cveTriage`, nor a promise to preview live editor state. |
+| Improvement 11: duplicate executors | This branch's `fromList` rejects duplicate/blank/null registrations ([#135](https://github.com/Apitomy/apitomy-flow/issues/135)). |
+| Improvements 13–14: callback types/keys | Editor callbacks use React event types; map drafts and extracted property forms have stable row identities. See [#132](https://github.com/Apitomy/apitomy-flow/issues/132) and [#136](https://github.com/Apitomy/apitomy-flow/issues/136); no blanket assertion about every list in the UI. |
+| Improvement 17: test gaps | Conversion/history have pure tests; rendered editor/viewer/diff and packed-consumer checks live in `ui/browser` ([#133](https://github.com/Apitomy/apitomy-flow/issues/133)). Coverage is Chromium, not a complete accessibility audit. |
+| Improvement 22: default-edge priorities | The TypeScript validator excludes default edges from priority collisions (historical bug 24 / PR #31). The Java validator still groups all outgoing edges by priority, including defaults, so it can report `DUPLICATE_EDGE_PRIORITY` when a default and conditional edge share a priority. This diagnostic discrepancy remains. |
+| Improvements 25–27: ownership/types | Owned Java JSON and discriminated TS configs/typed Java adapters are present in this branch ([#130](https://github.com/Apitomy/apitomy-flow/issues/130), [#131](https://github.com/Apitomy/apitomy-flow/issues/131)). Java uses `NodeConfig.Field` rather than adding a separate `WorkflowInput` record. |
+| Remaining suggestions | Builder APIs, context-menu placement, and navigation/accessibility ideas below are historical recommendations, not automatically reopened tasks. Consult current issues, including [#122](https://github.com/Apitomy/apitomy-flow/issues/122), for intended scope. |
+
+## Original audit (historical snapshot)
+
+The remaining text records the original engine/UI audit. Its statuses, counts, locations, and version
+labels are historical evidence and are superseded by the reconciliation above and current issue pages.
 
 ---
 

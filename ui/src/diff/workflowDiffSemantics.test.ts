@@ -3,7 +3,8 @@ import { nodeFieldComparisons } from '../components/workflowDiffFieldComparisons
 import { type Workflow, type WorkflowNode } from '../types/workflow.ts';
 import { diffWorkflows } from './workflowDiff.ts';
 
-function workflow(config: WorkflowNode['config'], position: unknown = { x: 0, y: 0 }): Workflow {
+// Exercise defensive comparison of untyped host payloads, including non-JSON array entries.
+function workflow(config: unknown, position: unknown = { x: 0, y: 0 }): Workflow {
     return {
         id: 'workflow',
         name: 'Workflow',
@@ -119,6 +120,8 @@ describe('semantic workflow diffs', () => {
         { label: 'array length', before: [1], after: [1, 2] },
         { label: 'undefined array element versus null', before: [undefined], after: [null] },
         { label: 'undefined array element versus omission', before: [undefined], after: [] },
+        { label: 'array hole versus null', before: Array(1), after: [null] },
+        { label: 'null versus array hole', before: [null], after: Array(1) },
         { label: 'object array order', before: [{ id: 'a' }, { id: 'b' }], after: [{ id: 'b' }, { id: 'a' }] },
         { label: 'array versus object', before: [], after: {} },
     ])('preserves $label changes in summary and details', ({ before, after }) => {

@@ -329,11 +329,12 @@ describe('editor transactions', () => {
     it('is deterministic and leaves prior state and command payloads untouched under reducer replay', () => {
         const state = createEditorState(workflow);
         const before = structuredClone(state);
-        const command: EditorCommand = { type: 'nodeData', id: 'start', data: { config: { nested: ['value'] } } };
+        const nested = ['value'];
+        const command: EditorCommand = { type: 'nodeData', id: 'start', data: { config: { nested } } };
         const first = editorReducer(state, command);
         expect(editorReducer(state, command)).toEqual(first);
         expect(state).toEqual(before);
-        command.data.config!.nested.push('external mutation');
+        nested.push('external mutation');
         expect(first.document.nodes[0].config).toEqual({ nested: ['value'] });
     });
 
