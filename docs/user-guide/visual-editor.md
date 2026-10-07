@@ -139,7 +139,8 @@ A panel on the right side shows configuration fields for the selected node or ed
 
 - Name (all node types)
 - Action Type (action nodes)
-- Event Type (receive-event nodes)
+- Event Type, Match Expressions, Lookback (`run-start` default, `none`, or a duration), and Output
+  mappings (receive-event nodes)
 - Description, Inputs (label/expression pairs), and Outputs (human task nodes). Each output is a
   form field the assignee fills in to complete the task and supports rich authoring metadata: name,
   type dropdown, required checkbox, label, help/description text, a widget (`text` / `textarea` /

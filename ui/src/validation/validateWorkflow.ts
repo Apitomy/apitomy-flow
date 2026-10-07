@@ -289,8 +289,19 @@ function validateSemantics(workflow: Workflow, problems: ValidationProblem[]) {
     } else if (typeof eventTypeVal !== 'string' || eventTypeVal.trim() === '') {
       problems.push(problem('warning', 'INVALID_EVENT_TYPE_VALUE', 'Receive-event node eventType must be a non-blank string', node.id));
     }
+    const lookbackVal = node.config.lookback;
+    if (typeof lookbackVal === 'string' && !isValidLookback(lookbackVal)) {
+      problems.push(problem('error', 'INVALID_LOOKBACK',
+        `Receive-event node lookback must be "run-start", "none", or a positive ISO 8601 duration: ${lookbackVal}`,
+        node.id));
+    }
     if (Array.isArray(node.config.outputs) && node.config.outputs.length > 0) {
       validateEventOutputMappings(node.config.outputs, node.id, problems);
+    }
+    const correlationKey = node.config.correlationKey;
+    if (correlationKey != null) {
+      validateCorrelationExpression(correlationKey.subscriptionKey, 'subscriptionKey', node.id, problems);
+      validateCorrelationExpression(correlationKey.eventKey, 'eventKey', node.id, problems);
     }
     validateReceiveEventTimeout(workflow, node.id, node.config.timeout, problems);
   }
@@ -470,6 +481,23 @@ function validateOutputNames(outputDefs: (ActionOutputConfig | HumanTaskOutput)[
  * strings and otherwise skips the entry, and mirrors the Java engine validator/runtime. The same
  * browser-subset parser checks both mappings and edge conditions; engine-only syntax is advisory.
  */
+function validateCorrelationExpression(expression: unknown, fieldName: string, nodeId: string,
+  problems: ValidationProblem[]) {
+  if (typeof expression !== 'string' || expression.trim() === '') {
+    problems.push(problem('error', 'MISSING_CORRELATION_KEY_EXPRESSION',
+      `Receive-event correlationKey.${fieldName} is required`, nodeId));
+    return;
+  }
+  const syntax = classifyExpression(expression);
+  if (syntax === 'invalid') {
+    problems.push(problem('error', 'INVALID_CORRELATION_KEY_EXPRESSION',
+      `Receive-event correlationKey.${fieldName} is not valid EL: ${expression}`, nodeId));
+  } else if (syntax === 'unsupported') {
+    problems.push(problem('warning', 'UNSUPPORTED_EXPRESSION_DIALECT',
+      `Receive-event correlationKey.${fieldName} uses syntax unsupported in the browser; validate with the Java engine`, nodeId));
+  }
+}
+
 function validateEventOutputMappings(outputDefs: EventOutputMapping[], nodeId: string, problems: ValidationProblem[]) {
   const contextKeys = new Set<string>();
   for (const def of outputDefs) {
@@ -545,6 +573,14 @@ function isValidIsoDuration(value: string): boolean {
   return /^P(?:\d+D)?(?:T(?:\d+H)?(?:\d+M)?(?:\d+(?:\.\d+)?S)?)?$/.test(value)
     && value !== 'P' && value !== 'PT'
     && !/T$/.test(value);
+}
+
+/**
+ * Tests a receive-event `lookback` value: `run-start`, `none`, or a positive ISO-8601 duration.
+ */
+export function isValidLookback(value: string): boolean {
+  if (value === 'run-start' || value === 'none') return true;
+  return isValidIsoDuration(value) && /[1-9]/.test(value);
 }
 
 function detectAutomatedCycles(workflow: Workflow, problems: ValidationProblem[]) {

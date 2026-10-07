@@ -20,7 +20,8 @@ Returns `true` if all three conditions are met:
 
 1. The instance is in `WAITING` status
 2. The addressed node is an active parked `receive-event` node
-3. The event matches the node's criteria (event type + match expressions)
+3. The event matches the node's criteria (event type, correlation key when configured, then match
+   expressions)
 
 Returns `false` in all other cases (wrong status, wrong node type, type mismatch, match expression failure).
 
@@ -30,14 +31,15 @@ single cursor. A true result does not tell you which branch to complete. Matchin
 
 ## Introspection
 
-`getReceiveEventInfo(workflow, instance, nodeId)` returns the event type, match expressions, and output
-mappings for a parked receiver. Index by event type to avoid loading every waiting instance. The overload
+`getReceiveEventInfo(workflow, instance, nodeId)` returns the event type, match expressions, output
+mappings, and parsed lookback for a parked receiver. Index by event type to avoid loading every waiting instance. The overload
 without a node ID returns the current or first eligible receiver, not the full set.
 
 ```java
 ReceiveEventInfo info = engine.getReceiveEventInfo(definition, instance);
 // info.eventType()   → "pr-merged"
 // info.matchExpressions() → ["event.repository == context.repository", ...]
+// info.lookback()    → EventLookback[mode=DURATION, duration=PT10M]
 ```
 
 ## Receive-Event Node Config
@@ -48,7 +50,8 @@ ReceiveEventInfo info = engine.getReceiveEventInfo(definition, instance);
   "match": [
     "event.repository == context.repository",
     "event.pull_request.number == context.prNumber"
-  ]
+  ],
+  "lookback": "PT10M"
 }
 ```
 
@@ -87,6 +90,57 @@ longer parked is a no-op. Validation codes: `INVALID_RECEIVE_EVENT_TIMEOUT`, `MI
 `MULTIPLE_TIMEOUT_EDGES`, `MISSING_EVENT_EDGE`, `INVALID_TIMEOUT_EDGE` (errors) and
 `TIMEOUT_EDGE_WITH_CONDITION` (warning). In the editor, set **Timeout** on the node and connect its bottom
 *timeout* port. The browser simulator does not fire timers; it always follows the event path.
+
+### lookback
+
+Optional. Controls how far back a host searches stored events when a branch parks on the node, so an
+event that arrived *before* the branch parked can still be delivered:
+
+| Value | Meaning |
+|-------|---------|
+| `run-start` (default) | Events with timestamps at or after the start of the workflow instance |
+| `none` | Only events delivered after the node parks |
+| ISO-8601 duration, e.g. `PT10M` | Events newer than *now minus duration*, still limited to the instance start |
+
+Durations must be positive and use the `java.time.Duration` form (`PnDTnHnMnS`). Other values are
+rejected with `INVALID_LOOKBACK`. Flow does not store events; running the look-back is the host's job.
+`ReceiveEventInfo.lookback()` returns the parsed `EventLookback` (a `Mode` of `RUN_START`, `NONE`, or
+`DURATION`, plus the `Duration` for the last mode), so hosts do not have to parse the value again.
+
+### correlationKey
+
+Optional explicit correlation key. Hosts can store the evaluated subscription key in an indexed column
+and look up waiting runs by the event key instead of evaluating every `match` expression against every
+candidate.
+
+```json
+{
+  "eventType": "order-shipped",
+  "correlationKey": {
+    "subscriptionKey": "context.orderId",
+    "eventKey": "event.data.orderId"
+  }
+}
+```
+
+| Field | Evaluated against | Description |
+|-------|-------------------|-------------|
+| `subscriptionKey` | `context` | Evaluated when the node is parked; exposed as `ReceiveEventInfo.subscriptionKey()` |
+| `eventKey` | `event` | Evaluated against the incoming event; see `WorkflowEngine.evaluateEventKey(...)` |
+
+Both expressions are required when `correlationKey` is present, and both must be valid EL. Each is a
+single expression; build composite keys with EL string concatenation, for example
+`context.orderId += ':' += context.region`. Evaluated keys are compared as strings.
+
+When a key is configured, `matchesEvent` requires the subscription key to be non-null and equal to the
+event key. `match` expressions still apply as an additional filter. Nodes without a `correlationKey`
+behave exactly as before, and `subscriptionKey()` / `evaluateEventKey(...)` return `null` for them.
+
+```java
+ReceiveEventInfo info = engine.getReceiveEventInfo(definition, instance, nodeId);
+String subscriptionKey = info.subscriptionKey();          // store in an indexed column
+String eventKey = engine.evaluateEventKey(definition, nodeId, event);  // look up waiting runs
+```
 
 ## Expression Examples
 

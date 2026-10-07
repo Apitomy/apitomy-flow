@@ -13,7 +13,7 @@ const NODE_CONFIG_FIELDS: Record<NodeType, string[]> = {
   end: ['outcome'],
   action: ['description', 'actionType', 'inputs', 'outputs'],
   'human-task': ['description', 'assignee', 'inputs', 'outputs'],
-  'receive-event': ['eventType', 'description', 'inputs', 'outputs', 'timeout'],
+  'receive-event': ['eventType', 'lookback', 'description', 'inputs', 'outputs', 'correlationKey', 'timeout'],
   wait: ['duration'],
 };
 

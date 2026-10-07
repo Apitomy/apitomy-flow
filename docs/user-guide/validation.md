@@ -72,7 +72,7 @@ If preflight finds errors, semantic checks do not run on the malformed data.
 
 Examples include `INVALID_WORKFLOW`, `INVALID_NODE`, `INVALID_EDGE`, `INVALID_NODE_TYPE`,
 `INVALID_NODE_POSITION`, `INVALID_INPUTS_TYPE`, `INVALID_OUTPUTS_TYPE`, `INVALID_INPUT_DEFINITION`,
-`INVALID_OUTPUT_DEFINITION`, `INVALID_TASK_DESCRIPTION`, and `INVALID_MATCH_TYPE`. Browser outer-field
+`INVALID_OUTPUT_DEFINITION`, `INVALID_TASK_DESCRIPTION`, `INVALID_MATCH_TYPE`, and `INVALID_LOOKBACK`. Browser outer-field
 checks additionally include `INVALID_NODES`, `INVALID_EDGES`, `INVALID_NODE_CONFIG`, `INVALID_NODE_NAME`,
 `INVALID_WORKFLOW_DESCRIPTION`, `INVALID_WORKFLOW_VERSION`, and edge field-type diagnostics.
 Some codes in later tables can therefore be errors for malformed types and warnings for missing values.
@@ -100,6 +100,7 @@ Some codes in later tables can therefore be errors for malformed types and warni
 | `MISSING_ACTION_TYPE` | Action node has no `actionType` in its config |
 | `INVALID_ACTION_TYPE_VALUE` | Action node `actionType` is present but not a non-blank string |
 | `INVALID_WAIT_DURATION` | Wait node `duration` is present but not a valid ISO 8601 duration |
+| `INVALID_LOOKBACK` | Receive-event `lookback` is not `run-start`, `none`, or a positive ISO 8601 duration |
 
 ### Structural (WARNING)
 
@@ -164,6 +165,14 @@ Some codes in later tables can therefore be errors for malformed types and warni
 | `INVALID_OUTPUT_EXPRESSION` | ERROR | Invalid expression syntax (browser subset or Java EL respectively) |
 | `DUPLICATE_OUTPUT_NAME` | WARNING | Repeated target context key |
 | `UNSUPPORTED_EXPRESSION_DIALECT` | WARNING | Browser cannot validate this syntax; consult Java |
+
+### Receive-event correlation key
+
+| Code | Severity | Rule |
+|---|---|---|
+| `INVALID_CORRELATION_KEY` | shape ERROR | `correlationKey` is not an object with string `subscriptionKey` / `eventKey` |
+| `MISSING_CORRELATION_KEY_EXPRESSION` | ERROR | `subscriptionKey` or `eventKey` missing/blank when `correlationKey` is present |
+| `INVALID_CORRELATION_KEY_EXPRESSION` | ERROR | Key expression is not valid EL |
 
 ### Parallel Structure (ERROR)
 

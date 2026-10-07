@@ -71,12 +71,23 @@
             },
             "additionalProperties": true
         },
+        "correlationKey": {
+            "type": ["object", "null"],
+            "description": "Optional explicit correlation key. subscriptionKey is an EL expression evaluated against the instance context; eventKey is an EL expression evaluated against the event. Both are required when present.",
+            "properties": {
+                "subscriptionKey": { "type": "string" },
+                "eventKey": { "type": "string" }
+            },
+            "additionalProperties": true
+        },
         "receiveEvent": {
             "type": ["object", "null"],
             "properties": {
                 "eventType": { "$ref": "#/definitions/text" },
                 "match": { "type": ["array", "null"], "items": { "type": "string" } },
+                "lookback": { "$ref": "#/definitions/text" },
                 "outputs": { "type": ["array", "null"], "items": { "$ref": "#/definitions/mapping" } },
+                "correlationKey": { "$ref": "#/definitions/correlationKey" },
                 "timeout": { "$ref": "#/definitions/text", "description": "Optional positive ISO-8601 duration; requires exactly one isTimeout edge" }
             },
             "additionalProperties": true

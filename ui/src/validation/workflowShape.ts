@@ -60,8 +60,14 @@ export function normalizeWorkflow(raw: unknown): {
         if (node.type === 'receive-event') {
             optionalString('eventType', 'INVALID_EVENT_TYPE_VALUE');
             optionalString('timeout', 'INVALID_RECEIVE_EVENT_TIMEOUT');
+            optionalString('lookback', 'INVALID_LOOKBACK');
             field(config.match == null || (Array.isArray(config.match) && config.match.every(item => typeof item === 'string')),
                 'INVALID_MATCH_TYPE', 'config.match', 'an array of strings');
+            const key = config.correlationKey;
+            field(key == null || (isObject(key)
+                && (key.subscriptionKey == null || typeof key.subscriptionKey === 'string')
+                && (key.eventKey == null || typeof key.eventKey === 'string')),
+                'INVALID_CORRELATION_KEY', 'config.correlationKey', 'an object with string subscriptionKey and eventKey');
         }
         if (node.type === 'action' || node.type === 'human-task') {
             field(config.inputs == null || isObject(config.inputs), 'INVALID_INPUTS_TYPE', 'config.inputs', 'an object');

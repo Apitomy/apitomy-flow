@@ -119,6 +119,22 @@ export interface ReceiveEventConfig extends ConfigExtensions {
      * outgoing edge with `isTimeout: true`, followed only when the host reports the timeout.
      */
     timeout?: string | null;
+    /**
+     * How far back a host searches stored events when a branch parks on the node: `run-start`
+     * (default), `none`, or a positive ISO-8601 duration such as `PT10M`.
+     */
+    lookback?: string | null;
+    /** Optional explicit correlation key; both expressions are required when present. */
+    correlationKey?: CorrelationKey | null;
+}
+/**
+ * Explicit correlation key for a receive-event node. `subscriptionKey` is evaluated against the
+ * instance context when the node parks; `eventKey` is evaluated against the incoming event.
+ * Composite keys are expressed with EL string concatenation.
+ */
+export interface CorrelationKey extends ConfigExtensions {
+    subscriptionKey?: string | null;
+    eventKey?: string | null;
 }
 export interface WaitConfig extends ConfigExtensions {
     duration?: string | null;

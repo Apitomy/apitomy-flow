@@ -370,8 +370,46 @@ public class WorkflowEngine {
         List<EventOutputMapping> outputMappings = config.outputs().stream()
             .map(o -> new EventOutputMapping(o.contextKey(), o.expression())).toList();
 
+        String subscriptionKey = null;
+        NodeConfig.CorrelationKey key = config.correlationKey();
+        if (key != null) {
+            try {
+                subscriptionKey = keyText(conditionEvaluator.resolve(key.subscriptionKey(), instance.context()));
+            } catch (ConditionEvaluationException e) {
+                log.warn("Correlation subscription key expression failed: {}", e.getMessage());
+            }
+        }
+
         return new ReceiveEventInfo(node.id(), node.name(), eventType, matchExpressions, outputMappings,
-            parseTimeout(config.timeout()));
+            config.parsedLookback(), subscriptionKey, parseTimeout(config.timeout()));
+    }
+
+    /**
+     * Evaluates the correlation event key of a receive-event node against an incoming event. Hosts can use
+     * the result to look up waiting runs by the subscription key exposed through {@link ReceiveEventInfo}.
+     *
+     * @param workflow the workflow definition
+     * @param nodeId   the id of the receive-event node
+     * @param event    the incoming event
+     * @return the evaluated event key as a string, or {@code null} when the node is not a receive-event node,
+     *         has no correlation key, or the expression fails or evaluates to null
+     */
+    public String evaluateEventKey(Workflow workflow, String nodeId, Map<String, Object> event) {
+        WorkflowNode node = workflow.findNodeById(nodeId).orElse(null);
+        if (node == null || node.type() != NodeType.RECEIVE_EVENT) {
+            return null;
+        }
+        NodeConfig.CorrelationKey key = ((NodeConfig.ReceiveEvent) node.typedConfig()).correlationKey();
+        if (key == null) {
+            return null;
+        }
+        try {
+            return keyText(conditionEvaluator.resolve(key.eventKey(), Map.of(),
+                event == null ? Map.of() : event));
+        } catch (ConditionEvaluationException e) {
+            log.warn("Correlation event key expression failed: {}", e.getMessage());
+            return null;
+        }
     }
 
     /**
@@ -439,6 +477,11 @@ public class WorkflowEngine {
         Deque<BranchWork> work = new ArrayDeque<>();
         work.add(new BranchWork(branch, WorkKind.MOVE, timeoutEdge));
         return advanceBranches(workflow, updated, work, ParallelRegions.analyze(workflow));
+    }
+
+    /** Normalizes an evaluated correlation key to its string form; null stays null. */
+    private static String keyText(Object value) {
+        return value == null ? null : String.valueOf(value);
     }
 
     /**
@@ -615,6 +658,23 @@ public class WorkflowEngine {
         Object actualType = event.get("type");
         if (!expectedType.equals(actualType)) {
             return false;
+        }
+
+        // Check explicit correlation key: both sides must evaluate to equal non-null keys
+        NodeConfig.CorrelationKey key = config.correlationKey();
+        if (key != null) {
+            String subscriptionKey;
+            String eventKey;
+            try {
+                subscriptionKey = keyText(conditionEvaluator.resolve(key.subscriptionKey(), instance.context()));
+                eventKey = keyText(conditionEvaluator.resolve(key.eventKey(), Map.of(), event));
+            } catch (ConditionEvaluationException e) {
+                log.warn("Correlation key expression failed: {}", e.getMessage());
+                return false;
+            }
+            if (subscriptionKey == null || !subscriptionKey.equals(eventKey)) {
+                return false;
+            }
         }
 
         // Check match expressions

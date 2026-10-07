@@ -29,9 +29,19 @@ describe('getNodeDefinition', () => {
                 type,
                 name: 'My Node',
                 description: undefined,
-                sections: [],
+                sections: type === 'receive-event'
+                    ? [{ label: 'Event lookback', fields: [{ label: 'lookback', value: 'run-start (default)' }] }]
+                    : [],
             });
         });
+    });
+
+    it('shows an authored receive-event lookback instead of the generic config entry', () => {
+        const view = getNodeDefinition(node({ type: 'receive-event', config: { eventType: 'e', lookback: 'PT10M' } }));
+        expect(view.sections).toEqual([
+            { label: 'Event lookback', fields: [{ label: 'lookback', value: 'PT10M' }] },
+            { label: 'Config', fields: [{ label: 'eventType', value: 'e' }] },
+        ]);
     });
 
     it.each(['action', 'human-task'])('formats imported %s literals safely for the Viewer', type => {
@@ -242,6 +252,23 @@ describe('getNodeDefinition', () => {
     expect(outputs!.fields).toEqual([
       { label: 'orderId', badge: undefined, value: 'event.payload.id' },
     ]);
+  });
+
+  it('builds a "Correlation key" section from a receive-event node\'s config.correlationKey', () => {
+    const def = getNodeDefinition(node({
+      type: 'receive-event',
+      config: {
+        eventType: 'order.created',
+        correlationKey: { subscriptionKey: 'context.orderId', eventKey: 'event.data.orderId' },
+      },
+    }));
+
+    const key = def.sections.find(s => s.label === 'Correlation key');
+    expect(key!.fields).toEqual([
+      { label: 'subscriptionKey', value: 'context.orderId' },
+      { label: 'eventKey', value: 'event.data.orderId' },
+    ]);
+    expect(def.sections.find(s => s.label === 'Config')?.fields.some(f => f.label === 'correlationKey')).not.toBe(true);
   });
 
   it('omits the "Output mappings" section for a receive-event node with no outputs declared', () => {

@@ -24,7 +24,7 @@
                     "options": [{ "label": "Yes", "value": "yes", "x-option": 1 }], "contextKey": null }]
             } },
             { "id": "event", "type": "receive-event", "name": "Event", "config": {
-                "eventType": "done", "match": ["event.id == context.id"], "timeout": "PT1H",
+                "eventType": "done", "match": ["event.id == context.id"], "timeout": "PT1H", "lookback": "PT10M",
                 "outputs": [{ "contextKey": "received", "expression": "event.value", "x-mapping": [1, null] }]
             } },
             { "id": "wait", "type": "wait", "name": "Wait", "config": { "duration": "PT1S" } },

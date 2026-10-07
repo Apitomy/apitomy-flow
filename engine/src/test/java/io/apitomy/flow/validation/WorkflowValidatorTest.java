@@ -188,6 +188,40 @@ class WorkflowValidatorTest {
     }
 
     @Test
+    void invalidLookbackIsError() {
+        for (Object bad : List.of("forever", "PT0S", "-PT5M", "P1M")) {
+            WorkflowNode receive = new WorkflowNode("r", NodeType.RECEIVE_EVENT, "R",
+                Map.of("eventType", "t", "lookback", bad), new Position(0, 0));
+            Workflow w = new Workflow("w", "W", null, null,
+                List.of(startNode("start"), receive, endNode("end")),
+                List.of(edge("e1", "start", "r"), edge("e2", "r", "end")));
+            assertTrue(hasCode(validate(w), "INVALID_LOOKBACK"), "expected INVALID_LOOKBACK for " + bad);
+        }
+    }
+
+    @Test
+    void nonStringLookbackIsError() {
+        WorkflowNode receive = new WorkflowNode("r", NodeType.RECEIVE_EVENT, "R",
+            Map.of("eventType", "t", "lookback", 10), new Position(0, 0));
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), receive, endNode("end")),
+            List.of(edge("e1", "start", "r"), edge("e2", "r", "end")));
+        assertTrue(hasCode(validate(w), "INVALID_LOOKBACK"));
+    }
+
+    @Test
+    void validLookbackValuesAccepted() {
+        for (String ok : List.of("run-start", "none", "PT10M", "P1DT2H")) {
+            WorkflowNode receive = new WorkflowNode("r", NodeType.RECEIVE_EVENT, "R",
+                Map.of("eventType", "t", "lookback", ok), new Position(0, 0));
+            Workflow w = new Workflow("w", "W", null, null,
+                List.of(startNode("start"), receive, endNode("end")),
+                List.of(edge("e1", "start", "r"), edge("e2", "r", "end")));
+            assertFalse(hasCode(validate(w), "INVALID_LOOKBACK"), "unexpected INVALID_LOOKBACK for " + ok);
+        }
+    }
+
+    @Test
     void missingTaskDescription() {
         Workflow w = new Workflow("w", "W", null, null,
             List.of(startNode("start"), humanTaskNode("ht"), endNode("end")),
