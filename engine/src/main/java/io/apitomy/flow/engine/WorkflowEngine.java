@@ -370,7 +370,8 @@ public class WorkflowEngine {
         List<EventOutputMapping> outputMappings = config.outputs().stream()
             .map(o -> new EventOutputMapping(o.contextKey(), o.expression())).toList();
 
-        return new ReceiveEventInfo(node.id(), node.name(), eventType, matchExpressions, outputMappings);
+        return new ReceiveEventInfo(node.id(), node.name(), eventType, matchExpressions, outputMappings,
+            config.parsedLookback());
     }
 
     /**

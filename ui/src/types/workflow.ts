@@ -114,6 +114,11 @@ export interface ReceiveEventConfig extends ConfigExtensions {
     eventType?: string | null;
     match?: string[] | null;
     outputs?: EventOutputMapping[] | null;
+    /**
+     * How far back a host searches stored events when a branch parks on the node: `run-start`
+     * (default), `none`, or a positive ISO-8601 duration such as `PT10M`.
+     */
+    lookback?: string | null;
 }
 export interface WaitConfig extends ConfigExtensions {
     duration?: string | null;

@@ -3,6 +3,7 @@
     { "type": "start", "config": { "inputs": {} }, "code": "INVALID_INPUTS_TYPE" },
     { "type": "wait", "config": { "duration": 123 }, "code": "INVALID_WAIT_DURATION" },
     { "type": "receive-event", "config": { "match": [null] }, "code": "INVALID_MATCH_TYPE" },
+    { "type": "receive-event", "config": { "lookback": 10 }, "code": "INVALID_LOOKBACK" },
     { "type": "human-task", "config": { "outputs": [null] }, "code": "INVALID_OUTPUT_DEFINITION" },
     { "type": "start", "config": { "inputs": [{ "name": "id", "contextKey": 42 }] }, "code": "INVALID_INPUT_DEFINITION" },
     { "type": "start", "config": { "inputs": [{ "name": "id", "label": 42 }] }, "code": "INVALID_INPUT_DEFINITION" },

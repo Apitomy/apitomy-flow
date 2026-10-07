@@ -288,6 +288,12 @@ function validateSemantics(workflow: Workflow, problems: ValidationProblem[]) {
     } else if (typeof eventTypeVal !== 'string' || eventTypeVal.trim() === '') {
       problems.push(problem('warning', 'INVALID_EVENT_TYPE_VALUE', 'Receive-event node eventType must be a non-blank string', node.id));
     }
+    const lookbackVal = node.config.lookback;
+    if (typeof lookbackVal === 'string' && !isValidLookback(lookbackVal)) {
+      problems.push(problem('error', 'INVALID_LOOKBACK',
+        `Receive-event node lookback must be "run-start", "none", or a positive ISO 8601 duration: ${lookbackVal}`,
+        node.id));
+    }
     if (Array.isArray(node.config.outputs) && node.config.outputs.length > 0) {
       validateEventOutputMappings(node.config.outputs, node.id, problems);
     }
@@ -504,6 +510,14 @@ function isValidIsoDuration(value: string): boolean {
   return /^P(?:\d+D)?(?:T(?:\d+H)?(?:\d+M)?(?:\d+(?:\.\d+)?S)?)?$/.test(value)
     && value !== 'P' && value !== 'PT'
     && !/T$/.test(value);
+}
+
+/**
+ * Tests a receive-event `lookback` value: `run-start`, `none`, or a positive ISO-8601 duration.
+ */
+export function isValidLookback(value: string): boolean {
+  if (value === 'run-start' || value === 'none') return true;
+  return isValidIsoDuration(value) && /[1-9]/.test(value);
 }
 
 function detectAutomatedCycles(workflow: Workflow, problems: ValidationProblem[]) {

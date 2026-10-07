@@ -49,6 +49,36 @@ class WorkflowEngineReceiveEventOutputMappingsTest {
         ReceiveEventInfo info = engine.getReceiveEventInfo(workflow, waiting);
 
         assertTrue(info.outputMappings().isEmpty());
+        assertEquals(EventLookback.RUN_START, info.lookback());
+    }
+
+    @Test
+    void getReceiveEventInfoExposesParsedLookback() {
+        WorkflowEngine engine = engine();
+        WorkflowNode receive = new WorkflowNode("wait", NodeType.RECEIVE_EVENT, "Wait",
+            Map.of("eventType", "order.created", "lookback", "PT10M"), new Position(0, 0));
+        Workflow workflow = new Workflow("wf", "W", null, null,
+            List.of(startNode("start"), receive, endNode("end")),
+            List.of(edge("e1", "start", "wait"), edge("e2", "wait", "end")));
+
+        ReceiveEventInfo info = engine.getReceiveEventInfo(workflow, engine.startWorkflow(workflow, Map.of()));
+
+        assertEquals(EventLookback.Mode.DURATION, info.lookback().mode());
+        assertEquals(java.time.Duration.ofMinutes(10), info.lookback().duration());
+    }
+
+    @Test
+    void getReceiveEventInfoExposesNoneLookback() {
+        WorkflowEngine engine = engine();
+        WorkflowNode receive = new WorkflowNode("wait", NodeType.RECEIVE_EVENT, "Wait",
+            Map.of("eventType", "order.created", "lookback", "none"), new Position(0, 0));
+        Workflow workflow = new Workflow("wf", "W", null, null,
+            List.of(startNode("start"), receive, endNode("end")),
+            List.of(edge("e1", "start", "wait"), edge("e2", "wait", "end")));
+
+        ReceiveEventInfo info = engine.getReceiveEventInfo(workflow, engine.startWorkflow(workflow, Map.of()));
+
+        assertEquals(EventLookback.NONE, info.lookback());
     }
 
     @Test

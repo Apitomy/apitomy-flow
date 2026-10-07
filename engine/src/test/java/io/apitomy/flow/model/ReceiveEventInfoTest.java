@@ -23,5 +23,14 @@ class ReceiveEventInfoTest {
         assertEquals(List.of("event.storeId == context.storeId"), info.matchExpressions());
         assertNotNull(info.outputMappings());
         assertTrue(info.outputMappings().isEmpty());
+        assertEquals(EventLookback.RUN_START, info.lookback());
+    }
+
+    @Test
+    void fiveArgConstructorAndNullLookbackDefaultToRunStart() {
+        assertEquals(EventLookback.RUN_START,
+            new ReceiveEventInfo("r", "R", "t", List.of(), List.of()).lookback());
+        assertEquals(EventLookback.RUN_START,
+            new ReceiveEventInfo("r", "R", "t", List.of(), List.of(), null).lookback());
     }
 }
