@@ -115,6 +115,11 @@ export interface ReceiveEventConfig extends ConfigExtensions {
     match?: string[] | null;
     outputs?: EventOutputMapping[] | null;
     /**
+     * Optional positive ISO-8601 duration (e.g. `PT1H`). When set, the node must have exactly one
+     * outgoing edge with `isTimeout: true`, followed only when the host reports the timeout.
+     */
+    timeout?: string | null;
+    /**
      * How far back a host searches stored events when a branch parks on the node: `run-start`
      * (default), `none`, or a positive ISO-8601 duration such as `PT10M`.
      */
@@ -163,6 +168,8 @@ export interface WorkflowEdge {
   priority: number;
   isDefault: boolean;
   label?: string;
+  /** Receive-event timeout edge (leaves the node's `timeout` port); never chosen by normal routing. */
+  isTimeout?: boolean;
 }
 
 export interface Workflow {

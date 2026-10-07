@@ -84,6 +84,8 @@ public sealed interface NodeConfig permits NodeConfig.Start, NodeConfig.End, Nod
         }
         /** Returns output mappings; empty means legacy flat event merge. */
         public List<Mapping> outputs() { return records(wire, "outputs", Mapping::new); }
+        /** Returns the optional ISO-8601 timeout text, or null when the node waits indefinitely. */
+        public String timeout() { return text(wire, "timeout"); }
         /** Returns the authored lookback text, or null when absent (meaning the run-start default). */
         public String lookback() { return text(wire, "lookback"); }
         /** Parses the lookback, defaulting to run-start; throws IllegalArgumentException when invalid. */

@@ -61,7 +61,10 @@ public final class ParallelRegions {
         List<Problem> problems = new ArrayList<>();
 
         for (WorkflowNode node : workflow.nodes()) {
-            List<WorkflowEdge> outgoing = workflow.getOutgoingEdges(node.id());
+            // Timeout edges are exclusive alternatives to a receive-event's normal path, never fork branches.
+            List<WorkflowEdge> outgoing = workflow.getOutgoingEdges(node.id()).stream()
+                .filter(e -> !e.isTimeout())
+                .toList();
             if (outgoing.size() < 2) {
                 continue;
             }
@@ -107,7 +110,7 @@ public final class ParallelRegions {
         boolean unbalanced = false;
         boolean crossing = false;
         boolean reentry = false;
-        for (WorkflowEdge branch : workflow.getOutgoingEdges(forkId)) {
+        for (WorkflowEdge branch : forkBranches(workflow, forkId)) {
             Set<String> branchNodes = new LinkedHashSet<>();
             Set<String> branchArrivals = new LinkedHashSet<>();
             Deque<WorkflowEdge> queue = new ArrayDeque<>();
@@ -149,6 +152,11 @@ public final class ParallelRegions {
         }
     }
 
+    /** Returns a fork's branch edges, excluding any receive-event timeout edge. */
+    private static List<WorkflowEdge> forkBranches(Workflow workflow, String forkId) {
+        return workflow.getOutgoingEdges(forkId).stream().filter(e -> !e.isTimeout()).toList();
+    }
+
     private static boolean isUnconditional(WorkflowEdge e) {
         return e.condition() == null || e.condition().isBlank();
     }
@@ -159,7 +167,7 @@ public final class ParallelRegions {
      * problem when no single balanced convergence node exists.
      */
     private static String findJoin(Workflow workflow, String forkId, List<Problem> problems) {
-        List<WorkflowEdge> branches = workflow.getOutgoingEdges(forkId);
+        List<WorkflowEdge> branches = forkBranches(workflow, forkId);
         List<Set<String>> reachablePerBranch = new ArrayList<>();
         boolean anyBranchReachesEnd = false;
 

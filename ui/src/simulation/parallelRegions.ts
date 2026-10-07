@@ -29,6 +29,11 @@ function isUnconditional(e: WorkflowEdge): boolean {
     return !e.condition || e.condition.trim() === '';
 }
 
+/** A fork's branch edges, excluding any receive-event timeout edge. */
+function forkBranches(workflow: Workflow, nodeId: string): WorkflowEdge[] {
+    return outgoing(workflow, nodeId).filter(e => !e.isTimeout);
+}
+
 function outgoing(workflow: Workflow, nodeId: string): WorkflowEdge[] {
     return workflow.edges
         .filter(e => e.source === nodeId)
@@ -53,7 +58,8 @@ export function analyzeParallelRegions(workflow: Workflow): ParallelAnalysis {
     const problems: ParallelProblem[] = [];
 
     for (const node of workflow.nodes) {
-        const out = outgoing(workflow, node.id);
+        // Timeout edges are exclusive alternatives to a receive-event's normal path, never fork branches.
+        const out = forkBranches(workflow, node.id);
         if (out.length < 2) {
             continue;
         }
@@ -102,7 +108,7 @@ function validateRegion(workflow: Workflow, forkId: string, join: string, proble
     let unbalanced = false;
     let crossing = false;
     let reentry = false;
-    for (const branch of outgoing(workflow, forkId)) {
+    for (const branch of forkBranches(workflow, forkId)) {
         const branchNodes = new Set<string>();
         const branchArrivals = new Set<string>();
         const queue: WorkflowEdge[] = [branch];
@@ -148,7 +154,7 @@ function validateRegion(workflow: Workflow, forkId: string, join: string, proble
  * convergence node exists. Mirrors {@code ParallelRegions.findJoin}.
  */
 function findJoin(workflow: Workflow, forkId: string, problems: ParallelProblem[]): string | null {
-    const branches = outgoing(workflow, forkId);
+    const branches = forkBranches(workflow, forkId);
     const reachablePerBranch: Set<string>[] = [];
     let anyBranchReachesEnd = false;
 

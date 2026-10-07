@@ -77,6 +77,11 @@ Blocks until a matching external event arrives.
 - **Config**: `eventType` (required) and `match` expressions (optional) for event correlation
 - **Behavior**: The host uses `matchesEvent` to correlate, then `completeNode` to deliver a matching event.
   Optional `outputs` expressions map selected event values into context.
+- **Timeout** (optional): `timeout` is a positive ISO 8601 duration (e.g. `PT1H`). A node with a timeout
+  must have exactly one outgoing edge with `isTimeout: true` (like a BPMN boundary timer) plus at least one
+  normal edge. The host schedules a timer from `ReceiveEventInfo.timeout()` and calls
+  `onReceiveEventTimeout` when it fires; the engine then follows the timeout edge. See
+  [Event Correlation](event-correlation.md#timeouts).
 
 See [Event Correlation](event-correlation.md) for details.
 
@@ -108,6 +113,7 @@ Edges connect nodes and control the flow of execution.
 | `priority` | int | Evaluation order — lower numbers first |
 | `isDefault` | boolean | Fallback when no conditions match |
 | `label` | String | Display label (optional) |
+| `isTimeout` | boolean | Receive-event timeout edge (optional, default `false`); never chosen by normal routing |
 
 ### Conditional Routing
 

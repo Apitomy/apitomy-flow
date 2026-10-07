@@ -151,7 +151,7 @@ export function stepSimulation(workflow: Workflow, state: SimState): SimState {
     // Fork: retire this branch and fan out one child branch per outgoing edge.
     if (regions.isFork(node.id)) {
         const forkEdges = workflow.edges
-            .filter(e => e.source === node.id)
+            .filter(e => e.source === node.id && !e.isTimeout)
             .sort((a, b) => a.priority - b.priority);
         const forkEvals: EdgeEvaluation[] = forkEdges.map(e => ({
             edgeId: e.id, condition: e.condition, isDefault: false, result: 'matched',
@@ -380,8 +380,9 @@ class EdgeConditionError extends Error {
  * show which matched, which were false, and which were skipped.
  */
 function selectEdge(workflow: Workflow, node: WorkflowNode, scope: ElScope): EdgeSelection {
+    // Timeout edges are only followed when the host reports a receive-event timeout (never simulated).
     const outgoing = workflow.edges
-        .filter(e => e.source === node.id)
+        .filter(e => e.source === node.id && !e.isTimeout)
         .sort((a, b) => a.priority - b.priority);
 
     const evaluations: EdgeEvaluation[] = [];

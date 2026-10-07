@@ -56,6 +56,7 @@ final class WorkflowShape {
         if (type == NodeType.WAIT) optionalString(config, "duration", "INVALID_WAIT_DURATION", node.id(), problems);
         if (type == NodeType.RECEIVE_EVENT) {
             optionalString(config, "eventType", "INVALID_EVENT_TYPE_VALUE", node.id(), problems);
+            optionalString(config, "timeout", "INVALID_RECEIVE_EVENT_TIMEOUT", node.id(), problems);
             optionalString(config, "lookback", "INVALID_LOOKBACK", node.id(), problems);
             Object match = config.get("match");
             check(match == null || (match instanceof List<?> list && list.stream().allMatch(String.class::isInstance)),

@@ -1,6 +1,6 @@
 import { applyNodeChanges, applyEdgeChanges, type Connection, type Edge, type EdgeChange, type Node, type NodeChange } from '@xyflow/react';
 import type { Workflow, WorkflowNode } from '../types/workflow.ts';
-import { toReactFlowEdges, toReactFlowNodes, type FlowNodeData } from '../utils/conversion.ts';
+import { TIMEOUT_HANDLE, toReactFlowEdges, toReactFlowNodes, type FlowNodeData } from '../utils/conversion.ts';
 import { layoutWorkflow, needsLayout } from '../layout/layoutWorkflow.ts';
 import { jsonEqual } from '../utils/jsonEqual.ts';
 
@@ -217,11 +217,12 @@ export function editorReducer(state: EditorState, command: EditorCommand): Edito
             } }) : state;
         }
         case 'connect': {
-            const { source, target } = command.connection;
+            const { source, target, sourceHandle } = command.connection;
             if (![source, target].every(id => document.nodes.some(node => node.id === id))
                 || document.edges.some(edge => edge.id === command.id || (edge.source === source && edge.target === target))) return state;
             return commit(state, { ...document, edges: [...document.edges, {
                 id: command.id, source, target, priority: 0, isDefault: false,
+                ...(sourceHandle === TIMEOUT_HANDLE ? { isTimeout: true } : {}),
             }] });
         }
         case 'import': {

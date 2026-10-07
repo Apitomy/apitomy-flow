@@ -14,6 +14,9 @@ export type FlowNodeData = { [K in NodeType]: Record<string, unknown> & {
   definition?: WorkflowNode;
 } }[NodeType];
 
+/** Source handle id of a receive-event node's timeout port; edges leaving it have `isTimeout: true`. */
+export const TIMEOUT_HANDLE = 'timeout';
+
 /** Converts wire nodes to canvas nodes while retaining host extension fields for export. */
 export function toReactFlowNodes(nodes: WorkflowNode[]): Node<FlowNodeData>[] {
   return nodes.map(node => ({
@@ -35,6 +38,7 @@ export function toReactFlowEdges(edges: WorkflowEdge[]): Edge[] {
     id: edge.id,
     source: edge.source,
     target: edge.target,
+    ...(edge.isTimeout ? { sourceHandle: TIMEOUT_HANDLE } : {}),
     type: 'conditional',
     markerEnd: {
       type: MarkerType.ArrowClosed
@@ -43,6 +47,7 @@ export function toReactFlowEdges(edges: WorkflowEdge[]): Edge[] {
       condition: edge.condition,
       priority: edge.priority,
       isDefault: edge.isDefault,
+      isTimeout: edge.isTimeout === true,
       label: edge.label,
       definition: edge,
     },
@@ -63,16 +68,22 @@ export function toWorkflowNodes(nodes: Node<FlowNodeData>[]): WorkflowNode[] {
 
 /** Applies edited canvas fields over the original edge definition and its host extensions. */
 export function toWorkflowEdges(edges: Edge[]): WorkflowEdge[] {
-  return edges.map(edge => ({
-    ...(edge.data?.definition as WorkflowEdge | undefined),
-    id: edge.id,
-    source: edge.source,
-    target: edge.target,
-    condition: edge.data?.condition as string | undefined,
-    priority: (edge.data?.priority as number) ?? 0,
-    isDefault: (edge.data?.isDefault as boolean) ?? false,
-    label: edge.data?.label as string | undefined,
-  }));
+  return edges.map(edge => {
+    const definition: Partial<WorkflowEdge> = { ...(edge.data?.definition as WorkflowEdge | undefined) };
+    delete definition.isTimeout; // re-derived from the canvas below; emitted only when true
+    const isTimeout = edge.sourceHandle === TIMEOUT_HANDLE || edge.data?.isTimeout === true;
+    return {
+      ...definition,
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      condition: edge.data?.condition as string | undefined,
+      priority: (edge.data?.priority as number) ?? 0,
+      isDefault: (edge.data?.isDefault as boolean) ?? false,
+      label: edge.data?.label as string | undefined,
+      ...(isTimeout ? { isTimeout: true } : {}),
+    };
+  });
 }
 
 /** Reassembles the edited graph without discarding host metadata from the base definition. */

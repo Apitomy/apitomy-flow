@@ -87,7 +87,8 @@
                 "match": { "type": ["array", "null"], "items": { "type": "string" } },
                 "lookback": { "$ref": "#/definitions/text" },
                 "outputs": { "type": ["array", "null"], "items": { "$ref": "#/definitions/mapping" } },
-                "correlationKey": { "$ref": "#/definitions/correlationKey" }
+                "correlationKey": { "$ref": "#/definitions/correlationKey" },
+                "timeout": { "$ref": "#/definitions/text", "description": "Optional positive ISO-8601 duration; requires exactly one isTimeout edge" }
             },
             "additionalProperties": true
         },
@@ -133,7 +134,8 @@
                 "condition": { "$ref": "#/definitions/text" },
                 "label": { "$ref": "#/definitions/text" },
                 "priority": { "$ref": "#/definitions/integer" },
-                "isDefault": { "$ref": "#/definitions/flag" }
+                "isDefault": { "$ref": "#/definitions/flag" },
+                "isTimeout": { "$ref": "#/definitions/flag", "description": "Receive-event timeout edge, followed only when the host reports a timeout" }
             },
             "additionalProperties": true
         }

@@ -38,3 +38,8 @@
   color: #fff;
   background: var(--flow-status-danger, #c9190b);
 }
+
+.edge-condition-badge.is-timeout {
+  border-style: dashed;
+  border-color: var(--flow-status-warning, #f0ab00);
+}

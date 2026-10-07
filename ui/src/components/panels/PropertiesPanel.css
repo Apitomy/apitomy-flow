@@ -317,3 +317,9 @@
   padding: 0;
   min-width: 0;
 }
+
+.properties-panel__hint {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--flow-text-muted, #6a6e73);
+}

@@ -258,8 +258,9 @@ public class WorkflowValidator {
     }
 
     private void validateEdgeConditions(Workflow workflow, List<ValidationProblem> problems) {
+        // Timeout edges are validated separately and never take part in conditional routing.
         Map<String, List<WorkflowEdge>> edgesBySource = workflow.edges().stream()
-            .filter(e -> e.source() != null)
+            .filter(e -> e.source() != null && !e.isTimeout())
             .collect(Collectors.groupingBy(WorkflowEdge::source));
 
         for (var entry : edgesBySource.entrySet()) {
@@ -334,6 +335,7 @@ public class WorkflowValidator {
                         "Receive-event node eventType must be a non-blank string", node.id()));
                 }
                 validateEventOutputMappings(config.outputs(), node.id(), problems);
+                validateReceiveEventTimeout(workflow, node, config, problems);
                 String lookback = config.lookback();
                 if (lookback != null) {
                     try {
@@ -346,6 +348,24 @@ public class WorkflowValidator {
                 }
                 validateCorrelationKey(config.correlationKey(), node.id(), problems);
             });
+
+        // Timeout edges may only leave receive-event nodes that configure a timeout
+        for (WorkflowEdge edge : workflow.edges()) {
+            if (!edge.isTimeout()) {
+                continue;
+            }
+            WorkflowNode source = workflow.findNodeById(edge.source()).orElse(null);
+            boolean validSource = source != null && source.type() == NodeType.RECEIVE_EVENT
+                && ((NodeConfig.ReceiveEvent) source.typedConfig()).timeout() != null;
+            if (!validSource) {
+                problems.add(ValidationProblem.edgeError("INVALID_TIMEOUT_EDGE",
+                    "Timeout edges may only leave a receive-event node with a timeout configured", edge.id()));
+            }
+            if (edge.isDefault() || (edge.condition() != null && !edge.condition().isBlank())) {
+                problems.add(ValidationProblem.edgeWarning("TIMEOUT_EDGE_WITH_CONDITION",
+                    "Timeout edge condition/default flag is ignored", edge.id()));
+            }
+        }
 
         // Duplicate event receivers
         List<WorkflowNode> receivers = workflow.nodes().stream()
@@ -430,6 +450,42 @@ public class WorkflowValidator {
 
         // Automated cycles (cycles with only action nodes)
         detectAutomatedCycles(workflow, problems);
+    }
+
+    /**
+     * Validates a receive-event timeout: the duration must be a positive ISO-8601 duration and the node
+     * must have exactly one timeout edge plus at least one normal (event) outgoing edge.
+     */
+    private void validateReceiveEventTimeout(Workflow workflow, WorkflowNode node,
+                                             NodeConfig.ReceiveEvent config, List<ValidationProblem> problems) {
+        String timeout = config.timeout();
+        if (timeout == null) {
+            return;
+        }
+        boolean valid;
+        try {
+            Duration duration = Duration.parse(timeout);
+            valid = !duration.isNegative() && !duration.isZero();
+        } catch (Exception e) {
+            valid = false;
+        }
+        if (!valid) {
+            problems.add(ValidationProblem.error("INVALID_RECEIVE_EVENT_TIMEOUT",
+                "Receive-event timeout must be a positive ISO 8601 duration: " + timeout, node.id()));
+        }
+        List<WorkflowEdge> outgoing = workflow.getOutgoingEdges(node.id());
+        long timeoutEdges = outgoing.stream().filter(WorkflowEdge::isTimeout).count();
+        if (timeoutEdges == 0) {
+            problems.add(ValidationProblem.error("MISSING_TIMEOUT_EDGE",
+                "Receive-event node with a timeout must have a timeout edge", node.id()));
+        } else if (timeoutEdges > 1) {
+            problems.add(ValidationProblem.error("MULTIPLE_TIMEOUT_EDGES",
+                "Receive-event node must have exactly one timeout edge", node.id()));
+        }
+        if (timeoutEdges > 0 && timeoutEdges == outgoing.size()) {
+            problems.add(ValidationProblem.error("MISSING_EVENT_EDGE",
+                "Receive-event node with a timeout must also have a normal outgoing edge", node.id()));
+        }
     }
 
     private void validateOutputNames(List<NodeConfig.Field> outputDefs, String nodeId,
