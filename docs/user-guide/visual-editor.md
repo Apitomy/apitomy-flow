@@ -24,7 +24,8 @@ function MyWorkflowEditor({ initialWorkflow }: { initialWorkflow: Workflow }) {
 | Prop | Type | Required | Description |
 |------|------|----------|-------------|
 | `workflow` | `Workflow` | Yes | Mount-time graph and live host metadata; see synchronization below |
-| `onChange` | `(workflow: Workflow) => void` | Yes | Publishes committed document revisions, including undo/redo and import |
+| `onChange` | `(workflow: Workflow) => void` | No | Publishes committed document revisions, including undo/redo and import. Never called when `readOnly` is true |
+| `readOnly` | `boolean` | No | Presents the definition without allowing changes (default: `false`). See [Read-only mode](#read-only-mode) |
 | `theme` | `FlowTheme` | No | `'light'` or `'dark'` (default: `'light'`). Controls the color scheme of the editor and React Flow canvas |
 | `onValidationChange` | `(problems: ValidationProblem[]) => void` | No | Called when validation results change (e.g. to disable a Save button when errors exist). Receives the merged built-in and host problems |
 | `spi` | `EditorSpi` | No | Host extension object. Supplies action-type descriptors (`actionTypes`) and/or a custom `validate` function. See [Host Extension (SPI)](#host-extension-spi) |
@@ -68,6 +69,27 @@ The persisted map includes the empty-string key (`''`); repeated keys, including
 last-entry-wins even though their separate rows remain in the local draft. Empty and duplicate keys show
 warnings. Untouched JSON literals retain their types; editing a value field makes it an expression string.
 Drafts reset on selection, import, or history travel.
+
+### Read-only mode
+
+Set `readOnly` to preview a workflow definition with the full editor presentation, e.g. before applying a
+generated definition:
+
+```tsx
+<WorkflowEditor workflow={workflow} readOnly />
+```
+
+When read-only:
+
+- the node palette, the interactivity lock, the Undo/Redo/Tidy up/Import toolbar actions, and the Simulate
+  switch are hidden (an active simulation is ended);
+- nodes and edges cannot be added, deleted, moved, connected, reconnected, or cloned;
+- the properties panel still opens on selection, but every field is rendered disabled;
+- keyboard delete and undo/redo shortcuts are ignored;
+- `onChange` is never called.
+
+Pan, zoom, selection, fit view, validation display, the Problems panel, and JSON/image export remain
+available. Omitting `readOnly` leaves the editor fully editable.
 
 ### Node Palette
 

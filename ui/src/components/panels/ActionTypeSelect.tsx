@@ -8,8 +8,10 @@ import type { ActionTypeDescriptor } from '../../types/spi.ts';
 import { filterActionTypeOptions } from '../../utils/actionTypeFilter.ts';
 
 /** Owns action-menu filtering, custom values, clear/open state and focus restoration. */
-export function ActionTypeSelect({ value, actionTypes, loading, onSelect, onClear }: {
+export function ActionTypeSelect({ value, actionTypes, loading, disabled = false, onSelect, onClear }: {
     value: string;
+    /** Disables the toggle entirely (e.g. when the editor is read-only). */
+    disabled?: boolean;
     actionTypes: ActionTypeDescriptor[];
     loading: boolean;
     onSelect: (value: string) => void;
@@ -51,13 +53,13 @@ export function ActionTypeSelect({ value, actionTypes, loading, onSelect, onClea
     const toggle = (toggleRef: React.Ref<HTMLButtonElement>) => (
         <MenuToggle ref={toggleRef} variant="typeahead"
             onClick={() => { handleOpenChange(!isOpen); textInputRef.current?.focus(); }}
-            isExpanded={isOpen} isDisabled={loading} isFullWidth>
+            isExpanded={isOpen} isDisabled={loading || disabled} isFullWidth>
             <TextInputGroup isPlain>
                 <TextInputGroupMain value={inputValue} onClick={() => { if (!isOpen) setIsOpen(true); }}
                     onChange={onInputChange} innerRef={textInputRef}
                     placeholder={loading ? 'Loading...' : filterEnabled ? 'Filter action types...' : 'Select or type an action type'}
                     autoComplete="off" />
-                {(value || inputValue) && <TextInputGroupUtilities>
+                {(value || inputValue) && !disabled && <TextInputGroupUtilities>
                     <Button variant="plain" onClick={handleClear} aria-label="Clear action type"><TimesIcon /></Button>
                 </TextInputGroupUtilities>}
             </TextInputGroup>
