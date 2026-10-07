@@ -41,6 +41,35 @@ function runWithMocks(wf: Workflow, context: Record<string, unknown>, outputs: R
     return state;
 }
 
+describe('recorded inputs', () => {
+    it('records start, action and human-task inputs as of entry, not the final context', () => {
+        const wf = workflow([
+            node('start', 'start', { inputs: [{ name: 'id', type: 'string', required: true }] }),
+            node('act', 'action', { actionType: 'x', inputs: { theId: 'context.id', limit: 5 } }),
+            node('task', 'human-task', { inputs: { theId: 'context.id' } }),
+            node('end', 'end'),
+        ], [edge('e1', 'start', 'act'), edge('e2', 'act', 'task'), edge('e3', 'task', 'end')]);
+        const state = runWithMocks(wf, { id: 'original', extra: 1 }, [{ id: 'changed' }, {}]);
+        expect(state.status).toBe('completed');
+        const input = (id: string) => state.history.find(h => h.nodeId === id)?.input;
+        expect(input('start')).toEqual({ id: 'original' });
+        expect(input('act')).toEqual({ theId: 'original', limit: 5 });
+        expect(input('task')).toEqual({ theId: 'changed' });
+        expect(input('end')).toBeUndefined();
+    });
+
+    it('records no inputs when an expression cannot be resolved', () => {
+        const wf = workflow([
+            node('start', 'start'),
+            node('task', 'human-task', { inputs: { bad: 'this is not valid !!!' } }),
+            node('end', 'end'),
+        ], [edge('e1', 'start', 'task'), edge('e2', 'task', 'end')]);
+        const state = runSimulation(wf, startSimulation(wf, {}));
+        expect(state.history.find(h => h.nodeId === 'task')?.input).toBeUndefined();
+        expect(state.history.find(h => h.nodeId === 'start')?.input).toBeUndefined();
+    });
+});
+
 describe('startSimulation', () => {
     it('positions at the start node, ready to route', () => {
         const wf = workflow([node('start', 'start'), node('end', 'end')], [edge('e1', 'start', 'end')]);

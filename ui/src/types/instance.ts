@@ -15,6 +15,12 @@ export interface HistoryEntry {
   completedOn?: string;
   output?: Record<string, unknown>;
   /**
+   * The input values the node received on this visit, resolved when it was entered: declared workflow
+   * inputs for a start node, resolved `inputs` expressions for action and human-task nodes. Absent when
+   * the node takes no inputs or they could not be resolved.
+   */
+  input?: Record<string, unknown>;
+  /**
    * The branch this visit belongs to. The root (non-parallel) branch uses `"root"`; a missing value
    * also denotes the root, preserving back-compat for existing linear histories.
    */

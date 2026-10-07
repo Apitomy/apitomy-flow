@@ -106,12 +106,37 @@ export const triageInstance: WorkflowInstance = {
   status: 'waiting',
   context: { cveId: 'CVE-2024-1234', severity: 'high', affectedVersions: '1.0.0 - 1.3.2' },
   history: [
-    { nodeId: 'start', nodeName: 'Start', enteredOn: '2024-01-01T00:00:00Z', completedOn: '2024-01-01T00:00:00Z' },
-    { nodeId: 'analyze', nodeName: 'Analyze CVE', edgeId: 'e1', enteredOn: '2024-01-01T00:00:01Z', completedOn: '2024-01-01T00:00:05Z', output: { severity: 'high', affectedVersions: '1.0.0 - 1.3.2' } },
-    { nodeId: 'triage', nodeName: 'Triage Decision', edgeId: 'e2', enteredOn: '2024-01-01T00:00:05Z' },
+    { nodeId: 'start', nodeName: 'Start', enteredOn: '2024-01-01T00:00:00Z', completedOn: '2024-01-01T00:00:00Z', input: { cveId: 'CVE-2024-1234' } },
+    { nodeId: 'analyze', nodeName: 'Analyze CVE', edgeId: 'e1', enteredOn: '2024-01-01T00:00:01Z', input: { 'CVE ID': 'CVE-2024-1234' }, completedOn: '2024-01-01T00:00:05Z', output: { severity: 'high', affectedVersions: '1.0.0 - 1.3.2' } },
+    { nodeId: 'triage', nodeName: 'Triage Decision', edgeId: 'e2', enteredOn: '2024-01-01T00:00:05Z', input: { 'CVE ID': 'CVE-2024-1234', 'Severity': 'high', 'Affected Versions': '1.0.0 - 1.3.2' } },
   ],
   createdOn: '2024-01-01T00:00:00Z',
   updatedOn: '2024-01-01T00:00:05Z',
+};
+
+/** A long, multi-line mitigation plan, used to demo truncated values in the viewer. */
+const longMitigationPlan = [
+  'Upgrade to 1.3.3 and rotate affected credentials.',
+  '1. Roll out 1.3.3 to staging and run the full regression suite.',
+  '2. Rotate all API keys and service-account credentials issued before the patch date.',
+  '3. Deploy to production behind a canary (10% -> 50% -> 100%) with automated rollback on error-rate alerts.',
+  '4. Audit access logs for the past 90 days for indicators of compromise and file findings with SecOps.',
+].join('\n');
+
+/** A large structured CVE record, used to demo truncated JSON values in the viewer. */
+const cveRecord = {
+  id: 'CVE-2026-1337',
+  cvss: { version: '3.1', baseScore: 9.8, vector: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H' },
+  cwe: ['CWE-94', 'CWE-502'],
+  affectedPackages: [
+    { name: 'dependency-parser', versions: '>=2.0.0 <2.4.1', fixedIn: '2.4.1' },
+    { name: 'dependency-parser-cli', versions: '>=2.0.0 <2.4.1', fixedIn: '2.4.1' },
+  ],
+  references: [
+    'https://nvd.nist.gov/vuln/detail/CVE-2026-1337',
+    'https://github.com/example/dependency-parser/security/advisories/GHSA-xxxx-yyyy-zzzz',
+  ],
+  published: '2026-09-08T17:00:00Z',
 };
 
 /**
@@ -132,13 +157,13 @@ export const completedTriageInstance: WorkflowInstance = {
     affectedVersions: '1.0.0 - 1.3.2',
     affected: true,
     triageNotes: 'Confirmed exploitable in production; prioritize patch.',
-    mitigationPlan: 'Upgrade to 1.3.3 and rotate affected credentials.',
+    mitigationPlan: longMitigationPlan,
   },
   history: [
-    { nodeId: 'start', nodeName: 'Start', enteredOn: '2024-01-01T00:00:00Z', completedOn: '2024-01-01T00:00:00Z' },
-    { nodeId: 'analyze', nodeName: 'Analyze CVE', edgeId: 'e1', enteredOn: '2024-01-01T00:00:01Z', completedOn: '2024-01-01T00:00:05Z', output: { severity: 'high', affectedVersions: '1.0.0 - 1.3.2' } },
-    { nodeId: 'triage', nodeName: 'Triage Decision', edgeId: 'e2', enteredOn: '2024-01-01T00:00:05Z', completedOn: '2024-01-01T00:02:00Z', output: { affected: true, triageNotes: 'Confirmed exploitable in production; prioritize patch.' } },
-    { nodeId: 'mitigate', nodeName: 'Plan Mitigation', edgeId: 'e3', edgeCondition: 'context.affected == true', enteredOn: '2024-01-01T00:02:00Z', completedOn: '2024-01-01T00:02:30Z', output: { mitigationPlan: 'Upgrade to 1.3.3 and rotate affected credentials.' } },
+    { nodeId: 'start', nodeName: 'Start', enteredOn: '2024-01-01T00:00:00Z', completedOn: '2024-01-01T00:00:00Z', input: { cveId: 'CVE-2024-1234' } },
+    { nodeId: 'analyze', nodeName: 'Analyze CVE', edgeId: 'e1', enteredOn: '2024-01-01T00:00:01Z', input: { 'CVE ID': 'CVE-2024-1234' }, completedOn: '2024-01-01T00:00:05Z', output: { severity: 'high', affectedVersions: '1.0.0 - 1.3.2' } },
+    { nodeId: 'triage', nodeName: 'Triage Decision', edgeId: 'e2', enteredOn: '2024-01-01T00:00:05Z', input: { 'CVE ID': 'CVE-2024-1234', 'Severity': 'high', 'Affected Versions': '1.0.0 - 1.3.2' }, completedOn: '2024-01-01T00:02:00Z', output: { affected: true, triageNotes: 'Confirmed exploitable in production; prioritize patch.' } },
+    { nodeId: 'mitigate', nodeName: 'Plan Mitigation', edgeId: 'e3', edgeCondition: 'context.affected == true', enteredOn: '2024-01-01T00:02:00Z', input: { 'CVE ID': 'CVE-2024-1234', 'Severity': 'high', 'Triage Notes': 'Confirmed exploitable in production; prioritize patch.' }, completedOn: '2024-01-01T00:02:30Z', output: { mitigationPlan: longMitigationPlan } },
     { nodeId: 'end-mitigated', nodeName: 'Mitigated', edgeId: 'e5', enteredOn: '2024-01-01T00:02:30Z', completedOn: '2024-01-01T00:02:30Z' },
   ],
   createdOn: '2024-01-01T00:00:00Z',
@@ -146,24 +171,43 @@ export const completedTriageInstance: WorkflowInstance = {
 };
 
 /**
- * A run of {@link cveTriage} that loops back through "Analyze CVE" and "Triage
- * Decision" before settling. Both nodes appear multiple times in the history,
- * exercising the viewer's per-node visit selector.
+ * A variant of {@link cveTriage} with a "Re-analyze" loop-back edge from "Triage Decision" to
+ * "Analyze CVE", taken when the triager asks for a closer look.
+ */
+export const cveTriageWithReanalysis: Workflow = {
+  ...cveTriage,
+  id: 'cve-triage-reanalysis',
+  name: 'CVE Triage (with Re-analysis)',
+  // Raise "Analyze CVE" so the loop-back edge doesn't render on top of the forward edge.
+  nodes: cveTriage.nodes.map(node => node.id === 'analyze' ? { ...node, position: { x: 250, y: 60 } } : node),
+  edges: [
+    { id: 'e7', source: 'triage', target: 'analyze', condition: 'context.needsReanalysis == true', priority: 0, isDefault: false, label: 'Re-analyze' },
+    ...cveTriage.edges,
+  ],
+};
+
+/**
+ * A run of {@link cveTriageWithReanalysis} that loops back through "Analyze CVE" and "Triage
+ * Decision" via the "Re-analyze" edge. Both nodes appear multiple times in the history,
+ * exercising the viewer's per-node visit selector and per-visit inputs.
  */
 export const loopingTriageInstance: WorkflowInstance = {
   id: 'inst-3',
-  workflowId: 'cve-triage',
+  workflowId: 'cve-triage-reanalysis',
   currentNodeId: 'triage',
   activeBranches: [{ branchId: 'root', nodeId: 'triage' }],
   joinArrivals: {},
   status: 'waiting',
-  context: { cveId: 'CVE-2024-1234', severity: 'high', affectedVersions: '1.0.0 - 1.3.2' },
+  context: {
+    cveId: 'CVE-2024-1234', severity: 'high', affectedVersions: '1.0.0 - 1.3.2',
+    affected: false, needsReanalysis: true, triageNotes: 'Needs a closer look at newer versions.',
+  },
   history: [
-    { nodeId: 'start', nodeName: 'Start', enteredOn: '2024-01-01T00:00:00Z', completedOn: '2024-01-01T00:00:00Z' },
-    { nodeId: 'analyze', nodeName: 'Analyze CVE', edgeId: 'e1', enteredOn: '2024-01-01T00:00:01Z', completedOn: '2024-01-01T00:00:05Z', output: { severity: 'medium', affectedVersions: '1.0.0 - 1.2.0' } },
-    { nodeId: 'triage', nodeName: 'Triage Decision', edgeId: 'e2', enteredOn: '2024-01-01T00:00:05Z', completedOn: '2024-01-01T00:01:00Z', output: { affected: false, triageNotes: 'Needs a closer look at newer versions.' } },
-    { nodeId: 'analyze', nodeName: 'Analyze CVE', edgeId: 'e2', enteredOn: '2024-01-01T00:01:00Z', completedOn: '2024-01-01T00:01:20Z', output: { severity: 'high', affectedVersions: '1.0.0 - 1.3.2' } },
-    { nodeId: 'triage', nodeName: 'Triage Decision', edgeId: 'e2', enteredOn: '2024-01-01T00:01:20Z' },
+    { nodeId: 'start', nodeName: 'Start', enteredOn: '2024-01-01T00:00:00Z', completedOn: '2024-01-01T00:00:00Z', input: { cveId: 'CVE-2024-1234' } },
+    { nodeId: 'analyze', nodeName: 'Analyze CVE', edgeId: 'e1', enteredOn: '2024-01-01T00:00:01Z', input: { 'CVE ID': 'CVE-2024-1234' }, completedOn: '2024-01-01T00:00:05Z', output: { severity: 'medium', affectedVersions: '1.0.0 - 1.2.0' } },
+    { nodeId: 'triage', nodeName: 'Triage Decision', edgeId: 'e2', enteredOn: '2024-01-01T00:00:05Z', input: { 'CVE ID': 'CVE-2024-1234', 'Severity': 'medium', 'Affected Versions': '1.0.0 - 1.2.0' }, completedOn: '2024-01-01T00:01:00Z', output: { affected: false, needsReanalysis: true, triageNotes: 'Needs a closer look at newer versions.' } },
+    { nodeId: 'analyze', nodeName: 'Analyze CVE', edgeId: 'e7', edgeCondition: 'context.needsReanalysis == true', enteredOn: '2024-01-01T00:01:00Z', input: { 'CVE ID': 'CVE-2024-1234' }, completedOn: '2024-01-01T00:01:20Z', output: { severity: 'high', affectedVersions: '1.0.0 - 1.3.2' } },
+    { nodeId: 'triage', nodeName: 'Triage Decision', edgeId: 'e2', enteredOn: '2024-01-01T00:01:20Z', input: { 'CVE ID': 'CVE-2024-1234', 'Severity': 'high', 'Affected Versions': '1.0.0 - 1.3.2' } },
   ],
   createdOn: '2024-01-01T00:00:00Z',
   updatedOn: '2024-01-01T00:01:20Z',
@@ -195,6 +239,7 @@ export const parallelForkJoinWorkflow: Workflow = {
         outputs: [
           { name: 'severity', type: 'string', required: true },
           { name: 'description', type: 'string', required: true },
+          { name: 'record', type: 'object', required: false },
         ],
       },
       position: { x: 260, y: 220 },
@@ -263,12 +308,13 @@ export const parallelForkJoinInstance: WorkflowInstance = {
     cveId: 'CVE-2026-1337',
     severity: 'critical',
     description: 'Remote code execution in dependency parser',
+    record: cveRecord,
   },
   history: [
-    { nodeId: 'start', nodeName: 'Start', enteredOn: '2026-09-09T13:00:00Z', completedOn: '2026-09-09T13:00:00Z', branchId: 'root' },
-    { nodeId: 'fetch', nodeName: 'Fetch CVE', edgeId: 'pf1', enteredOn: '2026-09-09T13:00:01Z', completedOn: '2026-09-09T13:00:03Z', output: { severity: 'critical', description: 'Remote code execution in dependency parser' }, branchId: 'root' },
-    { nodeId: 'analyze', nodeName: 'Assess Impact', edgeId: 'pf2', enteredOn: '2026-09-09T13:00:03Z', branchId: 'root.0' },
-    { nodeId: 'notify', nodeName: 'Notify Team', edgeId: 'pf3', enteredOn: '2026-09-09T13:00:03Z', branchId: 'root.1' },
+    { nodeId: 'start', nodeName: 'Start', enteredOn: '2026-09-09T13:00:00Z', completedOn: '2026-09-09T13:00:00Z', input: { cveId: 'CVE-2026-1337' }, branchId: 'root' },
+    { nodeId: 'fetch', nodeName: 'Fetch CVE', edgeId: 'pf1', enteredOn: '2026-09-09T13:00:01Z', input: { 'CVE ID': 'CVE-2026-1337' }, completedOn: '2026-09-09T13:00:03Z', output: { severity: 'critical', description: 'Remote code execution in dependency parser', record: cveRecord }, branchId: 'root' },
+    { nodeId: 'analyze', nodeName: 'Assess Impact', edgeId: 'pf2', enteredOn: '2026-09-09T13:00:03Z', input: { 'CVE ID': 'CVE-2026-1337', 'Severity': 'critical' }, branchId: 'root.0' },
+    { nodeId: 'notify', nodeName: 'Notify Team', edgeId: 'pf3', enteredOn: '2026-09-09T13:00:03Z', input: { to: 'soc@apitomy.io', subject: 'CVE Alert: CVE-2026-1337', body: 'Remote code execution in dependency parser' }, branchId: 'root.1' },
   ],
   createdOn: '2026-09-09T13:00:00Z',
   updatedOn: '2026-09-09T13:00:03Z',
@@ -376,11 +422,11 @@ export const loopWorkflowInstance: WorkflowInstance = {
     revisedPlan: 'Updated rollout with rollback verification checklist.',
   },
   history: [
-    { nodeId: 'start', nodeName: 'Start', enteredOn: '2026-09-09T14:10:00Z', completedOn: '2026-09-09T14:10:00Z', branchId: 'root' },
-    { nodeId: 'draft', nodeName: 'Draft Plan', edgeId: 'lp1', enteredOn: '2026-09-09T14:10:01Z', completedOn: '2026-09-09T14:10:05Z', output: { issueKey: 'SEC-42' }, branchId: 'root' },
-    { nodeId: 'review', nodeName: 'Review Plan', edgeId: 'lp2', enteredOn: '2026-09-09T14:10:05Z', completedOn: '2026-09-09T14:11:00Z', output: { reviewerApproved: false, reviewNotes: 'Please tighten rollback steps.' }, branchId: 'root' },
-    { nodeId: 'revise', nodeName: 'Revise Plan', edgeId: 'lp4', enteredOn: '2026-09-09T14:11:00Z', completedOn: '2026-09-09T14:12:30Z', output: { revisedPlan: 'Updated rollout with rollback verification checklist.' }, branchId: 'root' },
-    { nodeId: 'review', nodeName: 'Review Plan', edgeId: 'lp5', enteredOn: '2026-09-09T14:12:30Z', branchId: 'root' },
+    { nodeId: 'start', nodeName: 'Start', enteredOn: '2026-09-09T14:10:00Z', completedOn: '2026-09-09T14:10:00Z', input: { ticketId: 'SEC-42' }, branchId: 'root' },
+    { nodeId: 'draft', nodeName: 'Draft Plan', edgeId: 'lp1', enteredOn: '2026-09-09T14:10:01Z', input: { project: 'SEC', issueType: 'Task', summary: 'Mitigate SEC-42' }, completedOn: '2026-09-09T14:10:05Z', output: { issueKey: 'SEC-42' }, branchId: 'root' },
+    { nodeId: 'review', nodeName: 'Review Plan', edgeId: 'lp2', enteredOn: '2026-09-09T14:10:05Z', input: { 'Issue Key': 'SEC-42', 'Current Plan': null }, completedOn: '2026-09-09T14:11:00Z', output: { reviewerApproved: false, reviewNotes: 'Please tighten rollback steps.' }, branchId: 'root' },
+    { nodeId: 'revise', nodeName: 'Revise Plan', edgeId: 'lp4', enteredOn: '2026-09-09T14:11:00Z', input: { url: 'https://planner.apitomy.io/revise', method: 'POST', body: { notes: 'Please tighten rollback steps.' } }, completedOn: '2026-09-09T14:12:30Z', output: { revisedPlan: 'Updated rollout with rollback verification checklist.' }, branchId: 'root' },
+    { nodeId: 'review', nodeName: 'Review Plan', edgeId: 'lp5', enteredOn: '2026-09-09T14:12:30Z', input: { 'Issue Key': 'SEC-42', 'Current Plan': 'Updated rollout with rollback verification checklist.' }, branchId: 'root' },
   ],
   createdOn: '2026-09-09T14:10:00Z',
   updatedOn: '2026-09-09T14:12:30Z',
@@ -392,6 +438,18 @@ export const demoScenarios: DemoScenario[] = [
     label: 'CVE Triage',
     workflow: cveTriage,
     instance: triageInstance,
+  },
+  {
+    key: 'cve-triage-completed',
+    label: 'CVE Triage (Completed)',
+    workflow: cveTriage,
+    instance: completedTriageInstance,
+  },
+  {
+    key: 'cve-triage-looping',
+    label: 'CVE Triage (Looping)',
+    workflow: cveTriageWithReanalysis,
+    instance: loopingTriageInstance,
   },
   {
     key: 'parallel-fork-join',

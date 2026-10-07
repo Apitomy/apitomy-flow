@@ -36,6 +36,40 @@ final class NodeValueResolver {
         return Collections.unmodifiableMap(resolved);
     }
 
+    /**
+     * Resolves the input values to record on a node's history entry when it is entered. Declared workflow
+     * inputs are read from the context for a start node; {@code inputs} expressions are resolved for action
+     * and human-task nodes. Resolution failures are not raised here — they surface through normal execution
+     * and recovery — so a failure simply records no inputs.
+     *
+     * @param node    the entered node
+     * @param context the instance context at entry time
+     * @return the input values, or {@code null} when the node takes no inputs or they cannot be resolved
+     */
+    Map<String, Object> recordedInputs(WorkflowNode node, Map<String, Object> context) {
+        return switch (node.typedConfig()) {
+            case NodeConfig.Start config -> {
+                Map<String, Object> values = new LinkedHashMap<>();
+                config.inputs().stream()
+                    .map(NodeConfig.Field::name)
+                    .filter(name -> name != null && context.containsKey(name))
+                    .forEach(name -> values.put(name, context.get(name)));
+                yield config.inputs().isEmpty() ? null : values;
+            }
+            case NodeConfig.Action config -> config.inputs().isEmpty() ? null : resolveQuietly(node, context);
+            case NodeConfig.HumanTask config -> config.inputs().isEmpty() ? null : resolveQuietly(node, context);
+            default -> null;
+        };
+    }
+
+    private Map<String, Object> resolveQuietly(WorkflowNode node, Map<String, Object> context) {
+        try {
+            return inputs(node, context);
+        } catch (WorkflowError error) {
+            return null;
+        }
+    }
+
     WorkflowError validateResult(WorkflowNode node, NodeResult result) {
         if (result == null || result.status() == null) {
             return new WorkflowError(WorkflowError.Phase.RESULT_VALIDATION, node.id(), null, null,
