@@ -310,3 +310,10 @@
   color: var(--flow-status-danger, #c9190b);
   font-weight: 400;
 }
+
+.properties-panel__readonly {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}

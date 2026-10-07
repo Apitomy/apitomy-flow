@@ -8,11 +8,15 @@ interface ShortcutEvent {
     defaultPrevented?: boolean;
 }
 
-/** Resolves a key only when it belongs to an editable editor canvas rather than a text control. */
+/**
+ * Resolves a key only when it belongs to an editable editor canvas rather than a text control.
+ * Every shortcut mutates the graph, so none resolve when the editor is read-only.
+ */
 export function editorShortcut(
-    event: ShortcutEvent, owned: boolean, textEditing: boolean, simulating: boolean,
+    event: ShortcutEvent, owned: boolean, textEditing: boolean, simulating: boolean, readOnly = false,
 ): 'undo' | 'redo' | 'delete' | null {
-    if (!owned || textEditing || simulating || event.defaultPrevented || event.isComposing || event.altKey) return null;
+    if (readOnly || !owned || textEditing || simulating || event.defaultPrevented || event.isComposing
+        || event.altKey) return null;
     const key = event.key.toLowerCase();
     if (event.ctrlKey || event.metaKey) {
         if (key === 'z') return event.shiftKey ? 'redo' : 'undo';

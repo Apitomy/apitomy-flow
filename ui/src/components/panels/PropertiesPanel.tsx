@@ -30,7 +30,14 @@ interface PropertiesPanelProps {
   width?: number;
   /** Starts a drag-resize when the user presses the panel's resize handle. */
   onResizeStart?: (e: React.MouseEvent) => void;
+  /**
+   * When true, field values are shown but every control is disabled (via a disabled fieldset) and
+   * change callbacks are never invoked. Defaults to false.
+   */
+  readOnly?: boolean;
 }
+
+const ignore = (): void => {};
 
 /**
  * Reads a node's `config.outputs` as a list of receive-event output mappings, defensively:
@@ -248,7 +255,12 @@ function HumanTaskOutputsEditor({ outputs, onChange }: {
 }
 
 /** Coordinates selected entity editing; child forms own their local presentation and draft state. */
-export function PropertiesPanel({ selectedNode, selectedEdge, draftIdentity, nodeProblems = [], onNodeChange, onNodeIdChange, onEdgeChange, spi, sampleContext, width, onResizeStart }: PropertiesPanelProps) {
+export function PropertiesPanel(props: PropertiesPanelProps) {
+  const { selectedNode, selectedEdge, draftIdentity, nodeProblems = [], spi, sampleContext, width, onResizeStart,
+    readOnly = false } = props;
+  const onNodeChange = readOnly ? ignore : props.onNodeChange;
+  const onNodeIdChange = readOnly ? ignore : props.onNodeIdChange;
+  const onEdgeChange = readOnly ? ignore : props.onEdgeChange;
   const { actionTypes, loading: actionTypesLoading } = useActionTypes(spi);
 
   // Wrap every panel state in a common shell that carries the (optionally
@@ -259,7 +271,9 @@ export function PropertiesPanel({ selectedNode, selectedEdge, draftIdentity, nod
       {onResizeStart && (
         <div className="properties-panel__resize-handle" onMouseDown={onResizeStart} />
       )}
-      {children}
+      {readOnly ? (
+        <fieldset className="properties-panel__readonly" disabled aria-readonly="true">{children}</fieldset>
+      ) : children}
     </div>
   );
 
@@ -425,6 +439,7 @@ export function PropertiesPanel({ selectedNode, selectedEdge, draftIdentity, nod
         )}
         {selectedNode.data.nodeType === 'action' && (
           <ActionNodeFields
+            readOnly={readOnly}
             draftIdentity={draftIdentity}
             node={selectedNode}
             onNodeChange={onNodeChange}
@@ -674,8 +689,9 @@ function ConditionTester({ condition, sampleContext }: {
   );
 }
 
-function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading, draftIdentity }: {
+function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading, draftIdentity, readOnly = false }: {
   draftIdentity?: string;
+  readOnly?: boolean;
   node: Node<FlowNodeData>;
   onNodeChange: (id: string, data: Partial<FlowNodeData>) => void;
   actionTypes: ActionTypeDescriptor[];
@@ -720,6 +736,7 @@ function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading,
             value={currentActionType}
             actionTypes={actionTypes}
             loading={actionTypesLoading}
+            disabled={readOnly}
             onSelect={(value) => {
               const match = actionTypes.find(at => at.value === value);
               if (match) {

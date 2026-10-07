@@ -149,6 +149,7 @@ function App() {
   );
   const [editorWorkflow, setEditorWorkflow] = useState<Workflow>(defaultScenario.workflow);
   const [theme, setTheme] = useState<FlowTheme>('light');
+  const [editorReadOnly, setEditorReadOnly] = useState(false);
 
   useEffect(() => {
     syncPatternFlyRootTheme(theme);
@@ -312,6 +313,17 @@ function App() {
                   ))}
                 </FormSelect>
               </ToolbarItem>
+              {activeView === 'editor' && (
+                <ToolbarItem className="dev-app__read-only-toggle">
+                  <Switch
+                    id="read-only-toggle"
+                    label="Read-only"
+                    aria-label="Toggle read-only editor mode"
+                    isChecked={editorReadOnly}
+                    onChange={(_, checked) => setEditorReadOnly(checked)}
+                  />
+                </ToolbarItem>
+              )}
             </ToolbarGroup>
           </ToolbarContent>
         </Toolbar>
@@ -327,6 +339,7 @@ function App() {
             key={editorScenarioKey}
             workflow={editorWorkflow}
             onChange={setEditorWorkflow}
+            readOnly={editorReadOnly}
             theme={theme}
             spi={spi}
           />

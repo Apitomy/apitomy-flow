@@ -35,6 +35,8 @@ import { SimulationPanel } from './panels/SimulationPanel.tsx';
 import { NodeContextMenu } from './NodeContextMenu.tsx';
 import { useEditorState } from '../hooks/useEditorState.ts';
 import { editorShortcut } from '../hooks/editorShortcuts.ts';
+import { readOnlyCommand } from '../hooks/editorReadOnly.ts';
+import { type EditorCommand } from '../hooks/editorState.ts';
 import { deleteWithEditorFocus } from '../hooks/editorDeletion.ts';
 import {
   startSimulation,
@@ -84,22 +86,39 @@ function generateSampleContext(workflow: Workflow): string {
   return JSON.stringify(context, null, 2);
 }
 
+/** A stable no-op change listener used when the host supplies none (or the editor is read-only). */
+const ignoreChange = (): void => {};
+
 export interface WorkflowEditorProps {
   workflow: Workflow;
-  onChange: (workflow: Workflow) => void;
+  /** Receives each committed revision of the workflow. Never called when {@link readOnly} is true. */
+  onChange?: (workflow: Workflow) => void;
+  /**
+   * When true, the workflow is presented but cannot be changed: the palette and editing toolbar
+   * actions are hidden, nodes/edges cannot be added, removed, moved or connected, the properties
+   * panel is rendered read-only, mutating keyboard shortcuts are ignored and {@link onChange} is
+   * never called. Simulation is hidden. Pan, zoom, selection, fit-view, validation and export
+   * remain available. Defaults to false.
+   */
+  readOnly?: boolean;
   onValidationChange?: (problems: ValidationProblem[]) => void;
   theme?: FlowTheme;
   spi?: EditorSpi;
 }
 
-function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = 'light', spi }: WorkflowEditorProps) {
-  const { state, dispatch } = useEditorState(workflow, onChange);
+function WorkflowEditorInner({ workflow, onChange, readOnly = false, onValidationChange, theme = 'light', spi }: WorkflowEditorProps) {
+  const { state, dispatch: rawDispatch } = useEditorState(workflow, readOnly ? ignoreChange : onChange ?? ignoreChange);
+  // In read-only mode every mutating command is dropped before it reaches the reducer.
+  const dispatch = useCallback((command: EditorCommand) => {
+    const allowed = readOnly ? readOnlyCommand(command) : command;
+    if (allowed) rawDispatch(allowed);
+  }, [readOnly, rawDispatch]);
   const { nodes, edges, selectedNodeId, selectedEdgeId, simulating: simActive, interactive } = state;
   const currentWorkflow = state.document;
   const semanticWorkflow = state.semanticDocument;
   const { screenToFlowPosition, fitView, getNodes } = useReactFlow();
-  const canUndo = state.past.length > 0 && !simActive;
-  const canRedo = state.future.length > 0 && !simActive;
+  const canUndo = state.past.length > 0 && !simActive && !readOnly;
+  const canRedo = state.future.length > 0 && !simActive && !readOnly;
   const simulateSwitchId = useId();
   const typingSession = useRef(0);
 
@@ -113,7 +132,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
 
   // Canvas interactivity (drag/connect/select). Locked automatically while simulating so the graph
   // can't be edited mid-run; otherwise controlled by the lower-left lock button.
-  const interactivityEnabled = interactive && !simActive;
+  const interactivityEnabled = interactive && !simActive && !readOnly;
   const isResizing = useRef(false);
 
   const selectedNode = nodes.find(n => n.id === selectedNodeId);
@@ -313,7 +332,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
     const textEditing = !!target?.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], .monaco-editor');
     const shortcut = editorShortcut({ key: event.key, ctrlKey: event.ctrlKey, metaKey: event.metaKey,
       shiftKey: event.shiftKey, altKey: event.altKey, defaultPrevented: event.defaultPrevented,
-      isComposing: event.nativeEvent.isComposing }, owned, textEditing, simActive);
+      isComposing: event.nativeEvent.isComposing }, owned, textEditing, simActive, readOnly);
     if (!shortcut || (shortcut === 'delete' && !interactivityEnabled)) return;
     event.preventDefault();
     event.stopPropagation();
@@ -325,7 +344,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
     } else {
       dispatch({ type: shortcut });
     }
-  }, [dispatch, nodes, edges, simActive, interactivityEnabled, state]);
+  }, [dispatch, nodes, edges, simActive, interactivityEnabled, state, readOnly]);
 
   const onResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -362,6 +381,14 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
   }, [nodes, fitView, dispatch]);
 
   // --- Simulation ---------------------------------------------------------
+  // Simulation is not offered when read-only; leave it if the host switches to read-only mid-run.
+  useEffect(() => {
+    if (readOnly && simActive) {
+      dispatch({ type: 'mode', simulating: false });
+      setSimState(null);
+    }
+  }, [readOnly, simActive, dispatch]);
+
   const focusNode = useCallback((nodeId: string) => {
     dispatch({ type: 'select', nodeId });
     const node = nodes.find(n => n.id === nodeId);
@@ -446,7 +473,8 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
   }, [edges, simActive, simState]);
 
   return (
-    <div ref={editorRootRef} className="workflow-editor" data-flow-theme={theme}
+    <div ref={editorRootRef} className={`workflow-editor${readOnly ? ' workflow-editor--readonly' : ''}`}
+      data-flow-theme={theme} data-read-only={readOnly || undefined}
       data-workflow-editor tabIndex={-1} onKeyDown={onKeyDown}
       onPointerDownCapture={(event) => {
         const target = event.target instanceof Element ? event.target : null;
@@ -458,7 +486,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
       }}
       onBlurCapture={() => { typingSession.current += 1; dispatch({ type: 'endGroup' }); }}
     >
-      <NodePalette />
+      {!readOnly && <NodePalette />}
       <div className="workflow-editor__body">
         <div className={`workflow-editor__canvas${simActive ? ' workflow-editor__canvas--simulating' : ''}`}>
           <ReactFlow
@@ -480,23 +508,25 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
             deleteKeyCode={null}
             nodesDraggable={interactivityEnabled}
             nodesConnectable={interactivityEnabled}
-            elementsSelectable={interactivityEnabled}
+            elementsSelectable={readOnly || interactivityEnabled}
+            edgesReconnectable={interactivityEnabled}
             colorMode={theme}
             fitView
           >
             <Background />
             <Controls showInteractive={false}>
-              <ControlButton
+              {!readOnly && <ControlButton
                 title="Toggle Interactivity"
                 aria-label="Toggle Interactivity"
                 disabled={simActive}
                 onClick={() => dispatch({ type: 'mode', interactive: !interactive })}
               >
                 {interactivityEnabled ? <LockOpenIcon /> : <LockIcon />}
-              </ControlButton>
+              </ControlButton>}
             </Controls>
             <Panel position="top-right">
               <div className="workflow-editor__toolbar">
+                {!readOnly && <>
                 <button title="Undo (Ctrl+Z)" disabled={!canUndo} onClick={handleUndo}>
                   <UndoIcon /> Undo
                 </button>
@@ -509,6 +539,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
                 <button title="Import workflow from a JSON file" disabled={simActive} onClick={handleImportClick}>
                   <UploadIcon /> Import
                 </button>
+                </>}
                 <button title="Export workflow to a JSON file" onClick={handleExportJson}>
                   <DownloadIcon /> Export
                 </button>
@@ -522,14 +553,14 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
                   style={{ display: 'none' }}
                   onChange={onImportFileChange}
                 />
-                <Switch
+                {!readOnly && <Switch
                   id={simulateSwitchId}
                   className="workflow-editor__sim-switch"
                   label="Simulate"
                   aria-label="Simulate routing against a sample context"
                   isChecked={simActive}
                   onChange={toggleSim}
-                />
+                />}
               </div>
             </Panel>
             {importError && (
@@ -584,6 +615,7 @@ function WorkflowEditorInner({ workflow, onChange, onValidationChange, theme = '
             onNodeIdChange={onNodeIdChange}
             onEdgeChange={onEdgeDataChange}
             spi={spi}
+            readOnly={readOnly}
             sampleContext={sampleContext}
             width={panelWidth}
             onResizeStart={onResizeStart}

@@ -39,3 +39,8 @@
     min-width: 140px;
   }
 }
+
+.dev-app__read-only-toggle {
+  align-self: center;
+  margin-inline-start: 16px;
+}
