@@ -206,6 +206,22 @@ describe('validateWorkflow', () => {
       expect(hasProblem(validateWorkflow(w), 'MISSING_EVENT_TYPE')).toBe(true);
     });
 
+    it.each(['forever', 'PT0S', 'P0D', '-PT5M', 'P1M', 'PT'])('INVALID_LOOKBACK for %s', lookback => {
+      const w = workflow(
+        [node('start', 'start'), node('r', 'receive-event', { eventType: 't', lookback }), node('end', 'end')],
+        [edge('e1', 'start', 'r'), edge('e2', 'r', 'end')],
+      );
+      expect(hasProblem(validateWorkflow(w), 'INVALID_LOOKBACK')).toBe(true);
+    });
+
+    it.each(['run-start', 'none', 'PT10M', 'P1DT2H', 'PT0.5S'])('accepts lookback %s', lookback => {
+      const w = workflow(
+        [node('start', 'start'), node('r', 'receive-event', { eventType: 't', lookback }), node('end', 'end')],
+        [edge('e1', 'start', 'r'), edge('e2', 'r', 'end')],
+      );
+      expect(hasProblem(validateWorkflow(w), 'INVALID_LOOKBACK')).toBe(false);
+    });
+
     it('MISSING_START_INPUTS', () => {
       const w = workflow(
         [node('start', 'start'), node('end', 'end')],

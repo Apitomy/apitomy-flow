@@ -29,9 +29,19 @@ describe('getNodeDefinition', () => {
                 type,
                 name: 'My Node',
                 description: undefined,
-                sections: [],
+                sections: type === 'receive-event'
+                    ? [{ label: 'Event lookback', fields: [{ label: 'lookback', value: 'run-start (default)' }] }]
+                    : [],
             });
         });
+    });
+
+    it('shows an authored receive-event lookback instead of the generic config entry', () => {
+        const view = getNodeDefinition(node({ type: 'receive-event', config: { eventType: 'e', lookback: 'PT10M' } }));
+        expect(view.sections).toEqual([
+            { label: 'Event lookback', fields: [{ label: 'lookback', value: 'PT10M' }] },
+            { label: 'Config', fields: [{ label: 'eventType', value: 'e' }] },
+        ]);
     });
 
     it.each(['action', 'human-task'])('formats imported %s literals safely for the Viewer', type => {

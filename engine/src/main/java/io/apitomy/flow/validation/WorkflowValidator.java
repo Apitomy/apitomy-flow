@@ -334,6 +334,16 @@ public class WorkflowValidator {
                         "Receive-event node eventType must be a non-blank string", node.id()));
                 }
                 validateEventOutputMappings(config.outputs(), node.id(), problems);
+                String lookback = config.lookback();
+                if (lookback != null) {
+                    try {
+                        EventLookback.parse(lookback);
+                    } catch (IllegalArgumentException e) {
+                        problems.add(ValidationProblem.error("INVALID_LOOKBACK",
+                            "Receive-event node lookback must be \"run-start\", \"none\", or a positive "
+                                + "ISO 8601 duration: " + lookback, node.id()));
+                    }
+                }
             });
 
         // Duplicate event receivers

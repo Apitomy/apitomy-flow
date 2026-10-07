@@ -1,6 +1,7 @@
 import { type WorkflowNode, type ActionConfig, type HumanTaskConfig, type StartConfig,
   type ReceiveEventConfig, type NodeConfig } from '../types/workflow.ts';
 import { inputValueText } from './mapInputs.ts';
+import { describeLookback } from './lookback.ts';
 
 /**
  * A single labeled value in a node's definition view, e.g. `orderId: string` for a start node
@@ -36,7 +37,7 @@ const HANDLED_CONFIG_KEYS: Record<string, Set<string>> = {
   start: new Set(['inputs']),
   'human-task': new Set(['description', 'inputs', 'outputs']),
   action: new Set(['actionType', 'inputs', 'outputs']),
-  'receive-event': new Set(['outputs']),
+  'receive-event': new Set(['outputs', 'lookback']),
 };
 
 function formatConfigValue(value: unknown): string {
@@ -172,7 +173,11 @@ export function getNodeDefinition(node: WorkflowNode): NodeDefinitionView {
   } else if (node.type === 'action') {
     sections = actionSections(node.config ?? {});
   } else if (node.type === 'receive-event') {
-    sections = [receiveEventOutputsSection(node.config ?? {})].filter((s): s is DefinitionSection => s !== null);
+    const eventConfig: ReceiveEventConfig = node.config ?? {};
+    sections = [
+      { label: 'Event lookback', fields: [{ label: 'lookback', value: describeLookback(eventConfig.lookback) }] },
+      receiveEventOutputsSection(eventConfig),
+    ].filter((s): s is DefinitionSection => s !== null);
   } else {
     sections = [];
   }
