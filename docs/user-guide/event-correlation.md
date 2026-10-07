@@ -69,6 +69,25 @@ variables are available:
 
 If `match` is absent or empty, any event of the correct type matches.
 
+### Timeouts
+
+`timeout` is an optional positive ISO 8601 duration. When it is set, the node needs exactly one outgoing
+edge marked `"isTimeout": true`; that edge is the path taken when no matching event arrives in time.
+
+```json
+{ "id": "recv", "type": "receive-event", "config": { "eventType": "pr-merged", "timeout": "P2D" } }
+{ "id": "e-merged",  "source": "recv", "target": "deploy",   "priority": 0, "isDefault": false }
+{ "id": "e-expired", "source": "recv", "target": "escalate", "priority": 0, "isDefault": false, "isTimeout": true }
+```
+
+Normal edge selection ignores timeout edges, so a node with one normal edge and one timeout edge is not a
+parallel fork. The host reads `ReceiveEventInfo.timeout()`, schedules a timer, and calls
+`engine.onReceiveEventTimeout(workflow, instance, nodeId)` when it fires. A timeout for a node that is no
+longer parked is a no-op. Validation codes: `INVALID_RECEIVE_EVENT_TIMEOUT`, `MISSING_TIMEOUT_EDGE`,
+`MULTIPLE_TIMEOUT_EDGES`, `MISSING_EVENT_EDGE`, `INVALID_TIMEOUT_EDGE` (errors) and
+`TIMEOUT_EDGE_WITH_CONDITION` (warning). In the editor, set **Timeout** on the node and connect its bottom
+*timeout* port. The browser simulator does not fire timers; it always follows the event path.
+
 ## Expression Examples
 
 ```

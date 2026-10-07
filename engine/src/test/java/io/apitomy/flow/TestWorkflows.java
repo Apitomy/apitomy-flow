@@ -52,6 +52,15 @@ public class TestWorkflows {
             Map.of("eventType", eventType, "match", matchExpressions, "outputs", outputs), new Position(200, 0));
     }
 
+    public static WorkflowNode receiveEventNodeWithTimeout(String id, String eventType, String timeout) {
+        return new WorkflowNode(id, NodeType.RECEIVE_EVENT, id,
+            Map.of("eventType", eventType, "timeout", timeout), new Position(200, 0));
+    }
+
+    public static WorkflowEdge timeoutEdge(String id, String source, String target) {
+        return new WorkflowEdge(id, source, target, null, 0, false, null, true);
+    }
+
     public static WorkflowNode waitNode(String id, String duration) {
         return new WorkflowNode(id, NodeType.WAIT, id,
             Map.of("duration", duration), new Position(200, 0));

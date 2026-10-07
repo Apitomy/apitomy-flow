@@ -195,8 +195,26 @@ Returns `ReceiveEventInfo` for an eligible parked receiver, null otherwise. The 
 | `eventType` | String | The event type this node is waiting for |
 | `matchExpressions` | List<String> | Raw EL expressions used for event correlation |
 | `outputMappings` | List<EventOutputMapping> | Optional expressions mapping the event into context |
+| `timeout` | Duration | Configured timeout to schedule, or null when the node waits indefinitely |
 
 Use `eventType` to index waiting instances and avoid checking unrelated instances when an event arrives.
+
+## Receive-Event Timeouts
+
+When `ReceiveEventInfo.timeout()` is non-null, the host stores and fires a timer for that node. When it
+fires, call:
+
+```java
+WorkflowInstance next = engine.onReceiveEventTimeout(definition, instance, nodeId);
+```
+
+The engine completes the parked node without merging any event output and follows the node's timeout
+edge (`isTimeout: true`). Timers race with event delivery, so the call is a no-op (the same instance is
+returned) when the instance is not `WAITING` or the node is not a currently parked receive-event branch,
+for example because the event was already delivered. Inside loops only the current open activation can
+time out; a stale timer from an earlier pass is a no-op unless the branch is parked at the node again,
+so hosts should cancel or version their timers per activation. Calling it for a parked node that has no
+timeout edge throws `IllegalStateException`.
 
 ## Getting Wait Info
 

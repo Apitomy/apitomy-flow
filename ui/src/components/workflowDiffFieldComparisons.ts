@@ -13,7 +13,7 @@ const NODE_CONFIG_FIELDS: Record<NodeType, string[]> = {
   end: ['outcome'],
   action: ['description', 'actionType', 'inputs', 'outputs'],
   'human-task': ['description', 'assignee', 'inputs', 'outputs'],
-  'receive-event': ['eventType', 'description', 'inputs', 'outputs'],
+  'receive-event': ['eventType', 'description', 'inputs', 'outputs', 'timeout'],
   wait: ['duration'],
 };
 
@@ -96,7 +96,9 @@ export function edgeFieldComparisons(record: EdgeDiffRecord): FieldComparison[] 
               ? record.baseEdge?.isDefault
               : field === 'label'
                 ? record.baseEdge?.label
-                : undefined,
+                : field === 'isTimeout'
+                  ? record.baseEdge?.isTimeout ?? false
+                  : undefined,
     after: field === 'source'
       ? record.compareEdge?.source
       : field === 'target'
@@ -109,6 +111,8 @@ export function edgeFieldComparisons(record: EdgeDiffRecord): FieldComparison[] 
               ? record.compareEdge?.isDefault
               : field === 'label'
                 ? record.compareEdge?.label
-                : undefined,
+                : field === 'isTimeout'
+                  ? record.compareEdge?.isTimeout ?? false
+                  : undefined,
   }));
 }

@@ -370,7 +370,75 @@ public class WorkflowEngine {
         List<EventOutputMapping> outputMappings = config.outputs().stream()
             .map(o -> new EventOutputMapping(o.contextKey(), o.expression())).toList();
 
-        return new ReceiveEventInfo(node.id(), node.name(), eventType, matchExpressions, outputMappings);
+        return new ReceiveEventInfo(node.id(), node.name(), eventType, matchExpressions, outputMappings,
+            parseTimeout(config.timeout()));
+    }
+
+    /**
+     * Parses a receive-event timeout, returning {@code null} for absent, malformed, or non-positive values.
+     *
+     * @param text the authored ISO-8601 duration text
+     * @return the positive duration, or {@code null}
+     */
+    private static Duration parseTimeout(String text) {
+        if (text == null) {
+            return null;
+        }
+        try {
+            Duration duration = Duration.parse(text);
+            return duration.isNegative() || duration.isZero() ? null : duration;
+        } catch (Exception e) {
+            log.warn("Invalid receive-event timeout '{}': {}", text, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Resumes a parked RECEIVE_EVENT branch as timed out: the node's history entry is completed without
+     * merging any event output, and the branch follows the node's timeout edge ({@code isTimeout == true}).
+     * The host calls this when the timer it scheduled from {@link ReceiveEventInfo#timeout()} fires.
+     *
+     * <p>Timers race with event delivery, so this is a no-op (the instance is returned unchanged) when the
+     * instance is not WAITING or the node is not currently a parked RECEIVE_EVENT branch — for example
+     * because the event was already delivered, the workflow was cancelled, or the branch has moved on.
+     * When a node is re-entered inside a loop, only the current (open) activation can time out.
+     *
+     * @param workflow the workflow definition
+     * @param instance the instance whose branch timed out
+     * @param nodeId   the id of the parked receive-event node
+     * @return the advanced instance, or {@code instance} unchanged when the node is not parked
+     * @throws IllegalStateException if the parked node has no timeout edge
+     */
+    public WorkflowInstance onReceiveEventTimeout(Workflow workflow, WorkflowInstance instance, String nodeId) {
+        if (!isParkedNode(instance, nodeId)) {
+            return instance;
+        }
+        WorkflowNode node = workflow.findNodeById(nodeId).orElse(null);
+        if (node == null || node.type() != NodeType.RECEIVE_EVENT) {
+            return instance;
+        }
+        WorkflowEdge timeoutEdge = workflow.getOutgoingEdges(nodeId).stream()
+            .filter(WorkflowEdge::isTimeout)
+            .findFirst()
+            .orElseThrow(() -> new IllegalStateException("Receive-event node has no timeout edge: " + nodeId));
+        ActiveBranch branch = instance.activeBranches().stream()
+            .filter(b -> nodeId.equals(b.nodeId()) && isBranchOpen(instance, b.branchId(), nodeId))
+            .findFirst()
+            .orElseThrow();
+
+        WorkflowInstance updated = completeHistoryEntry(instance, branch.branchId(), nodeId, Instant.now(),
+            Map.of());
+        updated = updated.toBuilder()
+            .status(InstanceStatus.RUNNING)
+            .updatedOn(Instant.now())
+            .build();
+        WorkflowInstance completedInstance = updated;
+        NodeResult timedOut = new NodeResult(NodeResultStatus.COMPLETED, Map.of());
+        fireEvent(l -> l.onNodeCompleted(completedInstance, node, timedOut));
+
+        Deque<BranchWork> work = new ArrayDeque<>();
+        work.add(new BranchWork(branch, WorkKind.MOVE, timeoutEdge));
+        return advanceBranches(workflow, updated, work, ParallelRegions.analyze(workflow));
     }
 
     /**
@@ -673,7 +741,9 @@ public class WorkflowEngine {
             // Resolve outgoing edges from this (entered, executed) node.
             List<WorkflowEdge> targets;
             if (regions.isFork(node.id())) {
-                targets = workflow.getOutgoingEdges(node.id());
+                targets = workflow.getOutgoingEdges(node.id()).stream()
+                    .filter(edge -> !edge.isTimeout())
+                    .toList();
             } else {
                 WorkflowEdge selected;
                 try {
@@ -984,6 +1054,9 @@ public class WorkflowEngine {
         WorkflowEdge defaultEdge = null;
 
         for (WorkflowEdge edge : outgoing) {
+            if (edge.isTimeout()) {
+                continue; // followed only via onReceiveEventTimeout
+            }
             if (edge.isDefault()) {
                 defaultEdge = edge;
                 continue;

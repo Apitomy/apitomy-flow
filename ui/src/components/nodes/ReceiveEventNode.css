@@ -12,3 +12,6 @@
 }
 .flow-node-receive-event:hover { box-shadow: 0 2px 8px var(--flow-shadow, rgba(0, 0, 0, 0.12)); filter: brightness(0.97); }
 .flow-node-receive-event.selected { box-shadow: 0 0 0 2px var(--flow-brand, #06c); }
+.flow-node-receive-event { position: relative; }
+.flow-node-receive-event__timeout { font-size: 11px; opacity: 0.8; white-space: nowrap; }
+.flow-node-receive-event__timeout-handle { background: var(--flow-status-warning, #f0ab00); }

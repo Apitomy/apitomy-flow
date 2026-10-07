@@ -59,6 +59,7 @@ export function normalizeWorkflow(raw: unknown): {
         if (node.type === 'wait') optionalString('duration', 'INVALID_WAIT_DURATION');
         if (node.type === 'receive-event') {
             optionalString('eventType', 'INVALID_EVENT_TYPE_VALUE');
+            optionalString('timeout', 'INVALID_RECEIVE_EVENT_TIMEOUT');
             field(config.match == null || (Array.isArray(config.match) && config.match.every(item => typeof item === 'string')),
                 'INVALID_MATCH_TYPE', 'config.match', 'an array of strings');
         }
@@ -123,6 +124,7 @@ export function normalizeWorkflow(raw: unknown): {
         field(edge.priority == null || (Number.isInteger(edge.priority) && Number(edge.priority) >= -2147483648
             && Number(edge.priority) <= 2147483647), 'INVALID_EDGE_PRIORITY', 'priority', 'a 32-bit integer');
         field(edge.isDefault == null || typeof edge.isDefault === 'boolean', 'INVALID_EDGE_DEFAULT', 'isDefault', 'a boolean');
+        field(edge.isTimeout == null || typeof edge.isTimeout === 'boolean', 'INVALID_EDGE_TIMEOUT', 'isTimeout', 'a boolean');
     }
     if (problems.length > 0) return { problems };
 

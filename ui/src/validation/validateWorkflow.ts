@@ -218,7 +218,8 @@ function validateConnectivity(workflow: Workflow, problems: ValidationProblem[])
 
 function validateEdgeConditions(workflow: Workflow, problems: ValidationProblem[]) {
   const edgesBySource = new Map<string, WorkflowEdge[]>();
-  for (const edge of workflow.edges) {
+  // Timeout edges are validated separately and never take part in conditional routing.
+  for (const edge of workflow.edges.filter(e => !e.isTimeout)) {
     const list = edgesBySource.get(edge.source) || [];
     list.push(edge);
     edgesBySource.set(edge.source, list);
@@ -290,6 +291,20 @@ function validateSemantics(workflow: Workflow, problems: ValidationProblem[]) {
     }
     if (Array.isArray(node.config.outputs) && node.config.outputs.length > 0) {
       validateEventOutputMappings(node.config.outputs, node.id, problems);
+    }
+    validateReceiveEventTimeout(workflow, node.id, node.config.timeout, problems);
+  }
+
+  // Timeout edges may only leave receive-event nodes that configure a timeout
+  for (const edge of workflow.edges.filter(e => e.isTimeout)) {
+    const source = workflow.nodes.find(n => n.id === edge.source);
+    if (!source || source.type !== 'receive-event' || source.config.timeout == null) {
+      problems.push(problem('error', 'INVALID_TIMEOUT_EDGE',
+        'Timeout edges may only leave a receive-event node with a timeout configured', undefined, edge.id));
+    }
+    if (edge.isDefault || (edge.condition && edge.condition.trim() !== '')) {
+      problems.push(problem('warning', 'TIMEOUT_EDGE_WITH_CONDITION',
+        'Timeout edge condition/default flag is ignored', undefined, edge.id));
     }
   }
 
@@ -497,6 +512,32 @@ function stableStringify(value: unknown): string {
     }
     return v;
   });
+}
+
+/**
+ * Validates a receive-event timeout (mirrors the Java validator): it must be a positive ISO-8601 duration,
+ * and the node needs exactly one timeout edge plus at least one normal outgoing edge.
+ */
+function validateReceiveEventTimeout(workflow: Workflow, nodeId: string, timeout: string | null | undefined,
+                                     problems: ValidationProblem[]) {
+  if (timeout === undefined || timeout === null) return;
+  if (!isValidIsoDuration(timeout) || !/[1-9]/.test(timeout)) {
+    problems.push(problem('error', 'INVALID_RECEIVE_EVENT_TIMEOUT',
+      `Receive-event timeout must be a positive ISO 8601 duration: ${timeout}`, nodeId));
+  }
+  const outgoing = workflow.edges.filter(e => e.source === nodeId);
+  const timeoutEdges = outgoing.filter(e => e.isTimeout).length;
+  if (timeoutEdges === 0) {
+    problems.push(problem('error', 'MISSING_TIMEOUT_EDGE',
+      'Receive-event node with a timeout must have a timeout edge', nodeId));
+  } else if (timeoutEdges > 1) {
+    problems.push(problem('error', 'MULTIPLE_TIMEOUT_EDGES',
+      'Receive-event node must have exactly one timeout edge', nodeId));
+  }
+  if (timeoutEdges > 0 && timeoutEdges === outgoing.length) {
+    problems.push(problem('error', 'MISSING_EVENT_EDGE',
+      'Receive-event node with a timeout must also have a normal outgoing edge', nodeId));
+  }
 }
 
 function isValidIsoDuration(value: string): boolean {

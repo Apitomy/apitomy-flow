@@ -460,6 +460,22 @@ export function PropertiesPanel(props: PropertiesPanelProps) {
               />
             </div>
             <div className="properties-panel__field">
+              <label>Timeout (ISO 8601, optional)</label>
+              <input
+                type="text"
+                value={eventConfig.timeout || ''}
+                placeholder="e.g. PT1H — leave blank to wait indefinitely"
+                onChange={(e) => onNodeChange(selectedNode.id, {
+                  config: { ...selectedNode.data.config, timeout: e.target.value === '' ? undefined : e.target.value },
+                })}
+              />
+              {eventConfig.timeout && (
+                <div className="properties-panel__hint">
+                  Connect the node&apos;s bottom <em>timeout</em> port to the path taken when no event arrives in time.
+                </div>
+              )}
+            </div>
+            <div className="properties-panel__field">
               <label>Match Expressions (EL)</label>
               <div className="properties-panel__match-list">
                 {(eventConfig.match || []).map((expr, i) => (
@@ -573,7 +589,12 @@ export function PropertiesPanel(props: PropertiesPanelProps) {
   if (selectedEdge) {
     return wrap(
       <>
-        <div className="properties-panel__header">Edge</div>
+        <div className="properties-panel__header">{selectedEdge.data?.isTimeout ? 'Timeout Edge' : 'Edge'}</div>
+        {Boolean(selectedEdge.data?.isTimeout) && (
+          <div className="properties-panel__hint">
+            Followed only when the source receive-event node&apos;s timeout elapses; conditions are ignored.
+          </div>
+        )}
         <div className="properties-panel__field">
           <label>Label</label>
           <input

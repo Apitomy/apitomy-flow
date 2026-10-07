@@ -125,6 +125,9 @@ function edgeDiff(baseEdge?: WorkflowEdge, compareEdge?: WorkflowEdge): EdgeDiff
   if (baseEdge!.isDefault !== compareEdge!.isDefault) {
     changes.push('isDefault');
   }
+  if ((baseEdge!.isTimeout ?? false) !== (compareEdge!.isTimeout ?? false)) {
+    changes.push('isTimeout');
+  }
   if (baseEdge!.label !== compareEdge!.label) {
     changes.push('label');
   }

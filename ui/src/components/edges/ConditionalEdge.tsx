@@ -21,14 +21,15 @@ export function ConditionalEdge({
 
   const condition = data?.condition as string | undefined;
   const isDefault = data?.isDefault as boolean | undefined;
+  const isTimeout = data?.isTimeout as boolean | undefined;
   const label = data?.label as string | undefined;
   // Transient routing outcome written by the editor during a simulation run. It is never
   // persisted (toWorkflowEdges only saves condition/priority/isDefault/label).
   const simState = data?.simState as
     | 'matched' | 'true' | 'false' | 'skipped' | 'error' | undefined;
 
-  const displayText = label || (isDefault ? 'default' : condition);
-  const badgeClass = [isDefault ? 'is-default' : '', simState ? `sim-${simState}` : '']
+  const displayText = label || (isTimeout ? 'timeout' : isDefault ? 'default' : condition);
+  const badgeClass = [isDefault ? 'is-default' : '', isTimeout ? 'is-timeout' : '', simState ? `sim-${simState}` : '']
     .filter(Boolean)
     .join(' ');
 
@@ -45,7 +46,7 @@ export function ConditionalEdge({
           stroke: simStroke?.stroke
             ?? (selected ? 'var(--pf-t--global--color--brand--default, #06c)' : undefined),
           opacity: simStroke?.opacity,
-          strokeDasharray: simStroke?.strokeDasharray,
+          strokeDasharray: simStroke?.strokeDasharray ?? (isTimeout ? '6 4' : undefined),
         }}
         markerEnd={markerEnd}
       />
