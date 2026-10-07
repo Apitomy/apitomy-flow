@@ -382,12 +382,11 @@ function WorkflowEditorInner({ workflow, onChange, readOnly = false, onValidatio
 
   // --- Simulation ---------------------------------------------------------
   // Simulation is not offered when read-only; leave it if the host switches to read-only mid-run.
-  useEffect(() => {
-    if (readOnly && simActive) {
-      dispatch({ type: 'mode', simulating: false });
-      setSimState(null);
-    }
-  }, [readOnly, simActive, dispatch]);
+  // Adjusted during render (not in an effect) so no frame shows a simulation in read-only mode.
+  if (readOnly && simActive) {
+    rawDispatch({ type: 'mode', simulating: false });
+    if (simState) setSimState(null);
+  }
 
   const focusNode = useCallback((nodeId: string) => {
     dispatch({ type: 'select', nodeId });
