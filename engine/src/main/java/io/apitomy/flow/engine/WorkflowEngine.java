@@ -381,7 +381,7 @@ public class WorkflowEngine {
         }
 
         return new ReceiveEventInfo(node.id(), node.name(), eventType, matchExpressions, outputMappings,
-            subscriptionKey);
+            config.parsedLookback(), subscriptionKey);
     }
 
     /**

@@ -8,6 +8,7 @@ import { type ActionTypeDescriptor } from '../../types/spi.ts';
 import { type HumanTaskOutput, type OutputWidget, type ActionOutputConfig, type EventOutputMapping } from '../../types/workflow.ts';
 import { type ValidationProblem } from '../../types/validation.ts';
 import { inputValueText } from '../../utils/mapInputs.ts';
+import { lookbackMode, withLookback, type LookbackMode } from '../../utils/lookback.ts';
 import { withCorrelationKeyField } from '../../utils/correlationKey.ts';
 import { MapInputsEditor } from './MapInputsEditor.tsx';
 import { DefaultValueEditor, OptionsEditor } from './HumanTaskOutputFields.tsx';
@@ -503,6 +504,31 @@ export function PropertiesPanel(props: PropertiesPanelProps) {
                   + Add expression
                 </button>
               </div>
+            </div>
+            <div className="properties-panel__field">
+              <label>Lookback</label>
+              <select
+                aria-label="Lookback"
+                value={lookbackMode(eventConfig.lookback)}
+                onChange={(e) => onNodeChange(selectedNode.id, {
+                  config: withLookback(eventConfig, e.target.value as LookbackMode),
+                })}
+              >
+                <option value="run-start">Since run start (default)</option>
+                <option value="none">None (only events after parking)</option>
+                <option value="duration">Duration</option>
+              </select>
+              {lookbackMode(eventConfig.lookback) === 'duration' && (
+                <input
+                  type="text"
+                  aria-label="Lookback duration"
+                  value={eventConfig.lookback ?? ''}
+                  placeholder="e.g. PT10M"
+                  onChange={(e) => onNodeChange(selectedNode.id, {
+                    config: withLookback(eventConfig, 'duration', e.target.value),
+                  })}
+                />
+              )}
             </div>
             <div className="properties-panel__field">
               <label>Correlation Key: Subscription Key (EL, context)</label>

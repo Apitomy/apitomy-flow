@@ -59,6 +59,7 @@ export function normalizeWorkflow(raw: unknown): {
         if (node.type === 'wait') optionalString('duration', 'INVALID_WAIT_DURATION');
         if (node.type === 'receive-event') {
             optionalString('eventType', 'INVALID_EVENT_TYPE_VALUE');
+            optionalString('lookback', 'INVALID_LOOKBACK');
             field(config.match == null || (Array.isArray(config.match) && config.match.every(item => typeof item === 'string')),
                 'INVALID_MATCH_TYPE', 'config.match', 'an array of strings');
             const key = config.correlationKey;

@@ -31,14 +31,15 @@ single cursor. A true result does not tell you which branch to complete. Matchin
 
 ## Introspection
 
-`getReceiveEventInfo(workflow, instance, nodeId)` returns the event type, match expressions, and output
-mappings for a parked receiver. Index by event type to avoid loading every waiting instance. The overload
+`getReceiveEventInfo(workflow, instance, nodeId)` returns the event type, match expressions, output
+mappings, and parsed lookback for a parked receiver. Index by event type to avoid loading every waiting instance. The overload
 without a node ID returns the current or first eligible receiver, not the full set.
 
 ```java
 ReceiveEventInfo info = engine.getReceiveEventInfo(definition, instance);
 // info.eventType()   → "pr-merged"
 // info.matchExpressions() → ["event.repository == context.repository", ...]
+// info.lookback()    → EventLookback[mode=DURATION, duration=PT10M]
 ```
 
 ## Receive-Event Node Config
@@ -49,7 +50,8 @@ ReceiveEventInfo info = engine.getReceiveEventInfo(definition, instance);
   "match": [
     "event.repository == context.repository",
     "event.pull_request.number == context.prNumber"
-  ]
+  ],
+  "lookback": "PT10M"
 }
 ```
 
@@ -69,6 +71,22 @@ variables are available:
 | `event` | The incoming event payload |
 
 If `match` is absent or empty, any event of the correct type matches.
+
+### lookback
+
+Optional. Controls how far back a host searches stored events when a branch parks on the node, so an
+event that arrived *before* the branch parked can still be delivered:
+
+| Value | Meaning |
+|-------|---------|
+| `run-start` (default) | Events with timestamps at or after the start of the workflow instance |
+| `none` | Only events delivered after the node parks |
+| ISO-8601 duration, e.g. `PT10M` | Events newer than *now minus duration*, still limited to the instance start |
+
+Durations must be positive and use the `java.time.Duration` form (`PnDTnHnMnS`). Other values are
+rejected with `INVALID_LOOKBACK`. Flow does not store events; running the look-back is the host's job.
+`ReceiveEventInfo.lookback()` returns the parsed `EventLookback` (a `Mode` of `RUN_START`, `NONE`, or
+`DURATION`, plus the `Duration` for the last mode), so hosts do not have to parse the value again.
 
 ### correlationKey
 

@@ -84,6 +84,10 @@ public sealed interface NodeConfig permits NodeConfig.Start, NodeConfig.End, Nod
         }
         /** Returns output mappings; empty means legacy flat event merge. */
         public List<Mapping> outputs() { return records(wire, "outputs", Mapping::new); }
+        /** Returns the authored lookback text, or null when absent (meaning the run-start default). */
+        public String lookback() { return text(wire, "lookback"); }
+        /** Parses the lookback, defaulting to run-start; throws IllegalArgumentException when invalid. */
+        public EventLookback parsedLookback() { return EventLookback.parse(lookback()); }
         /** Returns the optional explicit correlation key, or null when absent/null. */
         public CorrelationKey correlationKey() {
             Object value = wire.get("correlationKey");
