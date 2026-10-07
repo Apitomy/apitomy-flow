@@ -165,6 +165,14 @@ Some codes in later tables can therefore be errors for malformed types and warni
 | `DUPLICATE_OUTPUT_NAME` | WARNING | Repeated target context key |
 | `UNSUPPORTED_EXPRESSION_DIALECT` | WARNING | Browser cannot validate this syntax; consult Java |
 
+### Receive-event correlation key
+
+| Code | Severity | Rule |
+|---|---|---|
+| `INVALID_CORRELATION_KEY` | shape ERROR | `correlationKey` is not an object with string `subscriptionKey` / `eventKey` |
+| `MISSING_CORRELATION_KEY_EXPRESSION` | ERROR | `subscriptionKey` or `eventKey` missing/blank when `correlationKey` is present |
+| `INVALID_CORRELATION_KEY_EXPRESSION` | ERROR | Key expression is not valid EL |
+
 ### Parallel Structure (ERROR)
 
 | Code | Description |

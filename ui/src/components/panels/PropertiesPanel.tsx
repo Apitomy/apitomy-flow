@@ -8,6 +8,7 @@ import { type ActionTypeDescriptor } from '../../types/spi.ts';
 import { type HumanTaskOutput, type OutputWidget, type ActionOutputConfig, type EventOutputMapping } from '../../types/workflow.ts';
 import { type ValidationProblem } from '../../types/validation.ts';
 import { inputValueText } from '../../utils/mapInputs.ts';
+import { withCorrelationKeyField } from '../../utils/correlationKey.ts';
 import { MapInputsEditor } from './MapInputsEditor.tsx';
 import { DefaultValueEditor, OptionsEditor } from './HumanTaskOutputFields.tsx';
 import { evaluateCondition, ElEvaluationError } from '../../simulation/elEvaluator.ts';
@@ -502,6 +503,28 @@ export function PropertiesPanel(props: PropertiesPanelProps) {
                   + Add expression
                 </button>
               </div>
+            </div>
+            <div className="properties-panel__field">
+              <label>Correlation Key: Subscription Key (EL, context)</label>
+              <input
+                type="text"
+                value={eventConfig.correlationKey?.subscriptionKey ?? ''}
+                placeholder="e.g. context.orderId"
+                onChange={(e) => onNodeChange(selectedNode.id, {
+                  config: withCorrelationKeyField(selectedNode.data.config, 'subscriptionKey', e.target.value),
+                })}
+              />
+            </div>
+            <div className="properties-panel__field">
+              <label>Correlation Key: Event Key (EL, event)</label>
+              <input
+                type="text"
+                value={eventConfig.correlationKey?.eventKey ?? ''}
+                placeholder="e.g. event.data.orderId"
+                onChange={(e) => onNodeChange(selectedNode.id, {
+                  config: withCorrelationKeyField(selectedNode.data.config, 'eventKey', e.target.value),
+                })}
+              />
             </div>
             <div className="properties-panel__field">
               <label>Output mappings</label>

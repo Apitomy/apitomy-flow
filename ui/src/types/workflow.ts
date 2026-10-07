@@ -114,6 +114,17 @@ export interface ReceiveEventConfig extends ConfigExtensions {
     eventType?: string | null;
     match?: string[] | null;
     outputs?: EventOutputMapping[] | null;
+    /** Optional explicit correlation key; both expressions are required when present. */
+    correlationKey?: CorrelationKey | null;
+}
+/**
+ * Explicit correlation key for a receive-event node. `subscriptionKey` is evaluated against the
+ * instance context when the node parks; `eventKey` is evaluated against the incoming event.
+ * Composite keys are expressed with EL string concatenation.
+ */
+export interface CorrelationKey extends ConfigExtensions {
+    subscriptionKey?: string | null;
+    eventKey?: string | null;
 }
 export interface WaitConfig extends ConfigExtensions {
     duration?: string | null;

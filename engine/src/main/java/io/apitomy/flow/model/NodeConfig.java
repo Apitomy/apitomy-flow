@@ -84,6 +84,25 @@ public sealed interface NodeConfig permits NodeConfig.Start, NodeConfig.End, Nod
         }
         /** Returns output mappings; empty means legacy flat event merge. */
         public List<Mapping> outputs() { return records(wire, "outputs", Mapping::new); }
+        /** Returns the optional explicit correlation key, or null when absent/null. */
+        public CorrelationKey correlationKey() {
+            Object value = wire.get("correlationKey");
+            return value == null ? null : new CorrelationKey(object(value));
+        }
+    }
+
+    /**
+     * Optional explicit correlation key for receive-event nodes. {@code subscriptionKey} is evaluated against
+     * the instance context when the node parks; {@code eventKey} is evaluated against the incoming event.
+     * Composite keys are expressed via EL string concatenation.
+     */
+    record CorrelationKey(@JsonValue Map<String, Object> wire) {
+        /** Snapshots caller-owned key data. */
+        public CorrelationKey { wire = snapshot(wire); }
+        /** Returns the EL expression evaluated against the instance context, or null. */
+        public String subscriptionKey() { return text(wire, "subscriptionKey"); }
+        /** Returns the EL expression evaluated against the incoming event, or null. */
+        public String eventKey() { return text(wire, "eventKey"); }
     }
 
     /** Wait duration as authored ISO-8601 text (semantic validation checks its syntax). */
