@@ -58,6 +58,20 @@ describe('recorded inputs', () => {
         expect(input('end')).toBeUndefined();
     });
 
+    it('records the computed title on human-task entries only, falling back to the node name', () => {
+        const wf = workflow([
+            node('start', 'start'),
+            node('titled', 'human-task', { title: "'Review ' += context.id" }),
+            node('broken', 'human-task', { title: "'Review ' += context.missing" }),
+            node('end', 'end'),
+        ], [edge('e1', 'start', 'titled'), edge('e2', 'titled', 'broken'), edge('e3', 'broken', 'end')]);
+        const state = runWithMocks(wf, { id: 'A-1' }, [{}, {}]);
+        const title = (id: string) => state.history.find(h => h.nodeId === id)?.title;
+        expect(title('titled')).toBe('Review A-1');
+        expect(title('broken')).toBe('broken');
+        expect(title('start')).toBeUndefined();
+    });
+
     it('records no inputs when an expression cannot be resolved', () => {
         const wf = workflow([
             node('start', 'start'),

@@ -230,6 +230,28 @@ class WorkflowValidatorTest {
     }
 
     @Test
+    void invalidTaskTitleExpressionIsAWarning() {
+        WorkflowNode task = new WorkflowNode("ht", NodeType.HUMAN_TASK, "ht",
+            Map.of("title", "'Review ' +=", "description", "d"), new Position(200, 0));
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), task, endNode("end")),
+            List.of(edge("e1", "start", "ht"), edge("e2", "ht", "end")));
+        List<ValidationProblem> problems = validate(w);
+        assertTrue(problems.stream().anyMatch(p -> p.code().equals("INVALID_TASK_TITLE_EXPRESSION")
+            && p.severity() == ValidationSeverity.WARNING));
+    }
+
+    @Test
+    void validTaskTitleExpressionHasNoProblem() {
+        WorkflowNode task = new WorkflowNode("ht", NodeType.HUMAN_TASK, "ht",
+            Map.of("title", "'Review ' += context.id", "description", "d"), new Position(200, 0));
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), task, endNode("end")),
+            List.of(edge("e1", "start", "ht"), edge("e2", "ht", "end")));
+        assertFalse(hasCode(validate(w), "INVALID_TASK_TITLE_EXPRESSION"));
+    }
+
+    @Test
     void missingTaskOutputs() {
         Workflow w = new Workflow("w", "W", null, null,
             List.of(startNode("start"), humanTaskNode("ht"), endNode("end")),

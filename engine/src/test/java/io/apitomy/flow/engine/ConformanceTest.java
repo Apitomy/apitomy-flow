@@ -54,6 +54,10 @@ class ConformanceTest {
             assertFalse(EVALUATOR.isValid(expression));
             assertThrows(ConditionEvaluationException.class,
                 () -> EVALUATOR.resolve(expression, map(data.path("context")), map(data.path("event"))));
+        } else if (data.path("error").asBoolean()) {
+            assertTrue(EVALUATOR.isValid(expression));
+            assertThrows(ConditionEvaluationException.class,
+                () -> EVALUATOR.resolve(expression, map(data.path("context")), map(data.path("event"))));
         } else {
             if (!expression.isBlank()) assertTrue(EVALUATOR.isValid(expression));
             Object value = EVALUATOR.resolve(expression, map(data.path("context")), map(data.path("event")));

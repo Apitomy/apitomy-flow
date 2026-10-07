@@ -10,6 +10,7 @@
  *  - comparison `== != < > <= >=` and their EL keyword aliases `eq ne lt gt le ge`;
  *  - logical `&& || !` and aliases `and or not`;
  *  - arithmetic `+ - * / %` and aliases `div mod`, plus unary minus;
+ *  - string concatenation `+=` (a null operand is an evaluation error, as in the engine);
  *  - the `empty` operator;
  *  - lazy, right-associative conditional expressions (`condition ? yes : no`);
  *  - literals: single/double-quoted strings, numbers, `true`, `false`, `null`;
@@ -134,7 +135,7 @@ interface Token {
 }
 
 /** Multi-character symbolic operators, matched longest-first. */
-const SYMBOL_OPERATORS = ['==', '!=', '<=', '>=', '&&', '||'];
+const SYMBOL_OPERATORS = ['==', '!=', '<=', '>=', '&&', '||', '+='];
 const SINGLE_OPERATORS = new Set(['<', '>', '!', '+', '-', '*', '/', '%', '?', ':']);
 
 /** Keyword operators (Jakarta EL aliases). */
@@ -231,7 +232,7 @@ function tokenize(input: string): Token[] {
         // Operators
         const two = input.slice(i, i + 2);
         // Do not label full-EL constructs as malformed merely because this parser cannot check them.
-        if (two === '->' || two === '+=' || '{};,'.includes(ch)
+        if (two === '->' || '{};,'.includes(ch)
             || (ch === '=' && two !== '==')) {
             throw new UnsupportedSyntaxError();
         }
@@ -355,12 +356,22 @@ class Parser {
     }
 
     private parseRelational(): Node {
-        let left = this.parseAdditive();
+        let left = this.parseConcat();
         let op: Token | null;
         while ((op = this.matchOp('<', '>', '<=', '>=', 'lt', 'gt', 'le', 'ge'))) {
             const canonical = { lt: '<', gt: '>', le: '<=', ge: '>=' }[op.value] ?? op.value;
-            const right = this.parseAdditive();
+            const right = this.parseConcat();
             left = { kind: 'binary', op: canonical, left, right };
+        }
+        return left;
+    }
+
+    /** String concatenation (`+=`): binds tighter than relational operators, looser than `+`/`-`. */
+    private parseConcat(): Node {
+        let left = this.parseAdditive();
+        while (this.matchOp('+=')) {
+            const right = this.parseAdditive();
+            left = { kind: 'binary', op: '+=', left, right };
         }
         return left;
     }
@@ -541,6 +552,7 @@ function evalBinary(op: string, leftNode: Node, rightNode: Node, scope: ElScope)
         case '>': return elCompare(left, right) > 0;
         case '<=': return elLessOrEqual(left, right);
         case '>=': return elGreaterOrEqual(left, right);
+        case '+=': return coerceToString(left) + coerceToString(right);
         case '+': return coerceToNumber(left) + coerceToNumber(right);
         case '-': return coerceToNumber(left) - coerceToNumber(right);
         case '*': return coerceToNumber(left) * coerceToNumber(right);
@@ -610,6 +622,20 @@ function elGreaterOrEqual(a: unknown, b: unknown): boolean {
 }
 
 /** Jakarta EL boolean coercion: null/""→false, Boolean→itself, String→"true" (case-insensitive). */
+/**
+ * Operand coercion for `+=`. Unlike general EL string coercion, the engine's EL implementation fails
+ * on a null operand, so this does too (pinned by the shared conformance fixtures).
+ */
+function coerceToString(v: unknown): string {
+    if (isNullish(v)) {
+        throw new Error('Cannot concatenate a null value');
+    }
+    if (typeof v === 'object') {
+        throw new Error('Cannot coerce an object or array to a string');
+    }
+    return String(v);
+}
+
 function coerceToBoolean(v: unknown): boolean {
     if (isNullish(v)) return false;
     if (typeof v === 'boolean') return v;

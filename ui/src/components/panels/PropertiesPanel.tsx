@@ -393,6 +393,21 @@ export function PropertiesPanel(props: PropertiesPanelProps) {
         {selectedNode.data.nodeType === 'human-task' && (
           <>
             <div className="properties-panel__field">
+              <label htmlFor={`task-title-${selectedNode.id}`}>Title (EL expression)</label>
+              <input
+                id={`task-title-${selectedNode.id}`}
+                type="text"
+                value={(selectedNode.data.config.title as string) || ''}
+                placeholder="e.g. 'Review ' += context.cveId"
+                onChange={(e) => onNodeChange(selectedNode.id, {
+                  config: { ...selectedNode.data.config, title: e.target.value },
+                })}
+              />
+              <div className="properties-panel__hint">
+                Task inbox subject. Join text with <code>+=</code>. Leave blank to use the node name.
+              </div>
+            </div>
+            <div className="properties-panel__field">
               <label>Description</label>
               <textarea
                 rows={3}

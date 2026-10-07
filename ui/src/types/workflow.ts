@@ -106,6 +106,11 @@ export interface ActionConfig extends ConfigExtensions {
     outputs?: ActionOutputConfig[] | null;
 }
 export interface HumanTaskConfig extends ConfigExtensions {
+    /**
+     * EL expression computing the task title (e.g. a task inbox subject), such as
+     * `'Review ' += context.cveId`. When absent, blank, or unresolvable, the node name is used.
+     */
+    title?: string | null;
     description?: string | null;
     inputs?: JsonObject | null;
     outputs?: HumanTaskOutput[] | null;

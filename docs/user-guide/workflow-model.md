@@ -60,13 +60,18 @@ Automated work delegated to a `NodeExecutor` provided by the host application.
 
 Blocks until a human responds. The engine sets the instance to `WAITING` status.
 
-- **Config**: The engine interprets three keys:
+- **Config**: The engine interprets four keys:
+    - `title` (String, optional) — an EL expression computing the task title, e.g. the subject of the item
+      in a task inbox. Join text and values with the EL string concatenation operator `+=`
+      (e.g. `"'Review ' += context.cveId"`; note that `+` is numeric addition in EL). When the title is
+      absent or blank, fails to evaluate, or yields `null`, the node name is used instead.
     - `description` (String) — instructions for the person completing the task
     - `inputs` (Map<String, Object>) — expression strings or JSON literals, resolved on entry and info reads
       (e.g. `{"Credit Score": "context.creditScore"}`)
     - `outputs` (List of `{name, type, required}`) — defines the form schema for task completion
 
-  The validator emits `MISSING_TASK_DESCRIPTION` and `MISSING_TASK_OUTPUTS` warnings when these are absent.
+  The validator emits `MISSING_TASK_DESCRIPTION` and `MISSING_TASK_OUTPUTS` warnings when these are absent,
+  and an `INVALID_TASK_TITLE_EXPRESSION` warning when the title is not valid EL.
 - **Behavior**: Completes when the host calls `completeNode` with the response (`completeCurrentNode` for
   one parked branch). The host validates the submitted form values.
 
@@ -192,10 +197,13 @@ persistence.
 
 At a parallel wait, `currentNodeId` is null; it is a convenience for the single-branch case, not a
 substitute for status and branch records. Each `HistoryEntry` has an optional `branchId` tagging its visit;
-a missing history branch ID denotes `root`. Java timestamps serialize as ISO strings with the Jackson
-Java Time module. Old instances missing branch collections normalize to empty collections in Java; that
-alone does not synthesize parked branches for safe resume. Hosts must migrate legacy runtime state and
-retain the correct definition. See [current contracts](current-contracts.md).
+a missing history branch ID denotes `root`. Entries also record, when the node is entered, the `input`
+values it received (declared workflow inputs for a start node, resolved inputs for action and human-task
+nodes) and, for human-task nodes, the computed task `title`; both are omitted when absent, so viewers can
+show per-visit values even after later nodes change the context. Java timestamps serialize as ISO strings
+with the Jackson Java Time module. Old instances missing branch collections normalize to empty collections
+in Java; that alone does not synthesize parked branches for safe resume. Hosts must migrate legacy runtime
+state and retain the correct definition. See [current contracts](current-contracts.md).
 
 ### Status Lifecycle
 

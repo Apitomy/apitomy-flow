@@ -65,6 +65,7 @@
         "humanTask": {
             "type": ["object", "null"],
             "properties": {
+                "title": { "$ref": "#/definitions/text" },
                 "description": { "$ref": "#/definitions/text" },
                 "inputs": { "type": ["object", "null"] },
                 "outputs": { "$ref": "#/definitions/fields" }

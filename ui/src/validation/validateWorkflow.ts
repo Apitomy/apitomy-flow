@@ -331,6 +331,18 @@ function validateSemantics(workflow: Workflow, problems: ValidationProblem[]) {
 
   // Human task node validation
   for (const node of workflow.nodes.filter(n => n.type === 'human-task')) {
+    const title = node.config.title;
+    if (typeof title === 'string' && title.trim() !== '') {
+      // Warnings only: at runtime a failing title falls back to the node name.
+      const syntax = classifyExpression(title);
+      if (syntax === 'invalid') {
+        problems.push(problem('warning', 'INVALID_TASK_TITLE_EXPRESSION',
+          `Human task title is not valid EL: ${title}`, node.id));
+      } else if (syntax === 'unsupported') {
+        problems.push(problem('warning', 'UNSUPPORTED_EXPRESSION_DIALECT',
+          'Human task title uses syntax unsupported in the browser; validate with the Java engine', node.id));
+      }
+    }
     if (!node.config.description || (typeof node.config.description === 'string' && node.config.description.trim() === '')) {
       problems.push(problem('warning', 'MISSING_TASK_DESCRIPTION', 'Human task node has no description', node.id));
     }

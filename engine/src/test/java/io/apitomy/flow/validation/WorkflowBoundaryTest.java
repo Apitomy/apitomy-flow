@@ -95,6 +95,7 @@ class WorkflowBoundaryTest {
             {NodeType.START, Map.of("inputs", Arrays.asList((Object) null)), "INVALID_INPUT_DEFINITION"},
             {NodeType.START, Map.of("inputs", List.of(Map.of("name", "x", "required", "false"))), "INVALID_INPUT_DEFINITION"},
             {NodeType.HUMAN_TASK, Map.of("description", Map.of()), "INVALID_TASK_DESCRIPTION"},
+            {NodeType.HUMAN_TASK, Map.of("title", 42), "INVALID_TASK_TITLE"},
             {NodeType.HUMAN_TASK, Map.of("outputs", List.of(Map.of("name", "x", "options", Map.of()))), "INVALID_OUTPUT_DEFINITION"},
             {NodeType.HUMAN_TASK, Map.of("outputs", List.of(Map.of("name", "x", "options", Arrays.asList((Object) null)))), "MALFORMED_OUTPUT_OPTION"},
             {NodeType.RECEIVE_EVENT, Map.of("match", Map.of()), "INVALID_MATCH_TYPE"},

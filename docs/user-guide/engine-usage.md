@@ -148,11 +148,17 @@ Returns `HumanTaskInfo` for an eligible parked human-task node, null otherwise. 
 |-------|------|-------------|
 | `nodeId` | String | The human-task node ID |
 | `nodeName` | String | The human-task node name |
+| `title` | String | The task title (e.g. an inbox subject): the node's `title` expression resolved, else the node name |
 | `description` | String | Instructions for the person completing the task |
 | `inputs` | Map<String, Object> | Display labels as keys, resolved context values as values |
 | `outputs` | List<OutputDefinition> | The form fields to complete the task (see below) |
 
 Input expression strings resolve against instance context; non-string JSON inputs remain literals.
+
+`title` is resolved against the instance context each time the info is read, and non-string results are
+converted to text. It falls back to `nodeName` when the node has no title, the expression fails, or it
+yields `null`; a failing title is logged as a warning and never blocks the task. Use `title` rather than
+`nodeName` as the subject of task inbox items.
 
 ### Output field metadata
 

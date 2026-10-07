@@ -57,10 +57,12 @@ public sealed interface NodeConfig permits NodeConfig.Start, NodeConfig.End, Nod
         public List<Field> outputs() { return records(wire, "outputs", Field::new); }
     }
 
-    /** Human-task instructions, expression/literal inputs, and form output metadata. */
+    /** Human-task title expression, instructions, expression/literal inputs, and form output metadata. */
     record HumanTask(Map<String, Object> wire) implements NodeConfig {
         /** Snapshots caller-owned configuration. */
         public HumanTask { wire = snapshot(wire); }
+        /** Returns the EL expression computing the task title (e.g. an inbox subject), or null. */
+        public String title() { return text(wire, "title"); }
         /** Returns task instructions, or null. */
         public String description() { return text(wire, "description"); }
         /** Returns literal or expression-valued inputs; absent/null means empty. */

@@ -41,6 +41,9 @@ describe('shared expression conformance', () => {
                 if (fixture.browser === 'unsupported') {
                     expect(() => resolveExpression(fixture.expression, scope)).toThrow(/unsupported.*browser/i);
                 }
+            } else if (fixture.error) {
+                expect(isValidExpression(fixture.expression)).toBe(true);
+                expect(() => resolveExpression(fixture.expression, scope)).toThrow();
             } else {
                 expect(isValidExpression(fixture.expression)).toBe(true);
                 expect(resolveExpression(fixture.expression, scope)).toEqual(fixture.value);

@@ -617,6 +617,7 @@ function mergeEvaluations(
 
 function enterEntry(node: WorkflowNode, edge: WorkflowEdge | undefined, context: Record<string, unknown>): HistoryEntry {
     const input = recordedInputs(node, context);
+    const title = node.type === 'human-task' ? taskTitle(node, context) : undefined;
     return {
         nodeId: node.id,
         nodeName: node.name,
@@ -624,7 +625,28 @@ function enterEntry(node: WorkflowNode, edge: WorkflowEdge | undefined, context:
         edgeCondition: edge?.condition,
         enteredOn: new Date().toISOString(),
         ...(input ? { input } : {}),
+        ...(title !== undefined ? { title } : {}),
     };
+}
+
+/**
+ * Computes a human task's title, mirroring the engine: the `title` expression resolved against the
+ * context and converted to text, or the node name when the title is absent, blank, fails, or yields null.
+ *
+ * @param node the human-task node
+ * @param context the context at entry time
+ * @return the task title
+ */
+export function taskTitle(node: WorkflowNode, context: Record<string, unknown>): string {
+    const expression = node.type === 'human-task' ? node.config.title : undefined;
+    if (typeof expression !== 'string' || expression.trim() === '') return node.name;
+    try {
+        const value = resolveExpression(expression, { context });
+        if (value === null || value === undefined) return node.name;
+        return typeof value === 'object' ? JSON.stringify(value) : String(value);
+    } catch {
+        return node.name;
+    }
 }
 
 /**

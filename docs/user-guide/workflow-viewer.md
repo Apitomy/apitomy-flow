@@ -73,6 +73,11 @@ view follows the latest visit as new history arrives; a visit picker lets you in
 Parallel history is grouped by branch. Clicking the canvas clears selection. Host right-click actions
 are independent of this built-in inspection.
 
+The State view shows each visit's recorded **Inputs** and **Outputs**. For human-task nodes it also shows
+the task **Title** computed for that visit (the node name for history recorded before titles existed) and
+the task **Description**. Long values are shortened; use the expand button to open the full value in a
+dialog, where JSON is formatted and highlighted.
+
 The viewer responds to new `workflow` and `instance` props. Replace changed objects/arrays rather than
 mutating them in place. Supply the definition that belongs to the instance: automatic version pinning is
 not implemented (see [current contracts](current-contracts.md)).

@@ -44,5 +44,13 @@
     { "name": "map literal", "expression": "{'key': 7}['key']", "value": 7, "browser": "unsupported" },
     { "name": "lambda", "expression": "(x -> x + 1)(2)", "value": 3, "browser": "unsupported" },
     { "name": "assignment and sequence", "expression": "x = 1; x + 2", "value": 3, "browser": "unsupported" },
-    { "name": "string concatenation", "expression": "'a' += 'b'", "value": "ab", "browser": "unsupported" }
+    { "name": "string concatenation", "expression": "'a' += 'b'", "value": "ab" },
+    { "name": "concatenation with context", "expression": "'Review ' += context.id", "context": { "id": "CVE-1" }, "value": "Review CVE-1" },
+    { "name": "concatenation chain", "expression": "context.a += ':' += context.b", "context": { "a": "x", "b": "y" }, "value": "x:y" },
+    { "name": "concatenation with null fails", "expression": "'a' += context.missing", "error": true },
+    { "name": "concatenation with number and boolean", "expression": "'n' += 42 += true", "value": "n42true" },
+    { "name": "concatenation binds looser than addition", "expression": "1 + 2 += 3", "value": "33" },
+    { "name": "concatenation binds tighter than equality", "expression": "'a' += 'b' == 'ab'", "value": true },
+    { "name": "concatenation in ternary arm", "expression": "context.urgent ? 'URGENT: ' += context.id : context.id", "context": { "urgent": true, "id": "T-1" }, "value": "URGENT: T-1" },
+    { "name": "missing concatenation operand", "expression": "'a' +=", "invalid": true }
 ]

@@ -8,6 +8,7 @@ import { toReactFlowNodes, toReactFlowEdges } from '../utils/conversion.ts';
 import { nodeVisits, nodeVisitsByBranch, type NodeBranchVisits } from '../utils/nodeHistory.ts';
 import { getNodeDefinition } from '../utils/nodeDefinition.ts';
 import { nodeInputRows } from '../utils/nodeInputs.ts';
+import { humanTaskSummary } from '../utils/humanTaskSummary.ts';
 import { getNodeStatusBadge } from '../utils/nodeStatus.ts';
 import { activeNodeIds, activeEdgeIds } from '../utils/parallelView.ts';
 import { type FlowTheme } from './WorkflowEditor.tsx';
@@ -342,6 +343,7 @@ function NodeDetail({ node, history, visits, visitsByBranch, visitIndex, onSelec
 
   const wasVisited = !!history;
   const inputRows = nodeInputRows(node, history);
+  const taskSummary = humanTaskSummary(node, history);
 
   // The node is only "current" for the visit actually in progress — i.e. the
   // most recent visit. An earlier visit of a looping node has completed, even
@@ -422,6 +424,18 @@ function NodeDetail({ node, history, visits, visitsByBranch, visitIndex, onSelec
               </span>
             </div>
           )}
+          {taskSummary?.title !== undefined && (
+            <div className="workflow-viewer__context-entry">
+              <span className="workflow-viewer__context-key">Title</span>
+              <ValueDisplay value={taskSummary.title} title="Title" theme={theme} />
+            </div>
+          )}
+          {taskSummary?.description !== undefined && (
+            <div className="workflow-viewer__context-entry">
+              <span className="workflow-viewer__context-key">Description</span>
+              <ValueDisplay value={taskSummary.description} title="Description" theme={theme} />
+            </div>
+          )}
           {inputRows.length > 0 && (
             <>
               <div className="workflow-viewer__section-label">Inputs</div>
@@ -461,12 +475,18 @@ function NodeDetail({ node, history, visits, visitsByBranch, visitIndex, onSelec
 function NodeDefinitionDetail({ node }: { node: WorkflowViewerProps['workflow']['nodes'][number] }) {
   const definition = useMemo(() => getNodeDefinition(node), [node]);
 
-  if (!definition.description && definition.sections.length === 0) {
+  if (!definition.title && !definition.description && definition.sections.length === 0) {
     return <div className="workflow-viewer__context-empty">No definition details</div>;
   }
 
   return (
     <>
+      {definition.title && (
+        <div className="workflow-viewer__context-entry">
+          <span className="workflow-viewer__context-key">Title (EL expression)</span>
+          <span className="workflow-viewer__context-value">{definition.title}</span>
+        </div>
+      )}
       {definition.description && (
         <div className="workflow-viewer__context-entry">
           <span className="workflow-viewer__context-key">Description</span>
