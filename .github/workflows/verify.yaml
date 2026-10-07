@@ -72,7 +72,14 @@ jobs:
         run: npm ci
         working-directory: ui
       - name: Install Chromium and OS dependencies
-        run: npx playwright install --with-deps chromium
+        # Headless runs only need Chromium's headless shell. Bound the step and make apt retry
+        # with short timeouts, so an unresponsive Ubuntu mirror fails fast instead of hanging
+        # until the job timeout.
+        run: |
+          printf 'Acquire::Retries "3";\nAcquire::http::Timeout "30";\nAcquire::https::Timeout "30";\n' \
+            | sudo tee /etc/apt/apt.conf.d/99ci-network > /dev/null
+          npx playwright install --with-deps --only-shell chromium
+        timeout-minutes: 5
         working-directory: ui
       - name: Browser contracts and packed consumer
         run: npm run test:browser
