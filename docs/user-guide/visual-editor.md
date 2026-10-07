@@ -141,7 +141,8 @@ A panel on the right side shows configuration fields for the selected node or ed
 - Action Type (action nodes)
 - Event Type, Match Expressions, Lookback (`run-start` default, `none`, or a duration), and Output
   mappings (receive-event nodes)
-- Description, Inputs (label/expression pairs), and Outputs (human task nodes). Each output is a
+- Title (an EL expression for the task inbox subject; blank uses the node name), Description, Inputs
+  (label/expression pairs), and Outputs (human task nodes). Each output is a
   form field the assignee fills in to complete the task and supports rich authoring metadata: name,
   type dropdown, required checkbox, label, help/description text, a widget (`text` / `textarea` /
   `select`), a default value, and — for the `select` widget — an editable list of label/value
@@ -250,9 +251,10 @@ aid; host execution and full Jakarta EL behavior require verification with the J
    nodes route through immediately (no input needed); real engine waits pause for external completion.
 
 **Expression support:** the browser supports JSON property/index access, literals, arithmetic,
-comparisons, logical operators, `empty`, and lazy ternary expressions (`condition ? yes : no`).
-Conditions select an edge only when the result is boolean `true`. Method/function calls, collection
-literals, lambdas, assignments, sequences and concatenation require the engine's full Jakarta EL.
+comparisons, logical operators, `empty`, string concatenation (`'Review ' += context.id`), and lazy
+ternary expressions (`condition ? yes : no`). Conditions select an edge only when the result is boolean
+`true`. Method/function calls, collection literals, lambdas, assignments and sequences require the
+engine's full Jakarta EL.
 The editor retains such expressions and reports `UNSUPPORTED_EXPRESSION_DIALECT`, rather than calling
 them malformed. This warning means the browser cannot validate them; Java validation remains authoritative.
 Trying to simulate them produces an explicit unsupported-dialect error. Edge conditions and event-output

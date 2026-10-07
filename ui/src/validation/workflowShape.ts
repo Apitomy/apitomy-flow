@@ -55,7 +55,10 @@ export function normalizeWorkflow(raw: unknown): {
         const optionalString = (key: string, code: string) => field(config[key] == null || typeof config[key] === 'string',
             code, `config.${key}`, 'a string');
         if (node.type === 'action') optionalString('actionType', 'INVALID_ACTION_TYPE_VALUE');
-        if (node.type === 'human-task') optionalString('description', 'INVALID_TASK_DESCRIPTION');
+        if (node.type === 'human-task') {
+            optionalString('title', 'INVALID_TASK_TITLE');
+            optionalString('description', 'INVALID_TASK_DESCRIPTION');
+        }
         if (node.type === 'wait') optionalString('duration', 'INVALID_WAIT_DURATION');
         if (node.type === 'receive-event') {
             optionalString('eventType', 'INVALID_EVENT_TYPE_VALUE');

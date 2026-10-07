@@ -387,6 +387,12 @@ public class WorkflowValidator {
             .filter(n -> n.type() == NodeType.HUMAN_TASK)
             .forEach(node -> {
                 NodeConfig.HumanTask config = (NodeConfig.HumanTask) node.typedConfig();
+                String title = config.title();
+                if (title != null && !title.isBlank() && !conditionEvaluator.isValid(title)) {
+                    // A warning: at runtime a failing title falls back to the node name.
+                    problems.add(ValidationProblem.warning("INVALID_TASK_TITLE_EXPRESSION",
+                        "Human task title is not valid EL: " + title, node.id()));
+                }
                 if (!node.config().containsKey("description")) {
                     problems.add(ValidationProblem.warning("MISSING_TASK_DESCRIPTION",
                         "Human task node has no description", node.id()));

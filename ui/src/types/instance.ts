@@ -21,6 +21,11 @@ export interface HistoryEntry {
    */
   input?: Record<string, unknown>;
   /**
+   * The task title computed when a human-task node was entered: its resolved `title` expression, or the
+   * node name. Absent for other node types and for history recorded before titles existed.
+   */
+  title?: string;
+  /**
    * The branch this visit belongs to. The root (non-parallel) branch uses `"root"`; a missing value
    * also denotes the root, preserving back-compat for existing linear histories.
    */

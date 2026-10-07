@@ -131,7 +131,7 @@ const linearMajorRevisionCompare: Workflow = {
         actionType: 'send-email',
         inputs: {
           to: "'security-ops@apitomy.io'",
-          subject: "'CVE triage update: ' + context.cveId",
+          subject: "'CVE triage update: ' += context.cveId",
           body: 'context.qaNotes',
         },
         outputs: [{ name: 'messageId', type: 'string', required: true }],

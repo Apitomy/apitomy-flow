@@ -34,6 +34,7 @@ export const cveTriage: Workflow = {
     {
       id: 'triage', type: 'human-task', name: 'Triage Decision',
       config: {
+        title: "'Triage ' += context.cveId += ' (' += context.severity += ' severity)'",
         description: 'Review the CVE analysis and determine if this vulnerability affects our systems.',
         inputs: {
           'CVE ID': 'context.cveId',
@@ -108,7 +109,7 @@ export const triageInstance: WorkflowInstance = {
   history: [
     { nodeId: 'start', nodeName: 'Start', enteredOn: '2024-01-01T00:00:00Z', completedOn: '2024-01-01T00:00:00Z', input: { cveId: 'CVE-2024-1234' } },
     { nodeId: 'analyze', nodeName: 'Analyze CVE', edgeId: 'e1', enteredOn: '2024-01-01T00:00:01Z', input: { 'CVE ID': 'CVE-2024-1234' }, completedOn: '2024-01-01T00:00:05Z', output: { severity: 'high', affectedVersions: '1.0.0 - 1.3.2' } },
-    { nodeId: 'triage', nodeName: 'Triage Decision', edgeId: 'e2', enteredOn: '2024-01-01T00:00:05Z', input: { 'CVE ID': 'CVE-2024-1234', 'Severity': 'high', 'Affected Versions': '1.0.0 - 1.3.2' } },
+    { nodeId: 'triage', nodeName: 'Triage Decision', title: 'Triage CVE-2024-1234 (high severity)', edgeId: 'e2', enteredOn: '2024-01-01T00:00:05Z', input: { 'CVE ID': 'CVE-2024-1234', 'Severity': 'high', 'Affected Versions': '1.0.0 - 1.3.2' } },
   ],
   createdOn: '2024-01-01T00:00:00Z',
   updatedOn: '2024-01-01T00:00:05Z',
@@ -162,7 +163,7 @@ export const completedTriageInstance: WorkflowInstance = {
   history: [
     { nodeId: 'start', nodeName: 'Start', enteredOn: '2024-01-01T00:00:00Z', completedOn: '2024-01-01T00:00:00Z', input: { cveId: 'CVE-2024-1234' } },
     { nodeId: 'analyze', nodeName: 'Analyze CVE', edgeId: 'e1', enteredOn: '2024-01-01T00:00:01Z', input: { 'CVE ID': 'CVE-2024-1234' }, completedOn: '2024-01-01T00:00:05Z', output: { severity: 'high', affectedVersions: '1.0.0 - 1.3.2' } },
-    { nodeId: 'triage', nodeName: 'Triage Decision', edgeId: 'e2', enteredOn: '2024-01-01T00:00:05Z', input: { 'CVE ID': 'CVE-2024-1234', 'Severity': 'high', 'Affected Versions': '1.0.0 - 1.3.2' }, completedOn: '2024-01-01T00:02:00Z', output: { affected: true, triageNotes: 'Confirmed exploitable in production; prioritize patch.' } },
+    { nodeId: 'triage', nodeName: 'Triage Decision', title: 'Triage CVE-2024-1234 (high severity)', edgeId: 'e2', enteredOn: '2024-01-01T00:00:05Z', input: { 'CVE ID': 'CVE-2024-1234', 'Severity': 'high', 'Affected Versions': '1.0.0 - 1.3.2' }, completedOn: '2024-01-01T00:02:00Z', output: { affected: true, triageNotes: 'Confirmed exploitable in production; prioritize patch.' } },
     { nodeId: 'mitigate', nodeName: 'Plan Mitigation', edgeId: 'e3', edgeCondition: 'context.affected == true', enteredOn: '2024-01-01T00:02:00Z', input: { 'CVE ID': 'CVE-2024-1234', 'Severity': 'high', 'Triage Notes': 'Confirmed exploitable in production; prioritize patch.' }, completedOn: '2024-01-01T00:02:30Z', output: { mitigationPlan: longMitigationPlan } },
     { nodeId: 'end-mitigated', nodeName: 'Mitigated', edgeId: 'e5', enteredOn: '2024-01-01T00:02:30Z', completedOn: '2024-01-01T00:02:30Z' },
   ],
@@ -205,9 +206,9 @@ export const loopingTriageInstance: WorkflowInstance = {
   history: [
     { nodeId: 'start', nodeName: 'Start', enteredOn: '2024-01-01T00:00:00Z', completedOn: '2024-01-01T00:00:00Z', input: { cveId: 'CVE-2024-1234' } },
     { nodeId: 'analyze', nodeName: 'Analyze CVE', edgeId: 'e1', enteredOn: '2024-01-01T00:00:01Z', input: { 'CVE ID': 'CVE-2024-1234' }, completedOn: '2024-01-01T00:00:05Z', output: { severity: 'medium', affectedVersions: '1.0.0 - 1.2.0' } },
-    { nodeId: 'triage', nodeName: 'Triage Decision', edgeId: 'e2', enteredOn: '2024-01-01T00:00:05Z', input: { 'CVE ID': 'CVE-2024-1234', 'Severity': 'medium', 'Affected Versions': '1.0.0 - 1.2.0' }, completedOn: '2024-01-01T00:01:00Z', output: { affected: false, needsReanalysis: true, triageNotes: 'Needs a closer look at newer versions.' } },
+    { nodeId: 'triage', nodeName: 'Triage Decision', title: 'Triage CVE-2024-1234 (medium severity)', edgeId: 'e2', enteredOn: '2024-01-01T00:00:05Z', input: { 'CVE ID': 'CVE-2024-1234', 'Severity': 'medium', 'Affected Versions': '1.0.0 - 1.2.0' }, completedOn: '2024-01-01T00:01:00Z', output: { affected: false, needsReanalysis: true, triageNotes: 'Needs a closer look at newer versions.' } },
     { nodeId: 'analyze', nodeName: 'Analyze CVE', edgeId: 'e7', edgeCondition: 'context.needsReanalysis == true', enteredOn: '2024-01-01T00:01:00Z', input: { 'CVE ID': 'CVE-2024-1234' }, completedOn: '2024-01-01T00:01:20Z', output: { severity: 'high', affectedVersions: '1.0.0 - 1.3.2' } },
-    { nodeId: 'triage', nodeName: 'Triage Decision', edgeId: 'e2', enteredOn: '2024-01-01T00:01:20Z', input: { 'CVE ID': 'CVE-2024-1234', 'Severity': 'high', 'Affected Versions': '1.0.0 - 1.3.2' } },
+    { nodeId: 'triage', nodeName: 'Triage Decision', title: 'Triage CVE-2024-1234 (high severity)', edgeId: 'e2', enteredOn: '2024-01-01T00:01:20Z', input: { 'CVE ID': 'CVE-2024-1234', 'Severity': 'high', 'Affected Versions': '1.0.0 - 1.3.2' } },
   ],
   createdOn: '2024-01-01T00:00:00Z',
   updatedOn: '2024-01-01T00:01:20Z',
@@ -247,6 +248,7 @@ export const parallelForkJoinWorkflow: Workflow = {
     {
       id: 'analyze', type: 'human-task', name: 'Assess Impact',
       config: {
+        title: "'Assess impact of ' += context.cveId",
         description: 'Security analyst reviews severity and confirms impact.',
         inputs: {
           'CVE ID': 'context.cveId',
@@ -264,7 +266,7 @@ export const parallelForkJoinWorkflow: Workflow = {
         actionType: 'send-email',
         inputs: {
           to: "'soc@apitomy.io'",
-          subject: "'CVE Alert: ' + context.cveId",
+          subject: "'CVE Alert: ' += context.cveId",
           body: 'context.description',
         },
         outputs: [
@@ -313,7 +315,7 @@ export const parallelForkJoinInstance: WorkflowInstance = {
   history: [
     { nodeId: 'start', nodeName: 'Start', enteredOn: '2026-09-09T13:00:00Z', completedOn: '2026-09-09T13:00:00Z', input: { cveId: 'CVE-2026-1337' }, branchId: 'root' },
     { nodeId: 'fetch', nodeName: 'Fetch CVE', edgeId: 'pf1', enteredOn: '2026-09-09T13:00:01Z', input: { 'CVE ID': 'CVE-2026-1337' }, completedOn: '2026-09-09T13:00:03Z', output: { severity: 'critical', description: 'Remote code execution in dependency parser', record: cveRecord }, branchId: 'root' },
-    { nodeId: 'analyze', nodeName: 'Assess Impact', edgeId: 'pf2', enteredOn: '2026-09-09T13:00:03Z', input: { 'CVE ID': 'CVE-2026-1337', 'Severity': 'critical' }, branchId: 'root.0' },
+    { nodeId: 'analyze', nodeName: 'Assess Impact', title: 'Assess impact of CVE-2026-1337', edgeId: 'pf2', enteredOn: '2026-09-09T13:00:03Z', input: { 'CVE ID': 'CVE-2026-1337', 'Severity': 'critical' }, branchId: 'root.0' },
     { nodeId: 'notify', nodeName: 'Notify Team', edgeId: 'pf3', enteredOn: '2026-09-09T13:00:03Z', input: { to: 'soc@apitomy.io', subject: 'CVE Alert: CVE-2026-1337', body: 'Remote code execution in dependency parser' }, branchId: 'root.1' },
   ],
   createdOn: '2026-09-09T13:00:00Z',
@@ -338,7 +340,7 @@ export const loopWorkflow: Workflow = {
         inputs: {
           project: "'SEC'",
           issueType: "'Task'",
-          summary: "'Mitigate ' + context.ticketId",
+          summary: "'Mitigate ' += context.ticketId",
         },
         outputs: [
           { name: 'issueKey', type: 'string', required: true },
@@ -349,6 +351,7 @@ export const loopWorkflow: Workflow = {
     {
       id: 'review', type: 'human-task', name: 'Review Plan',
       config: {
+        title: "'Review mitigation plan ' += context.issueKey",
         description: 'Approve the mitigation plan or request changes.',
         inputs: {
           'Issue Key': 'context.issueKey',
@@ -382,7 +385,7 @@ export const loopWorkflow: Workflow = {
         actionType: 'send-email',
         inputs: {
           to: "'secops@apitomy.io'",
-          subject: "'Plan approved: ' + context.issueKey",
+          subject: "'Plan approved: ' += context.issueKey",
           body: 'context.revisedPlan',
         },
         outputs: [
@@ -424,9 +427,9 @@ export const loopWorkflowInstance: WorkflowInstance = {
   history: [
     { nodeId: 'start', nodeName: 'Start', enteredOn: '2026-09-09T14:10:00Z', completedOn: '2026-09-09T14:10:00Z', input: { ticketId: 'SEC-42' }, branchId: 'root' },
     { nodeId: 'draft', nodeName: 'Draft Plan', edgeId: 'lp1', enteredOn: '2026-09-09T14:10:01Z', input: { project: 'SEC', issueType: 'Task', summary: 'Mitigate SEC-42' }, completedOn: '2026-09-09T14:10:05Z', output: { issueKey: 'SEC-42' }, branchId: 'root' },
-    { nodeId: 'review', nodeName: 'Review Plan', edgeId: 'lp2', enteredOn: '2026-09-09T14:10:05Z', input: { 'Issue Key': 'SEC-42', 'Current Plan': null }, completedOn: '2026-09-09T14:11:00Z', output: { reviewerApproved: false, reviewNotes: 'Please tighten rollback steps.' }, branchId: 'root' },
+    { nodeId: 'review', nodeName: 'Review Plan', title: 'Review mitigation plan SEC-42', edgeId: 'lp2', enteredOn: '2026-09-09T14:10:05Z', input: { 'Issue Key': 'SEC-42', 'Current Plan': null }, completedOn: '2026-09-09T14:11:00Z', output: { reviewerApproved: false, reviewNotes: 'Please tighten rollback steps.' }, branchId: 'root' },
     { nodeId: 'revise', nodeName: 'Revise Plan', edgeId: 'lp4', enteredOn: '2026-09-09T14:11:00Z', input: { url: 'https://planner.apitomy.io/revise', method: 'POST', body: { notes: 'Please tighten rollback steps.' } }, completedOn: '2026-09-09T14:12:30Z', output: { revisedPlan: 'Updated rollout with rollback verification checklist.' }, branchId: 'root' },
-    { nodeId: 'review', nodeName: 'Review Plan', edgeId: 'lp5', enteredOn: '2026-09-09T14:12:30Z', input: { 'Issue Key': 'SEC-42', 'Current Plan': 'Updated rollout with rollback verification checklist.' }, branchId: 'root' },
+    { nodeId: 'review', nodeName: 'Review Plan', title: 'Review mitigation plan SEC-42', edgeId: 'lp5', enteredOn: '2026-09-09T14:12:30Z', input: { 'Issue Key': 'SEC-42', 'Current Plan': 'Updated rollout with rollback verification checklist.' }, branchId: 'root' },
   ],
   createdOn: '2026-09-09T14:10:00Z',
   updatedOn: '2026-09-09T14:12:30Z',

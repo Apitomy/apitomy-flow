@@ -280,6 +280,46 @@ describe('validateWorkflow', () => {
       expect(hasProblem(validateWorkflow(w), 'EMPTY_TASK_INPUT_EXPRESSION')).toBe(false);
     });
 
+    it('INVALID_TASK_TITLE_EXPRESSION warning for malformed title', () => {
+      const w = workflow(
+        [
+          node('start', 'start'),
+          node('t', 'human-task', { title: "'Review ' +=", description: 'd', outputs: [{ name: 'x', type: 'string', required: true }] }),
+          node('end', 'end'),
+        ],
+        [edge('e1', 'start', 't'), edge('e2', 't', 'end')],
+      );
+      const found = validateWorkflow(w).find(p => p.code === 'INVALID_TASK_TITLE_EXPRESSION');
+      expect(found?.severity).toBe('warning');
+      expect(found?.nodeId).toBe('t');
+    });
+
+    it('accepts a concatenating title expression', () => {
+      const w = workflow(
+        [
+          node('start', 'start'),
+          node('t', 'human-task', { title: "'Review ' += context.id", description: 'd', outputs: [{ name: 'x', type: 'string', required: true }] }),
+          node('end', 'end'),
+        ],
+        [edge('e1', 'start', 't'), edge('e2', 't', 'end')],
+      );
+      const codes = validateWorkflow(w).map(p => p.code);
+      expect(codes).not.toContain('INVALID_TASK_TITLE_EXPRESSION');
+      expect(codes).not.toContain('UNSUPPORTED_EXPRESSION_DIALECT');
+    });
+
+    it('UNSUPPORTED_EXPRESSION_DIALECT for a title using engine-only syntax', () => {
+      const w = workflow(
+        [
+          node('start', 'start'),
+          node('t', 'human-task', { title: "context.id.toUpperCase()", description: 'd', outputs: [{ name: 'x', type: 'string', required: true }] }),
+          node('end', 'end'),
+        ],
+        [edge('e1', 'start', 't'), edge('e2', 't', 'end')],
+      );
+      expect(hasProblem(validateWorkflow(w), 'UNSUPPORTED_EXPRESSION_DIALECT')).toBe(true);
+    });
+
     it('MISSING_TASK_DESCRIPTION for whitespace-only description', () => {
       const w = workflow(
         [

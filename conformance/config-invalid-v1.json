@@ -5,6 +5,7 @@
     { "type": "receive-event", "config": { "match": [null] }, "code": "INVALID_MATCH_TYPE" },
     { "type": "receive-event", "config": { "lookback": 10 }, "code": "INVALID_LOOKBACK" },
     { "type": "human-task", "config": { "outputs": [null] }, "code": "INVALID_OUTPUT_DEFINITION" },
+    { "type": "human-task", "config": { "title": 42 }, "code": "INVALID_TASK_TITLE" },
     { "type": "start", "config": { "inputs": [{ "name": "id", "contextKey": 42 }] }, "code": "INVALID_INPUT_DEFINITION" },
     { "type": "start", "config": { "inputs": [{ "name": "id", "label": 42 }] }, "code": "INVALID_INPUT_DEFINITION" },
     { "type": "start", "config": { "inputs": [{ "name": "id", "widget": [] }] }, "code": "INVALID_INPUT_DEFINITION" },

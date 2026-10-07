@@ -21,6 +21,8 @@ import java.util.Map;
  *                      declared workflow inputs for a start node, resolved {@code inputs} expressions
  *                      for action and human-task nodes; {@code null} when the node takes no inputs
  *                      or they could not be resolved
+ * @param title         the task title computed when a human-task node was entered (its resolved
+ *                      {@code title} expression, or the node name); {@code null} for other node types
  */
 public record HistoryEntry(
     String nodeId,
@@ -31,12 +33,23 @@ public record HistoryEntry(
     @JsonFormat(shape = JsonFormat.Shape.STRING) Instant completedOn,
     Map<String, Object> output,
     String branchId,
-    @JsonInclude(JsonInclude.Include.NON_NULL) Map<String, Object> input
+    @JsonInclude(JsonInclude.Include.NON_NULL) Map<String, Object> input,
+    @JsonInclude(JsonInclude.Include.NON_NULL) String title
 ) {
     /** Owns output and input data while preserving null for an entry without them. */
     public HistoryEntry {
         output = JsonSnapshots.map(output);
         input = JsonSnapshots.map(input);
+    }
+
+    /**
+     * Back-compat constructor for callers that predate title recording; sets {@code title} to
+     * {@code null}.
+     */
+    public HistoryEntry(String nodeId, String nodeName, String edgeId, String edgeCondition,
+                        Instant enteredOn, Instant completedOn, Map<String, Object> output, String branchId,
+                        Map<String, Object> input) {
+        this(nodeId, nodeName, edgeId, edgeCondition, enteredOn, completedOn, output, branchId, input, null);
     }
 
     /**

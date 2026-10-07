@@ -72,7 +72,8 @@ If preflight finds errors, semantic checks do not run on the malformed data.
 
 Examples include `INVALID_WORKFLOW`, `INVALID_NODE`, `INVALID_EDGE`, `INVALID_NODE_TYPE`,
 `INVALID_NODE_POSITION`, `INVALID_INPUTS_TYPE`, `INVALID_OUTPUTS_TYPE`, `INVALID_INPUT_DEFINITION`,
-`INVALID_OUTPUT_DEFINITION`, `INVALID_TASK_DESCRIPTION`, `INVALID_MATCH_TYPE`, and `INVALID_LOOKBACK`. Browser outer-field
+`INVALID_OUTPUT_DEFINITION`, `INVALID_TASK_TITLE`, `INVALID_TASK_DESCRIPTION`, `INVALID_MATCH_TYPE`, and
+`INVALID_LOOKBACK`. Browser outer-field
 checks additionally include `INVALID_NODES`, `INVALID_EDGES`, `INVALID_NODE_CONFIG`, `INVALID_NODE_NAME`,
 `INVALID_WORKFLOW_DESCRIPTION`, `INVALID_WORKFLOW_VERSION`, and edge field-type diagnostics.
 Some codes in later tables can therefore be errors for malformed types and warnings for missing values.
@@ -147,6 +148,7 @@ Some codes in later tables can therefore be errors for malformed types and warni
 | `DUPLICATE_OUTPUT_NAME` | Action or human-task node has duplicate output names |
 | `EMPTY_ACTION_INPUT_EXPRESSION` | Action node input has an empty or blank EL expression |
 | `MISSING_TASK_DESCRIPTION` | Human task node has no description |
+| `INVALID_TASK_TITLE_EXPRESSION` | Human task `title` is not valid EL (the node name is used at runtime) |
 | `MISSING_TASK_OUTPUTS` | Human task node has no outputs defined |
 | `EMPTY_TASK_INPUT_EXPRESSION` | Human task input has an empty or blank EL expression |
 | `MISSING_WAIT_DURATION` | Wait node has no duration configured |

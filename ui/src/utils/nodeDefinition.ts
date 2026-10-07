@@ -27,6 +27,8 @@ export interface NodeDefinitionView {
   id: string;
   type: string;
   name: string;
+  /** Title EL expression (human-task nodes only), as authored. */
+  title?: string;
   /** Free-text instructions (currently only populated for human-task nodes). */
   description?: string;
   sections: DefinitionSection[];
@@ -35,7 +37,7 @@ export interface NodeDefinitionView {
 /** Fields consumed directly by the special-cased sections below, and therefore excluded from the generic Config fallback. */
 const HANDLED_CONFIG_KEYS: Record<string, Set<string>> = {
   start: new Set(['inputs']),
-  'human-task': new Set(['description', 'inputs', 'outputs']),
+  'human-task': new Set(['title', 'description', 'inputs', 'outputs']),
   action: new Set(['actionType', 'inputs', 'outputs']),
   'receive-event': new Set(['outputs', 'lookback', 'correlationKey']),
 };
@@ -176,9 +178,11 @@ export function getNodeDefinition(node: WorkflowNode): NodeDefinitionView {
 
   let sections: DefinitionSection[];
   let description: string | undefined;
+  let title: string | undefined;
   if (node.type === 'start') {
     sections = [startInputsSection(node.config ?? {})].filter((s): s is DefinitionSection => s !== null);
   } else if (node.type === 'human-task') {
+    title = typeof config.title === 'string' && config.title.trim() ? config.title : undefined;
     description = typeof config.description === 'string' && config.description ? config.description : undefined;
     sections = [mapInputsSection(node.config ?? {}), humanTaskOutputsSection(node.config ?? {})]
       .filter((s): s is DefinitionSection => s !== null);
@@ -198,5 +202,5 @@ export function getNodeDefinition(node: WorkflowNode): NodeDefinitionView {
   const generic = genericConfigSection(config, handledKeys);
   if (generic) sections = [...sections, generic];
 
-  return { id: node.id, type: node.type, name: node.name, description, sections };
+  return { id: node.id, type: node.type, name: node.name, title, description, sections };
 }

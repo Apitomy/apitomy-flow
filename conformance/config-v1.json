@@ -18,7 +18,7 @@
                 "x-host": { "nested": [null, { "enabled": true }] }
             } },
             { "id": "human", "type": "human-task", "name": "Human", "config": {
-                "description": null, "inputs": null,
+                "title": "'Answer ' += context.id", "description": null, "inputs": null,
                 "outputs": [{ "name": "answer", "type": "string", "required": false,
                     "label": null, "description": null, "widget": "select", "defaultValue": null,
                     "options": [{ "label": "Yes", "value": "yes", "x-option": 1 }], "contextKey": null }]

@@ -318,7 +318,32 @@ public class WorkflowEngine {
         List<OutputDefinition> outputs = config.outputs().stream().map(values::humanTaskOutput).toList();
 
         return new HumanTaskInfo(node.id(), node.name(), description,
-            Collections.unmodifiableMap(resolvedInputs), outputs);
+            Collections.unmodifiableMap(resolvedInputs), outputs, taskTitle(node, config, instance.context()));
+    }
+
+    /**
+     * Resolves a human task's title expression against the context. A missing or blank title, a failing
+     * expression, or a null result falls back to the node name; failures are logged, never raised, so a bad
+     * title cannot block a task.
+     *
+     * @param node    the human-task node
+     * @param config  the node's typed configuration
+     * @param context the instance context
+     * @return the resolved title, or the node name
+     */
+    private String taskTitle(WorkflowNode node, NodeConfig.HumanTask config, Map<String, Object> context) {
+        try {
+            String expression = config.title();
+            if (expression == null || expression.isBlank()) {
+                return node.name();
+            }
+            Object value = conditionEvaluator.resolve(expression, context);
+            return value == null ? node.name() : String.valueOf(value);
+        } catch (Exception error) {
+            log.warn("Title expression failed for human task {}; using the node name: {}",
+                node.id(), error.getMessage());
+            return node.name();
+        }
     }
 
     /**
@@ -926,7 +951,9 @@ public class WorkflowEngine {
             .addHistory(new HistoryEntry(node.id(), node.name(),
                 viaEdge != null ? viaEdge.id() : null,
                 viaEdge != null ? viaEdge.condition() : null,
-                now, null, null, branchId, values.recordedInputs(node, instance.context())))
+                now, null, null, branchId, values.recordedInputs(node, instance.context()),
+                node.type() == NodeType.HUMAN_TASK
+                    ? taskTitle(node, (NodeConfig.HumanTask) node.typedConfig(), instance.context()) : null))
             .updatedOn(now)
             .build();
         WorkflowInstance enteredInstance = instance;
@@ -1212,7 +1239,7 @@ public class WorkflowEngine {
             boolean sameBranch = Objects.equals(h.branchId(), branchId);
             if (sameBranch && h.nodeId().equals(nodeId) && h.completedOn() == null) {
                 history.set(i, new HistoryEntry(h.nodeId(), h.nodeName(), h.edgeId(), h.edgeCondition(),
-                    h.enteredOn(), completedOn, output != null ? output : h.output(), h.branchId(), h.input()));
+                    h.enteredOn(), completedOn, output != null ? output : h.output(), h.branchId(), h.input(), h.title()));
                 break;
             }
         }

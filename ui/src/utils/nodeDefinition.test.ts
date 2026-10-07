@@ -155,6 +155,20 @@ describe('getNodeDefinition', () => {
     expect(def.description).toBe('Review the order before approving.');
   });
 
+  it('exposes a human-task node\'s title expression and keeps it out of the generic Config section', () => {
+    const def = getNodeDefinition(node({
+      type: 'human-task',
+      config: { title: "'Review ' += context.orderId" },
+    }));
+
+    expect(def.title).toBe("'Review ' += context.orderId");
+    expect(def.sections.find(s => s.label === 'Config')).toBeUndefined();
+  });
+
+  it('omits a blank human-task title', () => {
+    expect(getNodeDefinition(node({ type: 'human-task', config: { title: '  ' } })).title).toBeUndefined();
+  });
+
   it('builds an Inputs section (as a field list, not JSON) from a human-task node\'s config.inputs map', () => {
     const def = getNodeDefinition(node({
       type: 'human-task',

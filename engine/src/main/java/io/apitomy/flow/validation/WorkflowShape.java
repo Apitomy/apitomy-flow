@@ -52,7 +52,10 @@ final class WorkflowShape {
         Map<String, Object> config = node.config();
         NodeType type = node.type();
         if (type == NodeType.ACTION) optionalString(config, "actionType", "INVALID_ACTION_TYPE_VALUE", node.id(), problems);
-        if (type == NodeType.HUMAN_TASK) optionalString(config, "description", "INVALID_TASK_DESCRIPTION", node.id(), problems);
+        if (type == NodeType.HUMAN_TASK) {
+            optionalString(config, "title", "INVALID_TASK_TITLE", node.id(), problems);
+            optionalString(config, "description", "INVALID_TASK_DESCRIPTION", node.id(), problems);
+        }
         if (type == NodeType.WAIT) optionalString(config, "duration", "INVALID_WAIT_DURATION", node.id(), problems);
         if (type == NodeType.RECEIVE_EVENT) {
             optionalString(config, "eventType", "INVALID_EVENT_TYPE_VALUE", node.id(), problems);
