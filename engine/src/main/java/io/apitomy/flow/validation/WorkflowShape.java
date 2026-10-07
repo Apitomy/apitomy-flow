@@ -60,6 +60,12 @@ final class WorkflowShape {
             Object match = config.get("match");
             check(match == null || (match instanceof List<?> list && list.stream().allMatch(String.class::isInstance)),
                 "INVALID_MATCH_TYPE", "config.match", "a list of strings", node.id(), problems);
+            Object key = config.get("correlationKey");
+            check(key == null || (key instanceof Map<?, ?> map
+                    && (map.get("subscriptionKey") == null || map.get("subscriptionKey") instanceof String)
+                    && (map.get("eventKey") == null || map.get("eventKey") instanceof String)),
+                "INVALID_CORRELATION_KEY", "config.correlationKey",
+                "an object with string subscriptionKey and eventKey", node.id(), problems);
         }
         if (type == NodeType.ACTION || type == NodeType.HUMAN_TASK) {
             Object inputs = config.get("inputs");

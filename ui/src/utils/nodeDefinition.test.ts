@@ -254,6 +254,23 @@ describe('getNodeDefinition', () => {
     ]);
   });
 
+  it('builds a "Correlation key" section from a receive-event node\'s config.correlationKey', () => {
+    const def = getNodeDefinition(node({
+      type: 'receive-event',
+      config: {
+        eventType: 'order.created',
+        correlationKey: { subscriptionKey: 'context.orderId', eventKey: 'event.data.orderId' },
+      },
+    }));
+
+    const key = def.sections.find(s => s.label === 'Correlation key');
+    expect(key!.fields).toEqual([
+      { label: 'subscriptionKey', value: 'context.orderId' },
+      { label: 'eventKey', value: 'event.data.orderId' },
+    ]);
+    expect(def.sections.find(s => s.label === 'Config')?.fields.some(f => f.label === 'correlationKey')).not.toBe(true);
+  });
+
   it('omits the "Output mappings" section for a receive-event node with no outputs declared', () => {
     const def = getNodeDefinition(node({
       type: 'receive-event',

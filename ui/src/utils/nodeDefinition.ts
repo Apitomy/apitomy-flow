@@ -37,7 +37,7 @@ const HANDLED_CONFIG_KEYS: Record<string, Set<string>> = {
   start: new Set(['inputs']),
   'human-task': new Set(['description', 'inputs', 'outputs']),
   action: new Set(['actionType', 'inputs', 'outputs']),
-  'receive-event': new Set(['outputs', 'lookback']),
+  'receive-event': new Set(['outputs', 'lookback', 'correlationKey']),
 };
 
 function formatConfigValue(value: unknown): string {
@@ -125,6 +125,18 @@ function actionSections(config: ActionConfig): DefinitionSection[] {
   return sections;
 }
 
+function receiveEventCorrelationKeySection(config: ReceiveEventConfig): DefinitionSection | null {
+  const key = config.correlationKey;
+  if (key === null || typeof key !== 'object') return null;
+  return {
+    label: 'Correlation key',
+    fields: [
+      { label: 'subscriptionKey', value: typeof key.subscriptionKey === 'string' ? key.subscriptionKey : undefined },
+      { label: 'eventKey', value: typeof key.eventKey === 'string' ? key.eventKey : undefined },
+    ],
+  };
+}
+
 function receiveEventOutputsSection(config: ReceiveEventConfig): DefinitionSection | null {
   const outputs = config.outputs;
   if (!Array.isArray(outputs) || outputs.length === 0) return null;
@@ -176,6 +188,7 @@ export function getNodeDefinition(node: WorkflowNode): NodeDefinitionView {
     const eventConfig: ReceiveEventConfig = node.config ?? {};
     sections = [
       { label: 'Event lookback', fields: [{ label: 'lookback', value: describeLookback(eventConfig.lookback) }] },
+      receiveEventCorrelationKeySection(eventConfig),
       receiveEventOutputsSection(eventConfig),
     ].filter((s): s is DefinitionSection => s !== null);
   } else {

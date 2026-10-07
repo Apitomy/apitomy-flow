@@ -344,6 +344,7 @@ public class WorkflowValidator {
                                 + "ISO 8601 duration: " + lookback, node.id()));
                     }
                 }
+                validateCorrelationKey(config.correlationKey(), node.id(), problems);
             });
 
         // Duplicate event receivers
@@ -457,6 +458,26 @@ public class WorkflowValidator {
      * @param nodeId     the receive-event node's id
      * @param problems   the problems list to append to
      */
+    private void validateCorrelationKey(NodeConfig.CorrelationKey key, String nodeId,
+                                        List<ValidationProblem> problems) {
+        if (key == null) {
+            return;
+        }
+        checkCorrelationExpression(key.subscriptionKey(), "subscriptionKey", nodeId, problems);
+        checkCorrelationExpression(key.eventKey(), "eventKey", nodeId, problems);
+    }
+
+    private void checkCorrelationExpression(String expression, String field, String nodeId,
+                                            List<ValidationProblem> problems) {
+        if (expression == null || expression.isBlank()) {
+            problems.add(ValidationProblem.error("MISSING_CORRELATION_KEY_EXPRESSION",
+                "Receive-event correlationKey." + field + " is required", nodeId));
+        } else if (!conditionEvaluator.isValid(expression)) {
+            problems.add(ValidationProblem.error("INVALID_CORRELATION_KEY_EXPRESSION",
+                "Receive-event correlationKey." + field + " is not valid EL: " + expression, nodeId));
+        }
+    }
+
     private void validateEventOutputMappings(List<NodeConfig.Mapping> outputDefs, String nodeId,
                                               List<ValidationProblem> problems) {
         Set<String> contextKeys = new HashSet<>();

@@ -20,7 +20,8 @@ Returns `true` if all three conditions are met:
 
 1. The instance is in `WAITING` status
 2. The addressed node is an active parked `receive-event` node
-3. The event matches the node's criteria (event type + match expressions)
+3. The event matches the node's criteria (event type, correlation key when configured, then match
+   expressions)
 
 Returns `false` in all other cases (wrong status, wrong node type, type mismatch, match expression failure).
 
@@ -86,6 +87,41 @@ Durations must be positive and use the `java.time.Duration` form (`PnDTnHnMnS`).
 rejected with `INVALID_LOOKBACK`. Flow does not store events; running the look-back is the host's job.
 `ReceiveEventInfo.lookback()` returns the parsed `EventLookback` (a `Mode` of `RUN_START`, `NONE`, or
 `DURATION`, plus the `Duration` for the last mode), so hosts do not have to parse the value again.
+
+### correlationKey
+
+Optional explicit correlation key. Hosts can store the evaluated subscription key in an indexed column
+and look up waiting runs by the event key instead of evaluating every `match` expression against every
+candidate.
+
+```json
+{
+  "eventType": "order-shipped",
+  "correlationKey": {
+    "subscriptionKey": "context.orderId",
+    "eventKey": "event.data.orderId"
+  }
+}
+```
+
+| Field | Evaluated against | Description |
+|-------|-------------------|-------------|
+| `subscriptionKey` | `context` | Evaluated when the node is parked; exposed as `ReceiveEventInfo.subscriptionKey()` |
+| `eventKey` | `event` | Evaluated against the incoming event; see `WorkflowEngine.evaluateEventKey(...)` |
+
+Both expressions are required when `correlationKey` is present, and both must be valid EL. Each is a
+single expression; build composite keys with EL string concatenation, for example
+`context.orderId += ':' += context.region`. Evaluated keys are compared as strings.
+
+When a key is configured, `matchesEvent` requires the subscription key to be non-null and equal to the
+event key. `match` expressions still apply as an additional filter. Nodes without a `correlationKey`
+behave exactly as before, and `subscriptionKey()` / `evaluateEventKey(...)` return `null` for them.
+
+```java
+ReceiveEventInfo info = engine.getReceiveEventInfo(definition, instance, nodeId);
+String subscriptionKey = info.subscriptionKey();          // store in an indexed column
+String eventKey = engine.evaluateEventKey(definition, nodeId, event);  // look up waiting runs
+```
 
 ## Expression Examples
 

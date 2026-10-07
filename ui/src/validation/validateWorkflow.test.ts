@@ -628,6 +628,34 @@ describe('validateWorkflow', () => {
       expect(hasProblem(validateWorkflow(w), 'MISSING_OUTPUT_EXPRESSION')).toBe(true);
     });
 
+    const keyed = (correlationKey: unknown) => workflow(
+      [
+        node('start', 'start'),
+        node('r', 'receive-event', { eventType: 'order.created', correlationKey } as never),
+        node('end', 'end'),
+      ],
+      [edge('e1', 'start', 'r'), edge('e2', 'r', 'end')],
+    );
+
+    it('accepts a complete correlationKey', () => {
+      const problems = validateWorkflow(keyed({ subscriptionKey: 'context.orderId', eventKey: 'event.data.orderId' }));
+      expect(problems.some(p => p.code.includes('CORRELATION'))).toBe(false);
+    });
+
+    it('MISSING_CORRELATION_KEY_EXPRESSION when an expression is absent', () => {
+      expect(hasProblem(validateWorkflow(keyed({ subscriptionKey: 'context.orderId' })),
+        'MISSING_CORRELATION_KEY_EXPRESSION')).toBe(true);
+    });
+
+    it('INVALID_CORRELATION_KEY_EXPRESSION when an expression does not parse', () => {
+      expect(hasProblem(validateWorkflow(keyed({ subscriptionKey: '(((unbalanced', eventKey: 'event.id' })),
+        'INVALID_CORRELATION_KEY_EXPRESSION')).toBe(true);
+    });
+
+    it('INVALID_CORRELATION_KEY when correlationKey is not an object', () => {
+      expect(hasProblem(validateWorkflow(keyed('context.orderId')), 'INVALID_CORRELATION_KEY')).toBe(true);
+    });
+
     it('INVALID_OUTPUT_EXPRESSION when a mapping\'s expression is not valid EL', () => {
       const w = workflow(
         [

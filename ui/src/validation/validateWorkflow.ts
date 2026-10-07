@@ -297,6 +297,11 @@ function validateSemantics(workflow: Workflow, problems: ValidationProblem[]) {
     if (Array.isArray(node.config.outputs) && node.config.outputs.length > 0) {
       validateEventOutputMappings(node.config.outputs, node.id, problems);
     }
+    const correlationKey = node.config.correlationKey;
+    if (correlationKey != null) {
+      validateCorrelationExpression(correlationKey.subscriptionKey, 'subscriptionKey', node.id, problems);
+      validateCorrelationExpression(correlationKey.eventKey, 'eventKey', node.id, problems);
+    }
   }
 
   const receivers = workflow.nodes.filter(n => n.type === 'receive-event' && n.config.eventType);
@@ -461,6 +466,23 @@ function validateOutputNames(outputDefs: (ActionOutputConfig | HumanTaskOutput)[
  * strings and otherwise skips the entry, and mirrors the Java engine validator/runtime. The same
  * browser-subset parser checks both mappings and edge conditions; engine-only syntax is advisory.
  */
+function validateCorrelationExpression(expression: unknown, fieldName: string, nodeId: string,
+  problems: ValidationProblem[]) {
+  if (typeof expression !== 'string' || expression.trim() === '') {
+    problems.push(problem('error', 'MISSING_CORRELATION_KEY_EXPRESSION',
+      `Receive-event correlationKey.${fieldName} is required`, nodeId));
+    return;
+  }
+  const syntax = classifyExpression(expression);
+  if (syntax === 'invalid') {
+    problems.push(problem('error', 'INVALID_CORRELATION_KEY_EXPRESSION',
+      `Receive-event correlationKey.${fieldName} is not valid EL: ${expression}`, nodeId));
+  } else if (syntax === 'unsupported') {
+    problems.push(problem('warning', 'UNSUPPORTED_EXPRESSION_DIALECT',
+      `Receive-event correlationKey.${fieldName} uses syntax unsupported in the browser; validate with the Java engine`, nodeId));
+  }
+}
+
 function validateEventOutputMappings(outputDefs: EventOutputMapping[], nodeId: string, problems: ValidationProblem[]) {
   const contextKeys = new Set<string>();
   for (const def of outputDefs) {

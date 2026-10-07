@@ -3,7 +3,7 @@ package io.apitomy.flow.model;
 import java.util.List;
 
 /**
- * Host-facing description of a parked receive-event node.
+ * Host-facing description of a parked receive-event node, so hosts can correlate incoming events.
  *
  * @param nodeId           the receive-event node's id
  * @param nodeName         the receive-event node's name
@@ -12,6 +12,8 @@ import java.util.List;
  * @param outputMappings   the node's output mappings
  * @param lookback         how far back the host should search stored events; never {@code null}
  *                         (defaults to {@link EventLookback#RUN_START})
+ * @param subscriptionKey  the evaluated correlation subscription key, or {@code null} when the node has no
+ *                         correlation key configured (or it evaluated to null)
  */
 public record ReceiveEventInfo(
     String nodeId,
@@ -19,7 +21,8 @@ public record ReceiveEventInfo(
     String eventType,
     List<String> matchExpressions,
     List<EventOutputMapping> outputMappings,
-    EventLookback lookback
+    EventLookback lookback,
+    String subscriptionKey
 ) {
     /**
      * Canonical constructor; a {@code null} lookback defaults to {@link EventLookback#RUN_START}.
@@ -30,6 +33,7 @@ public record ReceiveEventInfo(
      * @param matchExpressions the node's match expressions
      * @param outputMappings   the node's output mappings
      * @param lookback         the parsed look-back, or {@code null} for the default
+     * @param subscriptionKey  the evaluated correlation subscription key, or {@code null}
      */
     public ReceiveEventInfo {
         if (lookback == null) {
@@ -38,8 +42,24 @@ public record ReceiveEventInfo(
     }
 
     /**
+     * Backward-compatible constructor for callers built before {@code subscriptionKey} was added;
+     * defaults it to {@code null}.
+     *
+     * @param nodeId           the receive-event node's id
+     * @param nodeName         the receive-event node's name
+     * @param eventType        the event type the node waits for
+     * @param matchExpressions the node's match expressions
+     * @param outputMappings   the node's output mappings
+     * @param lookback         the parsed look-back, or {@code null} for the default
+     */
+    public ReceiveEventInfo(String nodeId, String nodeName, String eventType, List<String> matchExpressions,
+                            List<EventOutputMapping> outputMappings, EventLookback lookback) {
+        this(nodeId, nodeName, eventType, matchExpressions, outputMappings, lookback, null);
+    }
+
+    /**
      * Backward-compatible constructor for callers built before {@code lookback} was added; defaults it to
-     * {@link EventLookback#RUN_START}.
+     * {@link EventLookback#RUN_START} and the subscription key to {@code null}.
      *
      * @param nodeId           the receive-event node's id
      * @param nodeName         the receive-event node's name
@@ -49,7 +69,7 @@ public record ReceiveEventInfo(
      */
     public ReceiveEventInfo(String nodeId, String nodeName, String eventType, List<String> matchExpressions,
                             List<EventOutputMapping> outputMappings) {
-        this(nodeId, nodeName, eventType, matchExpressions, outputMappings, EventLookback.RUN_START);
+        this(nodeId, nodeName, eventType, matchExpressions, outputMappings, EventLookback.RUN_START, null);
     }
 
     /**
@@ -62,6 +82,6 @@ public record ReceiveEventInfo(
      * @param matchExpressions the node's match expressions
      */
     public ReceiveEventInfo(String nodeId, String nodeName, String eventType, List<String> matchExpressions) {
-        this(nodeId, nodeName, eventType, matchExpressions, List.of());
+        this(nodeId, nodeName, eventType, matchExpressions, List.of(), EventLookback.RUN_START, null);
     }
 }
