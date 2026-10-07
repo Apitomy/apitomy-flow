@@ -1,0 +1,41 @@
+/* Inline value with an optional "view full value" button. */
+.flow-value-display {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.flow-value-display__text {
+  flex: 1;
+  min-width: 0;
+  /* The preview is already length-capped and single-line, so wrap rather than clip it. */
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+.flow-value-display__view {
+  flex: none;
+  padding: 0 4px !important;
+}
+
+/* Full value inside the dialog: scroll instead of growing past the viewport. */
+.flow-value-display__full {
+  max-height: 60vh;
+  overflow: auto;
+}
+.flow-value-display__full .flow-json-editor--readonly.flow-value-display__json {
+  max-height: none;
+}
+.flow-value-display__pre {
+  margin: 0;
+  padding: 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  background: var(--flow-bg-secondary, #f5f5f5);
+  color: var(--flow-text, #151515);
+  border: 1px solid var(--flow-border, #d2d2d2);
+  border-radius: 4px;
+}

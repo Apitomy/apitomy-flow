@@ -114,7 +114,7 @@ export function startSimulation(workflow: Workflow, context: Record<string, unkn
         joinArrivals: {},
         context: { ...context },
         visitedNodeIds: [startNode.id],
-        history: [{ ...enterEntry(startNode), branchId: 'root' }],
+        history: [{ ...enterEntry(startNode, undefined, context), branchId: 'root' }],
         edgeEvaluations: {},
         transitions: 0,
     };
@@ -496,7 +496,7 @@ function enterNode(
     viaEdge?: WorkflowEdge,
 ): SimState {
     void workflow;
-    const history = state.history.concat({ ...enterEntry(node, viaEdge), branchId });
+    const history = state.history.concat({ ...enterEntry(node, viaEdge, state.context), branchId });
     const visitedNodeIds = [...state.visitedNodeIds, node.id];
     const base: SimState = { ...state, history, visitedNodeIds };
 
@@ -615,12 +615,44 @@ function mergeEvaluations(
     return merged;
 }
 
-function enterEntry(node: WorkflowNode, edge?: WorkflowEdge): HistoryEntry {
+function enterEntry(node: WorkflowNode, edge: WorkflowEdge | undefined, context: Record<string, unknown>): HistoryEntry {
+    const input = recordedInputs(node, context);
     return {
         nodeId: node.id,
         nodeName: node.name,
         edgeId: edge?.id,
         edgeCondition: edge?.condition,
         enteredOn: new Date().toISOString(),
+        ...(input ? { input } : {}),
     };
+}
+
+/**
+ * Resolves the input values recorded on a node's history entry at entry time, mirroring the engine's
+ * {@code NodeValueResolver.recordedInputs}: declared workflow inputs (read from the context) for a start
+ * node, and resolved `inputs` expressions (string values) or literals for action and human-task nodes.
+ *
+ * @param node the entered node
+ * @param context the context at entry time
+ * @return the input values, or `undefined` when the node takes no inputs or any expression fails to resolve
+ */
+export function recordedInputs(node: WorkflowNode, context: Record<string, unknown>): Record<string, unknown> | undefined {
+    if (node.type === 'start') {
+        const declared = Array.isArray(node.config.inputs) ? node.config.inputs : [];
+        if (declared.length === 0) return undefined;
+        return Object.fromEntries(declared
+            .filter(field => typeof field?.name === 'string' && Object.prototype.hasOwnProperty.call(context, field.name))
+            .map(field => [field.name, context[field.name]]));
+    }
+    if (node.type !== 'action' && node.type !== 'human-task') return undefined;
+    const inputs = node.config.inputs;
+    if (!inputs || typeof inputs !== 'object' || Array.isArray(inputs) || Object.keys(inputs).length === 0) {
+        return undefined;
+    }
+    try {
+        return Object.fromEntries(Object.entries(inputs).map(([key, value]) =>
+            [key, typeof value === 'string' ? resolveExpression(value, { context }) : value]));
+    } catch {
+        return undefined;
+    }
 }

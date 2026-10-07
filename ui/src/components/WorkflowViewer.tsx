@@ -7,12 +7,14 @@ import { type WorkflowInstance } from '../types/instance.ts';
 import { toReactFlowNodes, toReactFlowEdges } from '../utils/conversion.ts';
 import { nodeVisits, nodeVisitsByBranch, type NodeBranchVisits } from '../utils/nodeHistory.ts';
 import { getNodeDefinition } from '../utils/nodeDefinition.ts';
+import { nodeInputRows } from '../utils/nodeInputs.ts';
 import { getNodeStatusBadge } from '../utils/nodeStatus.ts';
 import { activeNodeIds, activeEdgeIds } from '../utils/parallelView.ts';
 import { type FlowTheme } from './WorkflowEditor.tsx';
 import { nodeTypes } from './nodes/nodeTypes.ts';
 import { edgeTypes } from './edges/edgeTypes.ts';
 import { NodeActionMenu } from './NodeActionMenu.tsx';
+import { ValueDisplay } from './common/ValueDisplay.tsx';
 import { needsLayout, layoutWorkflow } from '../layout/layoutWorkflow.ts';
 import { isNodeSelected } from './selectedNodeState.ts';
 import './theme.css';
@@ -298,6 +300,7 @@ function WorkflowViewerInner({ workflow, instance, theme = 'light', nodeContextM
               isCurrent={selectedNodeId ? activeIds.has(selectedNodeId) : false}
               instanceStatus={instance.status}
               viewMode={detailViewMode}
+              theme={theme}
             />
           ) : (
             <div className="workflow-viewer__context-entries">
@@ -321,13 +324,7 @@ function WorkflowViewerInner({ workflow, instance, theme = 'light', nodeContextM
   );
 }
 
-function formatValue(value: unknown): string {
-  if (value === null || value === undefined) return '—';
-  if (typeof value === 'object') return JSON.stringify(value);
-  return String(value);
-}
-
-function NodeDetail({ node, history, visits, visitsByBranch, visitIndex, onSelectVisit, isCurrent, instanceStatus, viewMode }: {
+function NodeDetail({ node, history, visits, visitsByBranch, visitIndex, onSelectVisit, isCurrent, instanceStatus, viewMode, theme }: {
   node: WorkflowViewerProps['workflow']['nodes'][number] | null;
   history: HistoryEntry | null;
   visits: HistoryEntry[];
@@ -337,12 +334,14 @@ function NodeDetail({ node, history, visits, visitsByBranch, visitIndex, onSelec
   isCurrent: boolean;
   instanceStatus: InstanceStatus;
   viewMode: 'state' | 'definition';
+  theme: FlowTheme;
 }) {
   if (!node) {
     return <div className="workflow-viewer__context-empty">Node not found</div>;
   }
 
   const wasVisited = !!history;
+  const inputRows = nodeInputRows(node, history);
 
   // The node is only "current" for the visit actually in progress — i.e. the
   // most recent visit. An earlier visit of a looping node has completed, even
@@ -423,14 +422,18 @@ function NodeDetail({ node, history, visits, visitsByBranch, visitIndex, onSelec
               </span>
             </div>
           )}
-          {node.type === 'start' && Array.isArray(node.config.inputs) && node.config.inputs.length > 0 && (
+          {inputRows.length > 0 && (
             <>
               <div className="workflow-viewer__section-label">Inputs</div>
-              {node.config.inputs.map((input) => (
+              {inputRows.map((input) => (
                 <div key={input.name} className="workflow-viewer__context-entry">
                   <span className="workflow-viewer__context-key">
-                    {input.name} <span className="workflow-viewer__type-badge">{input.type}{input.required ? '' : '?'}</span>
+                    {input.name}
+                    {input.typeLabel && <> <span className="workflow-viewer__type-badge">{input.typeLabel}</span></>}
                   </span>
+                  {input.hasValue && (
+                    <ValueDisplay value={input.value} title={`Input: ${input.name}`} theme={theme} />
+                  )}
                 </div>
               ))}
             </>
@@ -441,7 +444,7 @@ function NodeDetail({ node, history, visits, visitsByBranch, visitIndex, onSelec
               {Object.entries(history.output).map(([key, value]) => (
                 <div key={key} className="workflow-viewer__context-entry">
                   <span className="workflow-viewer__context-key">{key}</span>
-                  <span className="workflow-viewer__context-value">{formatValue(value)}</span>
+                  <ValueDisplay value={value} title={`Output: ${key}`} theme={theme} />
                 </div>
               ))}
             </>

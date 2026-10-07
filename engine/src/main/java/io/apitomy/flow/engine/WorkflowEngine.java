@@ -107,7 +107,8 @@ public class WorkflowEngine {
         fireEvent(l -> l.onNodeEntered(startedInstance, startNode));
         instance = instance.toBuilder()
             .addHistory(new HistoryEntry(startNode.id(), startNode.name(),
-                null, null, now, now, Map.of(), "root"))
+                null, null, now, now, Map.of(), "root",
+                values.recordedInputs(startNode, initialContext)))
             .build();
 
         // Advance through the graph
@@ -925,7 +926,7 @@ public class WorkflowEngine {
             .addHistory(new HistoryEntry(node.id(), node.name(),
                 viaEdge != null ? viaEdge.id() : null,
                 viaEdge != null ? viaEdge.condition() : null,
-                now, null, null, branchId))
+                now, null, null, branchId, values.recordedInputs(node, instance.context())))
             .updatedOn(now)
             .build();
         WorkflowInstance enteredInstance = instance;
@@ -1211,7 +1212,7 @@ public class WorkflowEngine {
             boolean sameBranch = Objects.equals(h.branchId(), branchId);
             if (sameBranch && h.nodeId().equals(nodeId) && h.completedOn() == null) {
                 history.set(i, new HistoryEntry(h.nodeId(), h.nodeName(), h.edgeId(), h.edgeCondition(),
-                    h.enteredOn(), completedOn, output != null ? output : h.output(), h.branchId()));
+                    h.enteredOn(), completedOn, output != null ? output : h.output(), h.branchId(), h.input()));
                 break;
             }
         }
