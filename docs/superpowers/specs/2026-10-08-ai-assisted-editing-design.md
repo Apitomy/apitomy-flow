@@ -43,6 +43,8 @@ Out of scope: in-Flow chat, agent status display, per-change rebase, Action Type
     Layout-only edits do not change it, and undo to identical content restores the identical value.
   - It is implemented in TS (`ui/src/changeset/contentRevision.ts`) and in Java (`ContentRevision` in
     `engine/`). Both are verified by `conformance/content-revision.json`.
+  - Hosts computing it server-side must hash exactly the Flow `Workflow` document they send to the editor,
+    with no host-specific fields added.
 - **Origin**: `EditorCommand` gains optional `origin?: 'user' | 'host' | `agent:${string}`` (default
   `'user'`). Undo snapshots record the origin of the change that produced them so undo labels can name it.
 - **`onChange`** becomes `onChange(workflow, meta: { contentRevision, origin })`. The added argument is
@@ -97,6 +99,9 @@ Op semantics:
   `updateEdge.unset` lists top-level edge fields to remove, for example `condition`. `unset` is applied after
   `patch`, and a key appearing in both is `malformed`. `null` in a patch is stored as a value, not treated as
   a removal.
+- Because `unset` and patches operate on top-level keys only, removing one entry from a nested mapping means
+  resending the whole mapping. For example, to drop input `foo` from an action node, send
+  `patch.config.inputs` containing every remaining input; `unset: ["inputs"]` would remove all of them.
 - `renameNode` rewrites the `source`/`target` of attached edges, the same as the existing `renameNode`
   command.
 - `removeNode` also removes all edges attached to the node.
@@ -123,22 +128,7 @@ Pure core, in `ui/src/changeset/applyChangeSet.ts`:
   error codes. Both implementations are verified by `conformance/changesets.json`. Each fixture case gives an
   input workflow, a change set, and either the expected output workflow (compared with layout stripped) or
   the expected error `code` and `opIndex`.
-- Added nodes without a `position` are placed near their connected neighbours. If they have none, the
-  existing layout fallback places them.
-
-Imperative handle, exposed through a `ref` on `WorkflowEditor`. None of these methods throw.
-
-| Method | Result |
-|---|---|
-| `propose(cs)` | `{ status: 'staged' }` or `{ status: 'rejected', error }` |
-| `apply(cs)` | `{ status: 'applied' }` or `{ status: 'rejected', error }` |
-| `clearHighlights()` | `void` |
-| `withdraw(id)` | `void` |
-| `replace(workflow, origin)` | `void` |
-| `getSnapshot()` | `{ workflow, contentRevision, selection, problems }` |
-
-Rules:
-
+- Added nodes without a `position` are placed by `placeNewNodes` (see §1).
 - `cs.baseRevision !== contentRevision` produces the error code `stale`.
 - `apply` dispatches a new reducer command, `applyChangeSet`. That command produces exactly one undo step,
   with `origin = cs.author`.
