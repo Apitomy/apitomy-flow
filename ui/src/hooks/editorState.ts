@@ -1,7 +1,7 @@
 import { applyNodeChanges, applyEdgeChanges, type Connection, type Edge, type EdgeChange, type Node, type NodeChange } from '@xyflow/react';
 import type { Workflow, WorkflowNode } from '../types/workflow.ts';
 import { TIMEOUT_HANDLE, toReactFlowEdges, toReactFlowNodes, type FlowNodeData } from '../utils/conversion.ts';
-import { layoutWorkflow, needsLayout } from '../layout/layoutWorkflow.ts';
+import { layoutForImport, layoutWorkflow } from '../layout/layoutWorkflow.ts';
 import { jsonEqual } from '../utils/jsonEqual.ts';
 
 interface Selection {
@@ -53,9 +53,9 @@ export type EditorCommand =
 
 /** Initializes an owned document and its independent ReactFlow presentation. */
 export function createEditorState(workflow: Workflow): EditorState {
-    const fallback = needsLayout(workflow.nodes);
-    const document = structuredClone(fallback
-        ? { ...workflow, nodes: layoutWorkflow(workflow.nodes, workflow.edges) } : workflow);
+    const placed = layoutForImport(workflow);
+    const fallback = placed !== workflow;
+    const document = structuredClone(placed);
     return {
         document, semanticDocument: document, nodes: toReactFlowNodes(document.nodes), edges: toReactFlowEdges(document.edges),
         nodeKeys: Object.fromEntries(document.nodes.map(node => [node.id, `initial:${node.id}`])),
@@ -227,8 +227,7 @@ export function editorReducer(state: EditorState, command: EditorCommand): Edito
         }
         case 'import': {
             const imported = command.workflow;
-            const next = commit(state, needsLayout(imported.nodes)
-                ? { ...imported, nodes: layoutWorkflow(imported.nodes, imported.edges) } : imported,
+            const next = commit(state, layoutForImport(imported),
             undefined, { selectedNodeId: null, selectedEdgeId: null }, {});
             return { ...next, draftReset: state.draftReset + 1,
                 selectedNodeId: null, selectedEdgeId: null,
