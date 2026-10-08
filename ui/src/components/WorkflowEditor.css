@@ -77,3 +77,29 @@
 .react-flow__edge { cursor: pointer; }
 .react-flow__edge:hover .react-flow__edge-path { stroke-width: 3; }
 .react-flow__edge:hover .edge-condition-badge { box-shadow: 0 1px 4px var(--flow-shadow-heavy, rgba(0, 0, 0, 0.15)); }
+
+/* AI-assisted editing: staged proposal overlay */
+.workflow-editor__canvas { position: relative; }
+.react-flow__node.flow-proposal--added { opacity: 0.8; outline: 2px dashed var(--flow-status-success, #3e8635); outline-offset: 3px; }
+.react-flow__node.flow-proposal--modified { outline: 2px solid var(--flow-brand, #06c); outline-offset: 3px; }
+.react-flow__node.flow-proposal--removed { opacity: 0.45; outline: 2px dashed var(--flow-status-danger, #c9190b); outline-offset: 3px; }
+.react-flow__edge.flow-proposal--added .react-flow__edge-path { stroke: var(--flow-status-success, #3e8635); stroke-width: 2.5; stroke-dasharray: 6 3; }
+.react-flow__edge.flow-proposal--removed .react-flow__edge-path { stroke: var(--flow-status-danger, #c9190b); stroke-dasharray: 5 3; opacity: 0.6; }
+.flow-proposal--stale { filter: grayscale(1); }
+
+/* Elements changed by the most recently applied change set */
+.react-flow__node.flow-applied { box-shadow: 0 0 0 3px var(--flow-brand, #06c); border-radius: 6px; }
+.react-flow__edge.flow-applied .react-flow__edge-path { stroke: var(--flow-brand, #06c); stroke-width: 2.5; }
+
+.flow-proposal-bar {
+  position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 5;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; max-width: min(90%, 720px);
+  padding: 8px 12px; border-radius: 8px; background: var(--flow-bg-primary, #fff);
+  border: 1px solid var(--flow-border, #d2d2d2); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+.flow-proposal-bar__summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.flow-proposal-bar__author, .flow-proposal-bar__counts, .flow-proposal-bar__validation { font-size: 0.85em; opacity: 0.8; }
+.flow-proposal-bar__stale { font-weight: 600; color: var(--flow-status-warning, #f0ab00); }
+.flow-proposal-bar__actions { display: flex; gap: 8px; margin-left: auto; }
+.flow-proposal-bar__details { flex-basis: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.flow-proposal-bar__details pre { max-height: 200px; overflow: auto; margin: 0; font-size: 0.8em; }

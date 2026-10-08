@@ -26,6 +26,9 @@ import { simNodeClass, activeNodeIds, parallelRole } from '../utils/parallelView
 import { validateWorkflow } from '../validation/validateWorkflow.ts';
 import { analyzeParallelRegions } from '../simulation/parallelRegions.ts';
 import { useHostValidation } from '../hooks/useHostValidation.ts';
+import { buildProposalOverlay, formatCounts, proposalCounts, proposalDetails, validationText } from '../changeset/proposalOverlay.ts';
+import { validationDelta } from '../changeset/validationDelta.ts';
+import { ProposalReviewBar } from './panels/ProposalReviewBar.tsx';
 import { nodeTypes } from './nodes/nodeTypes.ts';
 import { edgeTypes } from './edges/edgeTypes.ts';
 import { NodePalette } from './panels/NodePalette.tsx';
@@ -123,6 +126,7 @@ export interface WorkflowEditorProps {
 
 function WorkflowEditorInner({
   workflow, onChange, readOnly = false, onValidationChange, theme = 'light', spi, ref, onProposalResolved, onSelectionChange,
+  highlightApplied = true,
 }: WorkflowEditorProps) {
   const { state, dispatch: rawDispatch } = useEditorState(workflow, readOnly ? ignoreChange : onChange ?? ignoreChange,
     { onProposalResolved, onSelectionChange });
@@ -171,6 +175,17 @@ function WorkflowEditorInner({
   const validationProblems = useMemo(
     () => [...builtInProblems, ...hostProblems],
     [builtInProblems, hostProblems],
+  );
+
+  const proposal = state.proposal;
+  const previewBuiltInProblems = useMemo(
+    () => (proposal ? validateWorkflow(proposal.preview) : []),
+    [proposal],
+  );
+  const previewHostProblems = useHostValidation(proposal?.preview ?? semanticWorkflow, proposal ? spi?.validate : undefined);
+  const proposalValidation = useMemo(
+    () => validationText(validationDelta(validationProblems, [...previewBuiltInProblems, ...previewHostProblems])),
+    [validationProblems, previewBuiltInProblems, previewHostProblems],
   );
 
   useEffect(() => {
@@ -510,6 +525,26 @@ function WorkflowEditorInner({
     });
   }, [edges, simActive, simState]);
 
+  const overlay = useMemo(
+    () => buildProposalOverlay(displayNodes, displayEdges, currentWorkflow, proposal, highlightApplied ? state.highlight : null),
+    [displayNodes, displayEdges, currentWorkflow, proposal, highlightApplied, state.highlight],
+  );
+  // Focus is tied to a proposal id so it resets automatically when the proposal changes.
+  const [proposalFocus, setProposalFocus] = useState<{ proposalId: string; elementId: string } | null>(null);
+  const focusedDetails = proposal && proposalFocus?.proposalId === proposal.changeSet.id
+    ? proposalDetails(currentWorkflow, proposal.preview, proposalFocus.elementId) : null;
+  const focusProposalElement = useCallback((id: string, kind: 'nodes' | 'edges') => {
+    const changed = overlay.status && overlay.status[kind][id] && overlay.status[kind][id] !== 'unchanged';
+    setProposalFocus(changed && proposal ? { proposalId: proposal.changeSet.id, elementId: id } : null);
+    return overlay.status?.[kind][id] === 'added';
+  }, [overlay.status, proposal]);
+  const onCanvasNodeClick: typeof onNodeClick = useCallback((event, node) => {
+    if (!focusProposalElement(node.id, 'nodes')) onNodeClick(event, node);
+  }, [focusProposalElement, onNodeClick]);
+  const onCanvasEdgeClick: typeof onEdgeClick = useCallback((event, edge) => {
+    if (!focusProposalElement(edge.id, 'edges')) onEdgeClick(event, edge);
+  }, [focusProposalElement, onEdgeClick]);
+
   return (
     <div ref={editorRootRef} className={`workflow-editor${readOnly ? ' workflow-editor--readonly' : ''}`}
       data-flow-theme={theme} data-read-only={readOnly || undefined}
@@ -528,15 +563,15 @@ function WorkflowEditorInner({
       <div className="workflow-editor__body">
         <div className={`workflow-editor__canvas${simActive ? ' workflow-editor__canvas--simulating' : ''}`}>
           <ReactFlow
-            nodes={displayNodes}
-            edges={displayEdges}
+            nodes={overlay.nodes}
+            edges={overlay.edges}
             onNodesChange={handleNodesChange}
             onEdgesChange={handleEdgesChange}
             onConnect={onConnect}
             onDrop={onDrop}
             onDragOver={onDragOver}
-            onNodeClick={onNodeClick}
-            onEdgeClick={onEdgeClick}
+            onNodeClick={onCanvasNodeClick}
+            onEdgeClick={onCanvasEdgeClick}
             onPaneClick={onPaneClick}
             onNodeContextMenu={onNodeContextMenu}
             onNodeDragStop={onNodeDragStop}
@@ -616,6 +651,16 @@ function WorkflowEditorInner({
               </Panel>
             )}
           </ReactFlow>
+          {proposal && !readOnly && (
+            <ProposalReviewBar
+              proposal={proposal}
+              counts={formatCounts(proposalCounts(overlay.status!))}
+              validation={proposalValidation}
+              details={focusedDetails}
+              onAccept={() => dispatch({ type: 'acceptProposal' })}
+              onReject={() => dispatch({ type: 'rejectProposal' })}
+            />
+          )}
           {contextMenu && interactivityEnabled && (
             <NodeContextMenu
               node={contextMenu.node}
