@@ -27,11 +27,17 @@ export interface WorkflowEditorHandle {
     apply(changeSet: ChangeSet): ApplyResult;
     /** Removes the staged proposal if its id matches. */
     withdraw(id: string): void;
-    /** Replaces the whole document as one undoable step; exits simulation first. */
+    /**
+     * Replaces the whole document as one undoable step; exits simulation first. `origin` defaults to
+     * `'host'`. The workflow must be structured-cloneable (plain JSON data).
+     */
     replace(workflow: Workflow, origin?: Origin): void;
     /** Removes the highlight left by the last applied change set. */
     clearHighlights(): void;
-    /** Returns a detached copy of the current document, revision, selection and problems. */
+    /**
+     * Returns a detached copy of the current document, revision, selection and problems. The document
+     * must be structured-cloneable, which holds for any workflow supplied as plain JSON data.
+     */
     getSnapshot(): EditorSnapshot;
 }
 
@@ -41,6 +47,28 @@ export interface HandleAccess {
     dispatch(command: EditorCommand): void;
     readOnly(): boolean;
     problems(): ValidationProblem[];
+}
+
+type CheckedChangeSet =
+    | { ok: true; changeSet: ChangeSet; workflow: Workflow }
+    | { ok: false; error: ChangeSetError };
+
+/**
+ * Detaches the host's change set and checks it against the current document. Any thrown error (for
+ * example a value that cannot be structured-cloned) is reported as a malformed change set.
+ *
+ * @param state the current editor state
+ * @param changeSet the host-supplied change set
+ * @returns the detached change set and resulting workflow, or the error
+ */
+function cloneAndCheck(state: EditorState, changeSet: ChangeSet): CheckedChangeSet {
+    try {
+        const copy = structuredClone(changeSet);
+        const result = applyChangeSetChecked(state.document, copy, state.contentRevision);
+        return result.ok ? { ok: true, changeSet: copy, workflow: result.workflow } : result;
+    } catch (e) {
+        return { ok: false, error: { code: 'malformed', reason: `Invalid change set: ${String(e)}` } };
+    }
 }
 
 /**
@@ -53,20 +81,18 @@ export interface HandleAccess {
 export function createEditorHandle(access: HandleAccess): WorkflowEditorHandle {
     return {
         propose(changeSet) {
-            const state = access.state();
-            const result = applyChangeSetChecked(state.document, changeSet, state.contentRevision);
-            if (!result.ok) return { status: 'rejected', error: result.error };
-            access.dispatch({ type: 'propose', changeSet: structuredClone(changeSet), preview: result.workflow });
+            const checked = cloneAndCheck(access.state(), changeSet);
+            if (!checked.ok) return { status: 'rejected', error: checked.error };
+            access.dispatch({ type: 'propose', changeSet: checked.changeSet, preview: checked.workflow });
             return { status: 'staged' };
         },
         apply(changeSet) {
             if (access.readOnly()) {
                 return { status: 'rejected', error: { code: 'read-only', reason: 'The editor is read-only' } };
             }
-            const state = access.state();
-            const result = applyChangeSetChecked(state.document, changeSet, state.contentRevision);
-            if (!result.ok) return { status: 'rejected', error: result.error };
-            access.dispatch({ type: 'applyChangeSet', changeSet: structuredClone(changeSet) });
+            const checked = cloneAndCheck(access.state(), changeSet);
+            if (!checked.ok) return { status: 'rejected', error: checked.error };
+            access.dispatch({ type: 'applyChangeSet', changeSet: checked.changeSet });
             return { status: 'applied' };
         },
         withdraw(id) {

@@ -63,4 +63,18 @@ class ChangeSetConformanceTest {
         ChangeSets.apply(input, MAPPER.readTree("{\"ops\":[{\"op\":\"removeNode\",\"id\":\"s\"}]}"));
         assertEquals(before, input);
     }
+
+    /**
+     * A null or non-object change set is malformed, checked before the revision.
+     */
+    @Test
+    void nonObjectChangeSetIsMalformed() throws Exception {
+        JsonNode workflow = MAPPER.readTree("{\"id\":\"w\",\"nodes\":[],\"edges\":[]}");
+        for (JsonNode changeSet : new JsonNode[] {null, MAPPER.readTree("\"x\""), MAPPER.readTree("[]")}) {
+            ChangeSetResult.Rejected rejected = assertInstanceOf(ChangeSetResult.Rejected.class,
+                ChangeSets.applyChecked(workflow, changeSet));
+            assertEquals("malformed", rejected.error().code());
+            assertEquals(null, rejected.error().opIndex());
+        }
+    }
 }

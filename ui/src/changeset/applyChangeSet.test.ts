@@ -44,4 +44,10 @@ describe('applyChangeSetChecked', () => {
         expect(!stale.ok && stale.error.code).toBe('stale');
         expect(!stale.ok && stale.error.opIndex).toBeUndefined();
     });
+
+    it('reports a non-object change set as malformed rather than stale', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const result = applyChangeSetChecked(workflow(), 'x' as any);
+        expect(!result.ok && result.error.code).toBe('malformed');
+    });
 });

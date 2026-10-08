@@ -56,6 +56,10 @@ public final class ChangeSets {
      * @return the result, or a {@code stale} rejection without op index
      */
     public static ChangeSetResult applyChecked(JsonNode workflow, JsonNode changeSet) {
+        if (changeSet == null || !changeSet.isObject()) {
+            return new ChangeSetResult.Rejected(new ChangeSetError("malformed", null,
+                "Change set must be a JSON object"));
+        }
         String current = ContentRevision.of(workflow);
         String base = changeSet == null ? null : changeSet.path("baseRevision").asText(null);
         if (!current.equals(base)) {

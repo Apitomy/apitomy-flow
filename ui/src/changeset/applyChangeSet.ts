@@ -72,7 +72,7 @@ function applyOp(draft: Workflow, raw: unknown): void {
             if (extra) fail('malformed', `updateNode patch may only contain "name" and "config", not "${extra}"`);
             if (patch.name !== undefined && !isString(patch.name)) fail('malformed', '"patch.name" must be a non-empty string');
             const config = patch.config === undefined ? {} : requireObject(patch.config, '"patch.config"');
-            const both = unset.find(key => key in config);
+            const both = unset.find(key => Object.hasOwn(config, key));
             if (both) fail('malformed', `"${both}" appears in both patch.config and unset`);
             const node = findNode(draft, id) ?? fail('target-missing', `Node "${id}" does not exist`);
             if (patch.name !== undefined) node.name = patch.name as string;
@@ -116,14 +116,14 @@ function applyOp(draft: Workflow, raw: unknown): void {
             const id = requireString(op, 'id');
             const patch = optionalPatch(op);
             const unset = unsetList(op);
-            if ('id' in patch) fail('malformed', 'updateEdge patch may not change "id"');
+            if (Object.hasOwn(patch, 'id')) fail('malformed', 'updateEdge patch may not change "id"');
             const required = unset.find(key => REQUIRED_EDGE_FIELDS.includes(key));
             if (required) fail('malformed', `"${required}" is required and cannot be unset`);
-            const both = unset.find(key => key in patch);
+            const both = unset.find(key => Object.hasOwn(patch, key));
             if (both) fail('malformed', `"${both}" appears in both patch and unset`);
-            if (('source' in patch && !isString(patch.source)) || ('target' in patch && !isString(patch.target))
-                || ('priority' in patch && typeof patch.priority !== 'number')
-                || ('isDefault' in patch && typeof patch.isDefault !== 'boolean')) {
+            if ((Object.hasOwn(patch, 'source') && !isString(patch.source)) || (Object.hasOwn(patch, 'target') && !isString(patch.target))
+                || (Object.hasOwn(patch, 'priority') && typeof patch.priority !== 'number')
+                || (Object.hasOwn(patch, 'isDefault') && typeof patch.isDefault !== 'boolean')) {
                 fail('malformed', 'updateEdge patch has a field of the wrong type');
             }
             const index = draft.edges.findIndex(edge => edge.id === id);
@@ -144,8 +144,8 @@ function applyOp(draft: Workflow, raw: unknown): void {
             const patch = requireObject(op.patch, '"patch"');
             const extra = Object.keys(patch).find(key => !METADATA_KEYS.has(key));
             if (extra) fail('malformed', `metadata patch may only contain name, description and version, not "${extra}"`);
-            if (('name' in patch && !isString(patch.name)) || ('description' in patch && typeof patch.description !== 'string')
-                || ('version' in patch && typeof patch.version !== 'number')) {
+            if ((Object.hasOwn(patch, 'name') && !isString(patch.name)) || (Object.hasOwn(patch, 'description') && typeof patch.description !== 'string')
+                || (Object.hasOwn(patch, 'version') && typeof patch.version !== 'number')) {
                 fail('malformed', 'metadata patch has a field of the wrong type');
             }
             Object.assign(draft, structuredClone(patch));

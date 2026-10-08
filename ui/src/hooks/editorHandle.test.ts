@@ -41,6 +41,17 @@ describe('createEditorHandle', () => {
         expect(handle.apply(bad)).toMatchObject({ status: 'rejected', error: { code: 'target-missing', opIndex: 0 } });
     });
 
+    it('rejects a change set that cannot be cloned as malformed instead of throwing', () => {
+        const { handle, state } = harness();
+        const revision = handle.getSnapshot().contentRevision;
+        const bad = { ...rename(revision), ops: [{ op: 'metadata', patch: { name: 'X', fn: () => 1 } }] } as unknown as ChangeSet;
+        const proposed = handle.propose(bad);
+        expect(proposed.status === 'rejected' && proposed.error.code).toBe('malformed');
+        const applied = handle.apply(bad);
+        expect(applied.status === 'rejected' && applied.error.code).toBe('malformed');
+        expect(state().proposal).toBeNull();
+    });
+
     it('applies and advances the revision', () => {
         const { handle, state } = harness();
         const before = handle.getSnapshot().contentRevision;
