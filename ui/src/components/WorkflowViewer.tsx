@@ -312,7 +312,9 @@ function WorkflowViewerInner({ workflow, instance, theme = 'light', nodeContextM
                 Object.entries(instance.context).map(([key, value]) => (
                   <div key={key} className="workflow-viewer__context-entry">
                     <span className="workflow-viewer__context-key">{key}</span>
-                    <ValueDisplay value={value} title={`Context: ${key}`} theme={theme} />
+                    <span className="workflow-viewer__context-value">
+                      {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                    </span>
                   </div>
                 ))
               )}
