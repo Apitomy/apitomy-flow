@@ -64,8 +64,3 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.edge-loop-arrow {
-  stroke: var(--flow-loop-back, #8476d1);
-  fill: var(--flow-loop-back, #8476d1);
-  stroke-width: 1;
-}

@@ -137,7 +137,8 @@ function WorkflowViewerInner({ workflow, instance, theme = 'light', nodeContextM
         style: {
           ...edge.style,
           strokeWidth: isVisited ? 2.5 : 1,
-          stroke: isVisited ? 'var(--flow-status-success, #3e8635)' : undefined,
+          // Same green as the Start node border, so it tracks the light/dark theme.
+          stroke: isVisited ? 'var(--flow-node-start-border, #3e8635)' : undefined,
           opacity: isVisited ? 1 : 0.3,
         },
         animated: !isTerminal && activeEdges.has(edge.id),
