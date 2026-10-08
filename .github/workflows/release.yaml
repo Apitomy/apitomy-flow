@@ -48,7 +48,7 @@ jobs:
       - name: Compute Release and Snapshot Versions
         id: versions
         run: |
-          CURRENT_VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout -f engine/pom.xml)
+          CURRENT_VERSION=$(cd engine && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout)
           RELEASE_VERSION="${CURRENT_VERSION%-SNAPSHOT}"
           MAJOR=$(echo "$RELEASE_VERSION" | cut -d. -f1)
           MINOR=$(echo "$RELEASE_VERSION" | cut -d. -f2)
@@ -62,7 +62,7 @@ jobs:
 
 
       - name: Set release version (engine)
-        run: mvn versions:set -DnewVersion=${{ steps.versions.outputs.release-version }} -DgenerateBackupPoms=false
+        run: ./mvnw -B versions:set -DnewVersion=${{ steps.versions.outputs.release-version }} -DgenerateBackupPoms=false
         working-directory: engine
 
       - name: Set release version (UI)
@@ -71,7 +71,7 @@ jobs:
 
 
       - name: Build engine
-        run: mvn clean install
+        run: ./mvnw -B clean install
         working-directory: engine
 
       - name: Build UI
@@ -140,7 +140,7 @@ jobs:
 
 
       - name: Set next SNAPSHOT version (engine)
-        run: mvn versions:set -DnewVersion=${{ needs.release.outputs.snapshot-version }} -DgenerateBackupPoms=false
+        run: ./mvnw -B versions:set -DnewVersion=${{ needs.release.outputs.snapshot-version }} -DgenerateBackupPoms=false
         working-directory: engine
 
       - name: Set next SNAPSHOT version (UI)
