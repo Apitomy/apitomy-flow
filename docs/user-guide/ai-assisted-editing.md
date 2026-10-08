@@ -121,13 +121,15 @@ implementations are verified by `conformance/changesets.json`. Java does not pla
 ## The editor handle
 
 Pass a `ref` to `WorkflowEditor` to obtain a `WorkflowEditorHandle`. None of its methods throw.
+Inputs must be structured-cloneable plain JSON data; a change set that cannot be cloned is rejected as
+`malformed`.
 
 | Method | Result |
 | --- | --- |
-| `propose(cs)` | `{ status: 'staged' }` or `{ status: 'rejected', error }` |
+| `propose(cs)` | `{ status: 'staged' }` or `{ status: 'rejected', error }`. On a read-only editor it returns `'staged'` but shows no review bar. |
 | `apply(cs)` | `{ status: 'applied' }` or `{ status: 'rejected', error }` |
 | `withdraw(id)` | Removes the staged proposal if its id matches. |
-| `replace(workflow, origin?)` | Replaces the whole document as one undo step. |
+| `replace(workflow, origin?)` | Replaces the whole document as one undo step. `origin` defaults to `'host'`. |
 | `clearHighlights()` | Removes the applied-change highlight. |
 | `getSnapshot()` | `{ workflow, contentRevision, selection, problems }` (a detached copy). |
 
@@ -148,7 +150,7 @@ if (result.status === 'rejected' && result.error.code === 'stale') askAgentToRet
 - **Preview.** The canvas shows the proposal on top of the current document: added elements as dashed
   ghosts, modified and removed elements marked. The canvas stays editable, but proposal elements cannot
   be edited. Clicking a changed element shows a read-only before/after view in the review bar.
-- **Review bar.** A floating "Proposed changes" panel at the top of the canvas shows the summary, author,
+- **Review bar.** A floating "Proposed changes" panel at the bottom of the canvas shows the summary, author,
   change counts and a validation delta ("introduces N / fixes M", using built-in validation plus
   `spi.validate`). **Accept** runs the same path as `apply`; **Reject** discards the proposal.
 - **Staleness.** Any content edit makes the staged proposal stale, including undo and redo. Layout-only
@@ -186,3 +188,13 @@ a diff. `apply` is refused with the code `read-only`.
 const result = readOnlyRef.current!.apply(changeSet);
 // { status: 'rejected', error: { code: 'read-only', reason: '...' } }
 ```
+
+## Limitations
+
+- **Placement of added nodes.** Added nodes without a position are placed next to their neighbours
+  without moving existing nodes. This can produce edges that look like loop-backs; use **Tidy up** to
+  re-layout.
+- **Stale overlays.** A stale proposal's overlay is diffed against the current document, so while it is
+  shown greyed out the user's own later edits also appear as changes.
+- **Snapshot problems.** The `problems` in `getSnapshot()` may lag by one render after a handle dispatch
+  (`propose`, `apply`, `replace`).

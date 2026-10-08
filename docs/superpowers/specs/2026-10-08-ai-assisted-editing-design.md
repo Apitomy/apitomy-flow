@@ -158,8 +158,8 @@ Rules:
   `modified`, `removed` or `unchanged`. That status comes from a pure helper, extracted from the existing
   `WorkflowDiffViewer` diff logic and shared with it.
 - **Interaction**: the canvas stays editable. Proposal elements can't be edited. Selecting one shows a
-  read-only before/after view in the Properties panel.
-- **Review bar**: a floating panel at the top of the canvas.
+  read-only before/after view in the review bar.
+- **Review bar**: a floating panel at the bottom of the canvas, clear of the canvas toolbar.
   - It shows the summary, the author, and change counts.
   - It shows a validation delta for `preview` versus the current document, using built-in validation plus
     `spi.validate`: "introduces N / fixes M".
