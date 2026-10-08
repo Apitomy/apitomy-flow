@@ -48,6 +48,7 @@ import {
 } from '../simulation/simulate.ts';
 import './theme.css';
 import './WorkflowEditor.css';
+import type { ChangeMeta } from '../changeset/types.ts';
 
 export type FlowTheme = 'light' | 'dark';
 
@@ -91,8 +92,12 @@ const ignoreChange = (): void => {};
 
 export interface WorkflowEditorProps {
   workflow: Workflow;
-  /** Receives each committed revision of the workflow. Never called when {@link readOnly} is true. */
-  onChange?: (workflow: Workflow) => void;
+  /**
+   * Called with every committed revision. `meta.origin` tells host- and agent-made changes apart from the
+   * user's; `meta.contentRevision` is the base revision for the next change set. Never called when
+   * {@link readOnly} is true.
+   */
+  onChange?: (workflow: Workflow, meta: ChangeMeta) => void;
   /**
    * When true, the workflow is presented but cannot be changed: the palette and editing toolbar
    * actions are hidden, nodes/edges cannot be added, removed, moved or connected, the properties

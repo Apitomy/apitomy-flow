@@ -40,3 +40,5 @@ export {
   type EdgeEvaluation,
   type EdgeResult,
 } from './simulation/simulate.ts';
+export type { ChangeMeta, Origin } from './changeset/types.ts';
+export { computeContentRevision } from './changeset/contentRevision.ts';

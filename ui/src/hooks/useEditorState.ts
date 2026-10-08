@@ -1,10 +1,11 @@
 import { useEffect, useReducer, useState } from 'react';
 import type { Workflow } from '../types/workflow.ts';
+import type { ChangeMeta } from '../changeset/types.ts';
 import { createEditorState, editorReducer } from './editorState.ts';
 import { createDocumentPublisher } from './editorNotifications.ts';
 
 /** Owns reducer state and publishes only committed document revisions, once under StrictMode replay. */
-export function useEditorState(workflow: Workflow, onChange: (workflow: Workflow) => void) {
+export function useEditorState(workflow: Workflow, onChange: (workflow: Workflow, meta: ChangeMeta) => void) {
     const [state, dispatch] = useReducer(editorReducer, workflow, createEditorState);
     const metadata = JSON.stringify([workflow.id, workflow.name, workflow.description, workflow.version]);
     const [previousMetadata, setPreviousMetadata] = useState(metadata);

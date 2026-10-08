@@ -3,6 +3,8 @@ import type { Workflow, WorkflowNode } from '../types/workflow.ts';
 import { TIMEOUT_HANDLE, toReactFlowEdges, toReactFlowNodes, type FlowNodeData } from '../utils/conversion.ts';
 import { layoutForImport, layoutWorkflow } from '../layout/layoutWorkflow.ts';
 import { jsonEqual } from '../utils/jsonEqual.ts';
+import { computeContentRevision } from '../changeset/contentRevision.ts';
+import type { Origin } from '../changeset/types.ts';
 
 interface Selection {
     selectedNodeId: string | null;
@@ -16,6 +18,10 @@ interface Snapshot extends Selection {
     nodeKeys: Record<string, string>;
     selectedNodeIds: string[];
     selectedEdgeIds: string[];
+    /** Content revision of `semanticDocument`; layout-only edits keep it. */
+    contentRevision: string;
+    /** Origin of the change that produced this state. */
+    origin: Origin;
 }
 
 export interface EditorState extends Omit<Snapshot, 'selectedNodeIds' | 'selectedEdgeIds'> {
@@ -42,7 +48,7 @@ export type EditorCommand =
     | { type: 'addNode'; node: WorkflowNode }
     | { type: 'cloneNode'; id: string; newId: string }
     | { type: 'connect'; id: string; connection: Connection }
-    | { type: 'import'; workflow: Workflow }
+    | { type: 'import'; workflow: Workflow; origin?: Origin }
     | { type: 'metadata'; metadata: Pick<Workflow, 'id' | 'name' | 'description' | 'version'> }
     | { type: 'positions'; positions: Record<string, { x: number; y: number }> }
     | { type: 'commitPositions' }
@@ -61,6 +67,7 @@ export function createEditorState(workflow: Workflow): EditorState {
         nodeKeys: Object.fromEntries(document.nodes.map(node => [node.id, `initial:${node.id}`])),
         selectedNodeId: null, selectedEdgeId: null, past: [], future: [], revision: fallback ? 1 : 0,
         simulating: false, interactive: true, draftReset: 0,
+        contentRevision: computeContentRevision(document), origin: 'user',
     };
 }
 
@@ -68,7 +75,8 @@ function snapshot(state: EditorState): Snapshot {
     return { document: state.document, semanticDocument: state.semanticDocument, nodeKeys: state.nodeKeys,
         selectedNodeIds: state.nodes.filter(node => node.selected).map(node => node.id),
         selectedEdgeIds: state.edges.filter(edge => edge.selected).map(edge => edge.id),
-        selectedNodeId: state.selectedNodeId, selectedEdgeId: state.selectedEdgeId };
+        selectedNodeId: state.selectedNodeId, selectedEdgeId: state.selectedEdgeId,
+        contentRevision: state.contentRevision, origin: state.origin };
 }
 
 function validSelection(document: Workflow, selection: Selection): Selection {
@@ -102,7 +110,10 @@ function commit(state: EditorState, document: Workflow, group?: string, selectio
         ? state.semanticDocument : owned;
     const nodeKeys = Object.fromEntries(owned.nodes.map(node => [node.id, keys[node.id] ?? `${state.revision + 1}:${node.id}`]));
     return {
-        ...state, document: owned, semanticDocument, nodeKeys, ...present(state, owned, nodeKeys, canvasSelection), ...validSelection(owned, selection),
+        ...state, document: owned, semanticDocument,
+        contentRevision: semanticDocument === state.semanticDocument
+            ? state.contentRevision : computeContentRevision(semanticDocument),
+        nodeKeys, ...present(state, owned, nodeKeys, canvasSelection), ...validSelection(owned, selection),
         past: group && state.group === group ? state.past : [...state.past, snapshot(state)].slice(-50),
         future: [], group, revision: state.revision + 1,
     };
@@ -116,8 +127,7 @@ function sameSemantics(left: Workflow, right: Workflow): boolean {
     return jsonEqual(withoutLayout(left), withoutLayout(right));
 }
 
-/** Applies one atomic editor command without effects, clocks, IDs, or mutable history refs. */
-export function editorReducer(state: EditorState, command: EditorCommand): EditorState {
+function reduceCommand(state: EditorState, command: EditorCommand): EditorState {
     if (command.type === 'mode') {
         return {
             ...state, simulating: command.simulating ?? state.simulating,
@@ -141,10 +151,10 @@ export function editorReducer(state: EditorState, command: EditorCommand): Edito
         let next = changes.length ? { ...state, nodes: applyNodeChanges(changes, state.nodes) } : state;
         if (canvasEnabled) {
             const nodeIds = command.changes.filter(change => change.type === 'remove').map(change => change.id);
-            if (nodeIds.length) next = editorReducer(next, { type: 'delete', nodeIds });
+            if (nodeIds.length) next = reduceCommand(next, { type: 'delete', nodeIds });
             // Keyboard movement has no drag-stop callback; pointer movement commits only on release.
             if (changes.some(change => change.type === 'position' && change.dragging !== true)) {
-                next = editorReducer(next, { type: 'commitPositions' });
+                next = reduceCommand(next, { type: 'commitPositions' });
             }
         }
         return next;
@@ -153,7 +163,7 @@ export function editorReducer(state: EditorState, command: EditorCommand): Edito
         const changes = command.changes.filter(change => change.type === 'select');
         const next = changes.length ? { ...state, edges: applyEdgeChanges(changes, state.edges) } : state;
         const edgeIds = command.changes.filter(change => change.type === 'remove').map(change => change.id);
-        return canvasEnabled && edgeIds.length ? editorReducer(next, { type: 'delete', edgeIds }) : next;
+        return canvasEnabled && edgeIds.length ? reduceCommand(next, { type: 'delete', edgeIds }) : next;
     }
     if (state.simulating) return state;
     if (!state.interactive && ['addNode', 'cloneNode', 'connect', 'delete', 'positions', 'commitPositions', 'tidy']
@@ -211,7 +221,7 @@ export function editorReducer(state: EditorState, command: EditorCommand): Edito
                 { selectedNodeIds: [command.node.id], selectedEdgeIds: [] });
         case 'cloneNode': {
             const node = document.nodes.find(node => node.id === command.id);
-            return node ? editorReducer(state, { type: 'addNode', node: {
+            return node ? reduceCommand(state, { type: 'addNode', node: {
                 ...node, id: command.newId, name: `${node.name} (copy)`,
                 position: { x: (node.position?.x ?? 0) + 40, y: (node.position?.y ?? 0) + 40 },
             } }) : state;
@@ -243,8 +253,20 @@ export function editorReducer(state: EditorState, command: EditorCommand): Edito
             return commit(state, { ...document, nodes: document.nodes.map(node => command.positions[node.id]
                 ? { ...node, position: command.positions[node.id] } : node) }, undefined, state, state.nodeKeys, true);
         case 'commitPositions':
-            return editorReducer(state, { type: 'positions', positions: Object.fromEntries(
+            return reduceCommand(state, { type: 'positions', positions: Object.fromEntries(
                 state.nodes.map(node => [node.id, node.position]),
             ) });
     }
+}
+
+function commandOrigin(command: EditorCommand): Origin {
+    if (command.type === 'import' && command.origin) return command.origin;
+    return command.type === 'metadata' ? 'host' : 'user';
+}
+
+/** Applies one atomic editor command without effects, clocks, IDs, or mutable history refs. */
+export function editorReducer(state: EditorState, command: EditorCommand): EditorState {
+    const next = reduceCommand(state, command);
+    if (next === state || next.revision === state.revision) return next;
+    return { ...next, origin: commandOrigin(command) };
 }
