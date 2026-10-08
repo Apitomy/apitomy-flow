@@ -42,3 +42,11 @@ export {
 } from './simulation/simulate.ts';
 export type { ChangeMeta, Origin } from './changeset/types.ts';
 export { computeContentRevision } from './changeset/contentRevision.ts';
+export type {
+    ChangeSet, ChangeOp, ChangeSetError, ChangeSetErrorCode, ChangeSetResult, ProposalOutcome,
+} from './changeset/types.ts';
+export { applyChangeSet, applyChangeSetChecked } from './changeset/applyChangeSet.ts';
+export type {
+    WorkflowEditorHandle, EditorSnapshot, ProposeResult, ApplyResult,
+} from './hooks/editorHandle.ts';
+export type { EditorSelection } from './hooks/editorNotifications.ts';

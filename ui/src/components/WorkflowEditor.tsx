@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, useEffect, useRef, useId, type DragEvent } from 'react';
+import { useCallback, useMemo, useState, useEffect, useRef, useId, useImperativeHandle, useLayoutEffect, type DragEvent, type Ref } from 'react';
 import {
   ReactFlow,
   Background,
@@ -36,7 +36,9 @@ import { NodeContextMenu } from './NodeContextMenu.tsx';
 import { useEditorState } from '../hooks/useEditorState.ts';
 import { editorShortcut } from '../hooks/editorShortcuts.ts';
 import { readOnlyCommand } from '../hooks/editorReadOnly.ts';
-import { type EditorCommand } from '../hooks/editorState.ts';
+import { editorReducer, type EditorCommand } from '../hooks/editorState.ts';
+import { createEditorHandle, type WorkflowEditorHandle } from '../hooks/editorHandle.ts';
+import { type EditorSelection } from '../hooks/editorNotifications.ts';
 import { deleteWithEditorFocus } from '../hooks/editorDeletion.ts';
 import {
   startSimulation,
@@ -48,7 +50,7 @@ import {
 } from '../simulation/simulate.ts';
 import './theme.css';
 import './WorkflowEditor.css';
-import type { ChangeMeta } from '../changeset/types.ts';
+import type { ChangeMeta, ProposalOutcome } from '../changeset/types.ts';
 
 export type FlowTheme = 'light' | 'dark';
 
@@ -109,10 +111,21 @@ export interface WorkflowEditorProps {
   onValidationChange?: (problems: ValidationProblem[]) => void;
   theme?: FlowTheme;
   spi?: EditorSpi;
+  /** Imperative handle for staging and applying change sets (React 19 ref prop). */
+  ref?: Ref<WorkflowEditorHandle>;
+  /** Called once for every proposal resolution: accepted, rejected, stale or withdrawn. */
+  onProposalResolved?: (id: string, outcome: ProposalOutcome) => void;
+  /** Called when the set of selected nodes/edges changes. */
+  onSelectionChange?: (selection: EditorSelection) => void;
+  /** Keep elements changed by the last applied change set highlighted. Defaults to true. */
+  highlightApplied?: boolean;
 }
 
-function WorkflowEditorInner({ workflow, onChange, readOnly = false, onValidationChange, theme = 'light', spi }: WorkflowEditorProps) {
-  const { state, dispatch: rawDispatch } = useEditorState(workflow, readOnly ? ignoreChange : onChange ?? ignoreChange);
+function WorkflowEditorInner({
+  workflow, onChange, readOnly = false, onValidationChange, theme = 'light', spi, ref, onProposalResolved, onSelectionChange,
+}: WorkflowEditorProps) {
+  const { state, dispatch: rawDispatch } = useEditorState(workflow, readOnly ? ignoreChange : onChange ?? ignoreChange,
+    { onProposalResolved, onSelectionChange });
   // In read-only mode every mutating command is dropped before it reaches the reducer.
   const dispatch = useCallback((command: EditorCommand) => {
     const allowed = readOnly ? readOnlyCommand(command) : command;
@@ -163,6 +176,27 @@ function WorkflowEditorInner({ workflow, onChange, readOnly = false, onValidatio
   useEffect(() => {
     onValidationChange?.(validationProblems);
   }, [validationProblems, onValidationChange]);
+
+  // The handle reads the latest committed state; dispatches update it eagerly with the same pure reducer so
+  // consecutive handle calls (propose → apply) observe each other before React re-renders.
+  const stateRef = useRef(state);
+  const problemsRef = useRef(validationProblems);
+  useLayoutEffect(() => {
+    stateRef.current = state;
+    problemsRef.current = validationProblems;
+  }, [state, validationProblems]);
+  useImperativeHandle(ref, () => createEditorHandle({
+    state: () => stateRef.current,
+    dispatch: (command) => {
+      // Host document replacement bypasses the read-only filter; everything else obeys it.
+      const allowed = command.type === 'import' ? command : readOnly ? readOnlyCommand(command) : command;
+      if (!allowed) return;
+      stateRef.current = editorReducer(stateRef.current, allowed);
+      rawDispatch(allowed);
+    },
+    readOnly: () => readOnly,
+    problems: () => problemsRef.current,
+  }), [readOnly, rawDispatch]);
 
   const nodesWithValidation = useMemo(() => {
     if (!validationProblems?.length && !parallelAnalysis) return nodes;
