@@ -667,17 +667,19 @@ function WorkflowEditorInner({
                 </div>
               </Panel>
             )}
+            {proposal && !readOnly && (
+              <Panel position="bottom-center">
+                <ProposalReviewBar
+                  proposal={proposal}
+                  counts={formatCounts(proposalCounts(overlay.status!))}
+                  validation={proposalValidation}
+                  details={focusedDetails}
+                  onAccept={() => dispatch({ type: 'acceptProposal' })}
+                  onReject={() => dispatch({ type: 'rejectProposal' })}
+                />
+              </Panel>
+            )}
           </ReactFlow>
-          {proposal && !readOnly && (
-            <ProposalReviewBar
-              proposal={proposal}
-              counts={formatCounts(proposalCounts(overlay.status!))}
-              validation={proposalValidation}
-              details={focusedDetails}
-              onAccept={() => dispatch({ type: 'acceptProposal' })}
-              onReject={() => dispatch({ type: 'rejectProposal' })}
-            />
-          )}
           {contextMenu && interactivityEnabled && (
             <NodeContextMenu
               node={contextMenu.node}

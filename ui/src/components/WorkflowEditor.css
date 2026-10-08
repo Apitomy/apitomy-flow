@@ -92,8 +92,8 @@
 .react-flow__edge.flow-applied .react-flow__edge-path { stroke: var(--flow-brand, #06c); stroke-width: 2.5; }
 
 .flow-proposal-bar {
-  position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 5;
-  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; max-width: min(90%, 720px);
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; max-width: min(90vw, 720px);
+  max-height: 50vh; overflow: auto;
   padding: 8px 12px; border-radius: 8px; background: var(--flow-bg-primary, #fff);
   border: 1px solid var(--flow-border, #d2d2d2); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }

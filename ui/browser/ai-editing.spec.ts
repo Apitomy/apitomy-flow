@@ -58,3 +58,18 @@ test('an applied change set is highlighted until the user edits content', async 
     await page.keyboard.press('Delete');
     await expect(node(editor, 'w')).not.toHaveClass(/flow-applied/);
 });
+
+test('the review bar never covers the canvas toolbar', async ({ page }) => {
+    await page.goto('/?ai');
+    const editor = page.getByTestId('one');
+    await ready(editor);
+    await editor.getByRole('button', { name: 'Propose change' }).click();
+    const bar = editor.getByRole('region', { name: 'Proposed changes' });
+    await expect(bar).toBeVisible();
+    // Playwright's click() fails if another element would receive the click, proving the toolbar is reachable.
+    await editor.getByRole('button', { name: 'Tidy up' }).click();
+    const undo = editor.getByRole('button', { name: 'Undo', exact: true });
+    await expect(undo).toBeEnabled();
+    await undo.click();
+    await expect(bar).toBeVisible();
+});
