@@ -129,6 +129,20 @@ Pure core, in `ui/src/changeset/applyChangeSet.ts`:
   input workflow, a change set, and either the expected output workflow (compared with layout stripped) or
   the expected error `code` and `opIndex`.
 - Added nodes without a `position` are placed by `placeNewNodes` (see §1).
+
+Imperative handle, exposed through a `ref` on `WorkflowEditor`. None of these methods throw.
+
+| Method | Result |
+|---|---|
+| `propose(cs)` | `{ status: 'staged' }` or `{ status: 'rejected', error }` |
+| `apply(cs)` | `{ status: 'applied' }` or `{ status: 'rejected', error }` |
+| `clearHighlights()` | `void` |
+| `withdraw(id)` | `void` |
+| `replace(workflow, origin)` | `void` |
+| `getSnapshot()` | `{ workflow, contentRevision, selection, problems }` |
+
+Rules:
+
 - `cs.baseRevision !== contentRevision` produces the error code `stale`.
 - `apply` dispatches a new reducer command, `applyChangeSet`. That command produces exactly one undo step,
   with `origin = cs.author`.
