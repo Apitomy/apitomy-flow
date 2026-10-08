@@ -70,10 +70,16 @@ export function layoutWorkflow(
     g.setNode(layoutIds.get(node.id)!, { width: size.width, height: size.height });
   }
 
+  // Reverse loop-back edges ourselves (rather than letting dagre guess) so ranks follow the
+  // flow from the start node(s): a loop's target always stays left of its source.
+  const backEdges = findBackEdges(nodes, edges);
   for (const edge of edges) {
     const source = layoutIds.get(edge.source);
     const target = layoutIds.get(edge.target);
-    if (source !== undefined && target !== undefined) {
+    if (source === undefined || target === undefined || source === target) continue;
+    if (backEdges.has(edge)) {
+      g.setEdge(target, source);
+    } else {
       g.setEdge(source, target);
     }
   }
@@ -93,6 +99,59 @@ export function layoutWorkflow(
       position,
     };
   });
+}
+
+/**
+ * Identify loop-back edges: edges that point to a node still on the depth-first search stack
+ * when the graph is walked from its start node(s) along edges in priority order. Removing
+ * (or reversing) these edges leaves an acyclic graph whose order matches the execution flow.
+ * Nodes unreachable from a start node are walked afterwards, in document order.
+ *
+ * @param nodes the workflow nodes
+ * @param edges the workflow edges
+ * @returns the set of edges that close a cycle
+ */
+export function findBackEdges(nodes: WorkflowNode[], edges: WorkflowEdge[]): Set<WorkflowEdge> {
+  const outgoing = new Map<string, WorkflowEdge[]>();
+  for (const edge of edges) {
+    const list = outgoing.get(edge.source) ?? [];
+    list.push(edge);
+    outgoing.set(edge.source, list);
+  }
+  for (const list of outgoing.values()) {
+    list.sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0));
+  }
+
+  const back = new Set<WorkflowEdge>();
+  const state = new Map<string, 'active' | 'done'>();
+  const visit = (root: string): void => {
+    // Iterative DFS so very long workflows cannot overflow the call stack.
+    const stack: { id: string; next: number }[] = [{ id: root, next: 0 }];
+    state.set(root, 'active');
+    while (stack.length > 0) {
+      const frame = stack[stack.length - 1];
+      const out = outgoing.get(frame.id) ?? [];
+      if (frame.next >= out.length) {
+        state.set(frame.id, 'done');
+        stack.pop();
+        continue;
+      }
+      const edge = out[frame.next++];
+      const seen = state.get(edge.target);
+      if (seen === 'active') {
+        back.add(edge);
+      } else if (seen === undefined) {
+        state.set(edge.target, 'active');
+        stack.push({ id: edge.target, next: 0 });
+      }
+    }
+  };
+
+  const roots = [...nodes.filter(n => n.type === 'start'), ...nodes];
+  for (const node of roots) {
+    if (!state.has(node.id)) visit(node.id);
+  }
+  return back;
 }
 
 /**

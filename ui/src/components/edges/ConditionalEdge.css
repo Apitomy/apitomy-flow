@@ -43,3 +43,24 @@
   border-style: dashed;
   border-color: var(--flow-status-warning, #f0ab00);
 }
+
+/* Loop-back edges: a loop glyph (shown alone when the edge has no label). */
+.edge-condition-badge.is-loop-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.edge-loop-icon {
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 700;
+  color: var(--flow-loop-back, #8476d1);
+}
+.edge-condition-badge.is-default .edge-loop-icon,
+.edge-condition-badge.sim-error .edge-loop-icon {
+  color: inherit;
+}
+.edge-condition-badge.is-loop-back .edge-badge-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
