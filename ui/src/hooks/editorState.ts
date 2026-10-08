@@ -4,7 +4,9 @@ import { TIMEOUT_HANDLE, toReactFlowEdges, toReactFlowNodes, type FlowNodeData }
 import { layoutForImport, layoutWorkflow } from '../layout/layoutWorkflow.ts';
 import { jsonEqual } from '../utils/jsonEqual.ts';
 import { computeContentRevision } from '../changeset/contentRevision.ts';
-import type { Origin } from '../changeset/types.ts';
+import { applyChangeSetChecked } from '../changeset/applyChangeSet.ts';
+import { changeStatus, highlightOf } from '../changeset/changeStatus.ts';
+import type { ChangeSet, Highlight, Origin, ProposalEvent, ProposalOutcome, StagedProposal } from '../changeset/types.ts';
 
 interface Selection {
     selectedNodeId: string | null;
@@ -35,10 +37,25 @@ export interface EditorState extends Omit<Snapshot, 'selectedNodeIds' | 'selecte
     group?: string;
     simulating: boolean;
     interactive: boolean;
+       /** The single proposal under review, if any. Not part of undo history. */
+       proposal: StagedProposal | null;
+       /** Elements changed by the most recently applied change set. Not part of undo history. */
+       highlight: Highlight | null;
+       /** Recent proposal resolutions, drained by `createProposalPublisher`. */
+       proposalEvents: ProposalEvent[];
+       /** Sequence number of the last emitted proposal event. */
+       proposalSeq: number;
+   
 }
 
 export type EditorCommand =
-    | { type: 'select'; nodeId?: string; edgeId?: string }
+       | { type: 'propose'; changeSet: ChangeSet; preview: Workflow }
+       | { type: 'withdraw'; id: string }
+       | { type: 'applyChangeSet'; changeSet: ChangeSet }
+       | { type: 'acceptProposal' }
+       | { type: 'rejectProposal' }
+       | { type: 'clearHighlights' }
+       | { type: 'select'; nodeId?: string; edgeId?: string }
     | { type: 'mode'; simulating?: boolean; interactive?: boolean }
     | { type: 'endGroup' }
     | { type: 'nodeData'; id: string; data: Partial<FlowNodeData>; group?: string }
@@ -68,6 +85,7 @@ export function createEditorState(workflow: Workflow): EditorState {
         selectedNodeId: null, selectedEdgeId: null, past: [], future: [], revision: fallback ? 1 : 0,
         simulating: false, interactive: true, draftReset: 0,
         contentRevision: computeContentRevision(document), origin: 'user',
+        proposal: null, highlight: null, proposalEvents: [], proposalSeq: 0,
     };
 }
 
@@ -127,7 +145,8 @@ function sameSemantics(left: Workflow, right: Workflow): boolean {
     return jsonEqual(withoutLayout(left), withoutLayout(right));
 }
 
-function reduceCommand(state: EditorState, command: EditorCommand): EditorState {
+type ProposalCommandType = 'propose' | 'withdraw' | 'applyChangeSet' | 'acceptProposal' | 'rejectProposal' | 'clearHighlights';
+   function reduceCommand(state: EditorState, command: Exclude<EditorCommand, { type: ProposalCommandType }>): EditorState {
     if (command.type === 'mode') {
         return {
             ...state, simulating: command.simulating ?? state.simulating,
@@ -264,9 +283,64 @@ function commandOrigin(command: EditorCommand): Origin {
     return command.type === 'metadata' ? 'host' : 'user';
 }
 
+function emit(state: EditorState, id: string, outcome: ProposalOutcome): EditorState {
+    const seq = state.proposalSeq + 1;
+    return { ...state, proposalSeq: seq, proposalEvents: [...state.proposalEvents, { seq, id, outcome }].slice(-20) };
+}
+
+function markStale(state: EditorState): EditorState {
+    const proposal = state.proposal;
+    if (!proposal || proposal.stale) return state;
+    return { ...emit(state, proposal.changeSet.id, 'stale'), proposal: { ...proposal, stale: true } };
+}
+
+function applyChangeSetCommand(state: EditorState, changeSet: ChangeSet): EditorState {
+    const result = applyChangeSetChecked(state.document, changeSet, state.contentRevision);
+    if (!result.ok) return state;
+    const committed = commit(state, result.workflow);
+    let next: EditorState = { ...committed, origin: changeSet.author, group: undefined,
+        highlight: highlightOf(changeStatus(state.document, committed.document)) };
+    if (state.proposal?.changeSet.id === changeSet.id) {
+        next = { ...emit(next, changeSet.id, 'accepted'), proposal: null };
+    } else if (next.contentRevision !== state.contentRevision) {
+        next = markStale(next);
+    }
+    return next;
+}
+
 /** Applies one atomic editor command without effects, clocks, IDs, or mutable history refs. */
 export function editorReducer(state: EditorState, command: EditorCommand): EditorState {
+    switch (command.type) {
+        case 'propose': {
+            if (command.changeSet.baseRevision !== state.contentRevision) return state;
+            const next = state.proposal && !state.proposal.stale
+                ? emit(state, state.proposal.changeSet.id, 'withdrawn') : state;
+            return { ...next, proposal: { changeSet: command.changeSet, preview: command.preview, stale: false } };
+        }
+        case 'withdraw': {
+            const proposal = state.proposal;
+            if (!proposal || proposal.changeSet.id !== command.id) return state;
+            return { ...(proposal.stale ? state : emit(state, command.id, 'withdrawn')), proposal: null };
+        }
+        case 'rejectProposal': {
+            const proposal = state.proposal;
+            if (!proposal) return state;
+            return { ...(proposal.stale ? state : emit(state, proposal.changeSet.id, 'rejected')), proposal: null };
+        }
+        case 'acceptProposal':
+            return state.proposal && !state.proposal.stale ? applyChangeSetCommand(state, state.proposal.changeSet) : state;
+        case 'applyChangeSet':
+            return applyChangeSetCommand(state, command.changeSet);
+        case 'clearHighlights':
+            return state.highlight ? { ...state, highlight: null } : state;
+    }
     const next = reduceCommand(state, command);
     if (next === state || next.revision === state.revision) return next;
-    return { ...next, origin: commandOrigin(command) };
+    const origin = commandOrigin(command);
+    let result: EditorState = { ...next, origin };
+    if (result.contentRevision !== state.contentRevision) {
+        if (origin === 'user' && result.highlight) result = { ...result, highlight: null };
+        result = markStale(result);
+    }
+    return result;
 }
