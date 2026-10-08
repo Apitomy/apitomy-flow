@@ -15,6 +15,9 @@ const SIM_EDGE_STYLE: Record<string, { stroke?: string; strokeWidth?: number; op
   error: { stroke: 'var(--flow-status-danger, #c9190b)', strokeWidth: 2.5 },
 };
 
+/** Stroke colour for loop-back edges; matches the badge's loop icon. */
+const LOOP_BACK_COLOR = 'var(--flow-loop-back, #8476d1)';
+
 function boxOf(node: InternalNode): Box {
   const { x, y } = node.internals.positionAbsolute;
   return { x, y, width: node.measured.width ?? 0, height: node.measured.height ?? 0 };
@@ -78,14 +81,37 @@ export function ConditionalEdge({
     | 'matched' | 'true' | 'false' | 'skipped' | 'error' | undefined;
 
   const displayText = label || (isTimeout ? 'timeout' : isDefault ? 'default' : condition);
-  const badgeClass = [isDefault ? 'is-default' : '', isTimeout ? 'is-timeout' : '', simState ? `sim-${simState}` : '']
+  const badgeClass = [loopBack ? 'is-loop-back' : '', isDefault ? 'is-default' : '', isTimeout ? 'is-timeout' : '', simState ? `sim-${simState}` : '']
     .filter(Boolean)
     .join(' ');
 
   const simStroke = SIM_EDGE_STYLE[simState ?? ''];
+  // Loop-backs get their own colour unless simulation or selection styling takes precedence.
+  const loopTinted = loopBack && !simStroke?.stroke && !selected;
+  const loopMarkerId = `flow-loop-arrow-${id}`;
 
   return (
     <>
+      {loopTinted && (
+        <defs>
+          <marker
+            id={loopMarkerId}
+            viewBox="-10 -10 20 20"
+            markerWidth="12.5"
+            markerHeight="12.5"
+            orient="auto-start-reverse"
+            refX="0"
+            refY="0"
+          >
+            <polyline
+              className="edge-loop-arrow"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              points="-5,-4 0,0 -5,4 -5,-4"
+            />
+          </marker>
+        </defs>
+      )}
       <BaseEdge
         id={id}
         path={edgePath}
@@ -93,13 +119,14 @@ export function ConditionalEdge({
           ...style,
           strokeWidth: simStroke?.strokeWidth ?? (selected ? 2.5 : 1.5),
           stroke: simStroke?.stroke
-            ?? (selected ? 'var(--pf-t--global--color--brand--default, #06c)' : undefined),
+            ?? (selected ? 'var(--pf-t--global--color--brand--default, #06c)' : undefined)
+            ?? (loopTinted ? LOOP_BACK_COLOR : undefined),
           opacity: simStroke?.opacity,
           strokeDasharray: simStroke?.strokeDasharray ?? (isTimeout ? '6 4' : undefined),
         }}
-        markerEnd={markerEnd}
+        markerEnd={loopTinted ? `url(#${loopMarkerId})` : markerEnd}
       />
-      {displayText && (
+      {(displayText || loopBack) && (
         <EdgeLabelRenderer>
           <div
             className={`edge-condition-badge ${badgeClass}`}
@@ -109,7 +136,12 @@ export function ConditionalEdge({
               pointerEvents: 'all',
             }}
           >
-            {displayText}
+            {loopBack && (
+              <span className="edge-loop-icon" role="img" aria-label="Loops back" title="Loops back to an earlier step">
+                ↻
+              </span>
+            )}
+            {loopBack && displayText ? <span className="edge-badge-text">{displayText}</span> : displayText}
           </div>
         </EdgeLabelRenderer>
       )}
