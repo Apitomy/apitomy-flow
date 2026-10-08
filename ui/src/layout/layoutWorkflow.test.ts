@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { layoutWorkflow, needsLayout } from './layoutWorkflow.ts';
+import { findBackEdges, layoutWorkflow, needsLayout } from './layoutWorkflow.ts';
 import { type WorkflowNode, type WorkflowEdge } from '../types/workflow.ts';
 
 function node(id: string, type: WorkflowNode['type'], x = 0, y = 0): WorkflowNode {
@@ -9,6 +9,30 @@ function node(id: string, type: WorkflowNode['type'], x = 0, y = 0): WorkflowNod
 function edge(source: string, target: string): WorkflowEdge {
   return { id: `e-${source}-${target}`, source, target, priority: 0, isDefault: false };
 }
+
+describe('loop handling', () => {
+  const nodes = [node('s', 'start'), node('a', 'action'), node('b', 'action'), node('c', 'action'), node('x', 'end')];
+  const edges = [
+    { id: '1', source: 's', target: 'a', priority: 0, isDefault: false },
+    { id: '2', source: 'a', target: 'b', priority: 0, isDefault: false },
+    { id: '3', source: 'b', target: 'c', priority: 0, isDefault: false },
+    { id: 'loop', source: 'c', target: 'a', priority: 0, isDefault: false },
+    { id: '4', source: 'c', target: 'x', priority: 1, isDefault: false },
+  ];
+
+  it('identifies only the edge that closes the cycle as a back edge', () => {
+    expect([...findBackEdges(nodes, edges)].map(e => e.id)).toEqual(['loop']);
+  });
+
+  it('keeps nodes in flow order from the start node despite the loop', () => {
+    const laid = layoutWorkflow(nodes, edges);
+    const x = (id: string) => laid.find(n => n.id === id)!.position.x;
+    expect(x('s')).toBeLessThan(x('a'));
+    expect(x('a')).toBeLessThan(x('b'));
+    expect(x('b')).toBeLessThan(x('c'));
+    expect(x('c')).toBeLessThan(x('x'));
+  });
+});
 
 describe('layoutWorkflow', () => {
   it('orders a linear graph left-to-right', () => {
