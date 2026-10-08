@@ -85,7 +85,7 @@ describe('proposals', () => {
         expect(second.proposal?.changeSet.id).toBe('cs-2');
     });
 
-    it('goes stale once on a content edit, including undo, but not on layout edits', () => {
+    it('goes stale once on content edits after a layout-only undo, but not on layout edits', () => {
         const initial = rename(createEditorState(workflow()));
         const staged = propose(initial, addWait(initial));
         const moved = editorReducer(editorReducer(staged, { type: 'positions', positions: { s: { x: 9, y: 9 } } }),
@@ -97,6 +97,16 @@ describe('proposals', () => {
         const twice = edit(edit(undone, 'Again'), 'Once more');
         expect(twice.proposal?.stale).toBe(true);
         expect(outcomes(twice)).toEqual(['cs-1:stale']);
+    });
+
+    it('goes stale once when a content-changing undo runs', () => {
+        const initial = rename(createEditorState(workflow()));
+        const staged = propose(initial, addWait(initial));
+        const undone = editorReducer(staged, { type: 'undo' });
+        expect(undone.contentRevision).not.toBe(staged.contentRevision);
+        expect(undone.proposal?.stale).toBe(true);
+        const redone = editorReducer(undone, { type: 'redo' });
+        expect(outcomes(redone)).toEqual(['cs-1:stale']);
     });
 
     it('accepts a fresh proposal and ignores accept when stale', () => {

@@ -37,25 +37,24 @@ export interface EditorState extends Omit<Snapshot, 'selectedNodeIds' | 'selecte
     group?: string;
     simulating: boolean;
     interactive: boolean;
-       /** The single proposal under review, if any. Not part of undo history. */
-       proposal: StagedProposal | null;
-       /** Elements changed by the most recently applied change set. Not part of undo history. */
-       highlight: Highlight | null;
-       /** Recent proposal resolutions, drained by `createProposalPublisher`. */
-       proposalEvents: ProposalEvent[];
-       /** Sequence number of the last emitted proposal event. */
-       proposalSeq: number;
-   
+    /** The single proposal under review, if any. Not part of undo history. */
+    proposal: StagedProposal | null;
+    /** Elements changed by the most recently applied change set. Not part of undo history. */
+    highlight: Highlight | null;
+    /** Recent proposal resolutions, drained by `createProposalPublisher`. */
+    proposalEvents: ProposalEvent[];
+    /** Sequence number of the last emitted proposal event. */
+    proposalSeq: number;
 }
 
 export type EditorCommand =
-       | { type: 'propose'; changeSet: ChangeSet; preview: Workflow }
-       | { type: 'withdraw'; id: string }
-       | { type: 'applyChangeSet'; changeSet: ChangeSet }
-       | { type: 'acceptProposal' }
-       | { type: 'rejectProposal' }
-       | { type: 'clearHighlights' }
-       | { type: 'select'; nodeId?: string; edgeId?: string }
+    | { type: 'propose'; changeSet: ChangeSet; preview: Workflow }
+    | { type: 'withdraw'; id: string }
+    | { type: 'applyChangeSet'; changeSet: ChangeSet }
+    | { type: 'acceptProposal' }
+    | { type: 'rejectProposal' }
+    | { type: 'clearHighlights' }
+    | { type: 'select'; nodeId?: string; edgeId?: string }
     | { type: 'mode'; simulating?: boolean; interactive?: boolean }
     | { type: 'endGroup' }
     | { type: 'nodeData'; id: string; data: Partial<FlowNodeData>; group?: string }
@@ -146,7 +145,7 @@ function sameSemantics(left: Workflow, right: Workflow): boolean {
 }
 
 type ProposalCommandType = 'propose' | 'withdraw' | 'applyChangeSet' | 'acceptProposal' | 'rejectProposal' | 'clearHighlights';
-   function reduceCommand(state: EditorState, command: Exclude<EditorCommand, { type: ProposalCommandType }>): EditorState {
+function reduceCommand(state: EditorState, command: Exclude<EditorCommand, { type: ProposalCommandType }>): EditorState {
     if (command.type === 'mode') {
         return {
             ...state, simulating: command.simulating ?? state.simulating,
