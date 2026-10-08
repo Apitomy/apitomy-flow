@@ -234,9 +234,24 @@ function WorkflowEditorInner({
     [validationProblems, selectedNodeId],
   );
 
+  // Ghost (proposed) nodes are not part of the editor state, so React Flow's measurements for them are kept
+  // here; without them React Flow keeps the ghosts hidden.
+  const [ghostSizes, setGhostSizes] = useState<Record<string, { width: number; height: number }>>({});
   const handleNodesChange = useCallback((changes: NodeChange<Node<FlowNodeData>>[]) => {
-    dispatch({ type: 'nodesChange', changes });
-  }, [dispatch]);
+    const known = new Set(nodes.map(node => node.id));
+    const ghostChanges = changes.filter(change => change.type === 'dimensions' && !known.has(change.id) && change.dimensions);
+    if (ghostChanges.length) {
+      setGhostSizes(previous => {
+        const next = { ...previous };
+        ghostChanges.forEach(change => {
+          if (change.type === 'dimensions' && change.dimensions) next[change.id] = change.dimensions;
+        });
+        return next;
+      });
+    }
+    const rest = changes.filter(change => !ghostChanges.includes(change));
+    if (rest.length) dispatch({ type: 'nodesChange', changes: rest });
+  }, [dispatch, nodes]);
 
   const handleEdgesChange = useCallback((changes: EdgeChange[]) => {
     dispatch({ type: 'edgesChange', changes });
@@ -525,10 +540,12 @@ function WorkflowEditorInner({
     });
   }, [edges, simActive, simState]);
 
-  const overlay = useMemo(
-    () => buildProposalOverlay(displayNodes, displayEdges, currentWorkflow, proposal, highlightApplied ? state.highlight : null),
-    [displayNodes, displayEdges, currentWorkflow, proposal, highlightApplied, state.highlight],
-  );
+  const overlay = useMemo(() => {
+    const built = buildProposalOverlay(displayNodes, displayEdges, currentWorkflow, proposal,
+      highlightApplied ? state.highlight : null);
+    return { ...built, nodes: built.nodes.map(node => built.status?.nodes[node.id] === 'added' && ghostSizes[node.id]
+      ? { ...node, measured: ghostSizes[node.id] } : node) };
+  }, [displayNodes, displayEdges, currentWorkflow, proposal, highlightApplied, state.highlight, ghostSizes]);
   // Focus is tied to a proposal id so it resets automatically when the proposal changes.
   const [proposalFocus, setProposalFocus] = useState<{ proposalId: string; elementId: string } | null>(null);
   const focusedDetails = proposal && proposalFocus?.proposalId === proposal.changeSet.id
