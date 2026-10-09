@@ -163,6 +163,23 @@ if (result.status === 'rejected' && result.error.code === 'stale') askAgentToRet
 <WorkflowEditor ref={editorRef} workflow={seed} highlightApplied={false} />
 ```
 
+A staged proposal that adds a Wait node before End: the new node and edges are dashed ghosts, and the
+removed edge is drawn dashed in red.
+
+![Staged proposal with the review bar](images/ai-assisted-editing/after-proposal-staged.png)
+
+Clicking a changed element shows its before/after in the review bar:
+
+![Proposal details in the review bar](images/ai-assisted-editing/after-proposal-details.png)
+
+After Accept, the change is one undo step and the changed elements stay highlighted:
+
+![Applied change highlighted](images/ai-assisted-editing/after-accepted-highlight.png)
+
+A user content edit makes the proposal stale. Only Dismiss remains, and the overlay is greyed out:
+
+![Stale proposal](images/ai-assisted-editing/after-proposal-stale.png)
+
 ## Events
 
 - `onChange(workflow, { contentRevision, origin })` — `origin` is `'user'`, `'host'` or `agent:<name>`.
