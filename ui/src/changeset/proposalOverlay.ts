@@ -1,4 +1,4 @@
-import type { Edge, Node } from '@xyflow/react';
+import type { Edge, Node, NodeChange } from '@xyflow/react';
 import type { Workflow, WorkflowNode } from '../types/workflow.ts';
 import { toReactFlowEdges, toReactFlowNodes, type FlowNodeData } from '../utils/conversion.ts';
 import { jsonEqual } from '../utils/jsonEqual.ts';
@@ -157,4 +157,30 @@ export function proposalDetails(document: Workflow, preview: Workflow, id: strin
     const after = preview.edges.find(edge => edge.id === id) ?? null;
     if (!before && !after) return null;
     return jsonEqual(before, after) ? null : { id, kind: 'edge', before, after };
+}
+
+/** Measured size of a proposed (ghost) node, keyed by node id. */
+export type GhostSizes = Record<string, { width: number; height: number }>;
+
+/**
+ * Separates React Flow measurements of proposed (ghost) nodes from the changes the editor reducer handles.
+ * Ghost nodes are not part of editor state, so the reducer would discard their measurements and React Flow
+ * would keep them hidden.
+ *
+ * @param changes the node changes reported by React Flow
+ * @param knownIds ids of the nodes in editor state
+ * @returns measured ghost sizes, and the remaining changes for the reducer
+ */
+export function splitGhostChanges<T extends Node>(changes: NodeChange<T>[], knownIds: Set<string>):
+    { ghostSizes: GhostSizes; rest: NodeChange<T>[] } {
+    const ghostSizes: GhostSizes = {};
+    const rest: NodeChange<T>[] = [];
+    for (const change of changes) {
+        if (change.type === 'dimensions' && change.dimensions && !knownIds.has(change.id)) {
+            ghostSizes[change.id] = change.dimensions;
+        } else {
+            rest.push(change);
+        }
+    }
+    return { ghostSizes, rest };
 }
