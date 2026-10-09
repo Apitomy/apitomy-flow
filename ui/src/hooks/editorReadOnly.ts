@@ -3,7 +3,8 @@ import type { EditorCommand } from './editorState.ts';
 /**
  * Filters an editor command for a read-only editor. Commands that only affect presentation
  * (selection, leaving simulation mode, typing-group bookkeeping, host metadata sync, React Flow measurement)
- * pass through; anything that could mutate the workflow document returns {@code null}.
+ * pass through, and proposals may be previewed, rejected or withdrawn but not accepted or applied;
+ * anything that could mutate the workflow document returns {@code null}.
  *
  * @param command the command the editor wants to dispatch
  * @returns the (possibly narrowed) command to dispatch, or {@code null} to drop it
@@ -13,6 +14,10 @@ export function readOnlyCommand(command: EditorCommand): EditorCommand | null {
         case 'select':
         case 'endGroup':
         case 'metadata':
+        case 'propose':
+        case 'withdraw':
+        case 'rejectProposal':
+        case 'clearHighlights':
             return command;
         case 'mode':
             // Simulation is unavailable when read-only; only leaving it is allowed. The interactivity

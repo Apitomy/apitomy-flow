@@ -103,4 +103,14 @@ describe('read-only editor', () => {
         expect(editorShortcut({ key: 'y', ctrlKey: true }, true, false, false, true)).toBeNull();
         expect(editorShortcut({ key: 'Delete' }, true, false, false)).toBe('delete');
     });
+
+    it('lets proposals be previewed but never applied when read-only', () => {
+        const changeSet = { id: 'c', baseRevision: 'r', author: 'host' as const, summary: 's', ops: [] };
+        expect(readOnlyCommand({ type: 'propose', changeSet, preview: { id: 'w', name: 'W', nodes: [], edges: [] } })).not.toBeNull();
+        expect(readOnlyCommand({ type: 'rejectProposal' })).not.toBeNull();
+        expect(readOnlyCommand({ type: 'clearHighlights' })).not.toBeNull();
+        expect(readOnlyCommand({ type: 'withdraw', id: 'c' })).not.toBeNull();
+        expect(readOnlyCommand({ type: 'acceptProposal' })).toBeNull();
+        expect(readOnlyCommand({ type: 'applyChangeSet', changeSet })).toBeNull();
+    });
 });

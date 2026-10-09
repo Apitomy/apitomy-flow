@@ -62,6 +62,7 @@ nav:
     - Visual Editor: user-guide/visual-editor.md
     - Workflow Viewer: user-guide/workflow-viewer.md
     - Workflow Diff Viewer: user-guide/workflow-diff.md
+    - AI-assisted editing: user-guide/ai-assisted-editing.md
     - Parallel Fork/Join: user-guide/parallel-fork-join.md
   - Developer Guide:
     - Building: developer-guide/building.md

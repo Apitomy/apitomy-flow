@@ -1,10 +1,20 @@
 import { useEffect, useReducer, useState } from 'react';
 import type { Workflow } from '../types/workflow.ts';
+import type { ChangeMeta, ProposalOutcome } from '../changeset/types.ts';
 import { createEditorState, editorReducer } from './editorState.ts';
-import { createDocumentPublisher } from './editorNotifications.ts';
+import {
+    createDocumentPublisher, createProposalPublisher, createSelectionPublisher, type EditorSelection,
+} from './editorNotifications.ts';
+
+/** Host callbacks beyond `onChange`. */
+export interface EditorListeners {
+    onProposalResolved?: (id: string, outcome: ProposalOutcome) => void;
+    onSelectionChange?: (selection: EditorSelection) => void;
+}
 
 /** Owns reducer state and publishes only committed document revisions, once under StrictMode replay. */
-export function useEditorState(workflow: Workflow, onChange: (workflow: Workflow) => void) {
+export function useEditorState(workflow: Workflow, onChange: (workflow: Workflow, meta: ChangeMeta) => void,
+    listeners: EditorListeners = {}) {
     const [state, dispatch] = useReducer(editorReducer, workflow, createEditorState);
     const metadata = JSON.stringify([workflow.id, workflow.name, workflow.description, workflow.version]);
     const [previousMetadata, setPreviousMetadata] = useState(metadata);
@@ -18,5 +28,14 @@ export function useEditorState(workflow: Workflow, onChange: (workflow: Workflow
     useEffect(() => {
         publish(state, onChange);
     }, [state, onChange, publish]);
+    const [publishProposals] = useState(createProposalPublisher);
+    const [publishSelection] = useState(createSelectionPublisher);
+    const { onProposalResolved, onSelectionChange } = listeners;
+    useEffect(() => {
+        publishProposals(state, onProposalResolved);
+    }, [state, onProposalResolved, publishProposals]);
+    useEffect(() => {
+        publishSelection(state, onSelectionChange);
+    }, [state, onSelectionChange, publishSelection]);
     return { state, dispatch };
 }

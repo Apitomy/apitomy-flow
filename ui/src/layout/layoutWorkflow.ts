@@ -1,5 +1,5 @@
 import dagre from '@dagrejs/dagre';
-import { type WorkflowNode, type WorkflowEdge, type NodeType } from '../types/workflow.ts';
+import { type WorkflowNode, type WorkflowEdge, type NodeType, type Workflow } from '../types/workflow.ts';
 
 export const DEFAULT_NODE_DIMENSION = { width: 180, height: 50 };
 
@@ -183,4 +183,82 @@ export function needsLayout(nodes: WorkflowNode[]): boolean {
   const allSame = nodes.every(n =>
     Math.abs(n.position!.x - first.x) < 1 && Math.abs(n.position!.y - first.y) < 1);
   return allSame;
+}
+
+const PLACEMENT_GAP_X = 90;
+const PLACEMENT_GAP_Y = 30;
+const PLACEMENT_BELOW = 100;
+
+type Point = { x: number; y: number };
+
+function hasPosition(node: WorkflowNode): boolean {
+  const p = node.position;
+  return !!p && typeof p.x === 'number' && typeof p.y === 'number' && Number.isFinite(p.x) && Number.isFinite(p.y);
+}
+
+/**
+ * Positions only the nodes that have no valid position, leaving every positioned node untouched.
+ *
+ * Each new node goes right of its positioned predecessors (or left of its positioned successors) at their
+ * average height, else below the existing bounds, then is nudged down until it overlaps nothing. When no
+ * node has a position the whole graph is laid out with {@link layoutWorkflow}.
+ *
+ * @param workflow the workflow to place
+ * @returns the same object when nothing needed placing, otherwise a copy with positions filled in
+ */
+export function placeNewNodes(workflow: Workflow): Workflow {
+  const missing = workflow.nodes.filter(node => !hasPosition(node));
+  if (missing.length === 0) return workflow;
+  if (missing.length === workflow.nodes.length) {
+    return { ...workflow, nodes: layoutWorkflow(workflow.nodes, workflow.edges) };
+  }
+  const byId = new Map(workflow.nodes.map(node => [node.id, node]));
+  const placed = new Map<string, Point>(workflow.nodes.filter(hasPosition).map(node => [node.id, node.position!]));
+  const initial = [...placed.entries()];
+  const minX = Math.min(...initial.map(([, p]) => p.x));
+  const maxBottom = Math.max(...initial.map(([id, p]) => p.y + sizeOf(byId.get(id)!).height));
+  const average = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / values.length;
+  const overlaps = (node: WorkflowNode, p: Point) => [...placed.entries()].some(([id, q]) => {
+    const a = sizeOf(node);
+    const b = sizeOf(byId.get(id)!);
+    return p.x < q.x + b.width && q.x < p.x + a.width && p.y < q.y + b.height && q.y < p.y + a.height;
+  });
+
+  for (const node of missing) {
+    const preds = workflow.edges.filter(e => e.target === node.id && placed.has(e.source)).map(e => e.source);
+    const succs = workflow.edges.filter(e => e.source === node.id && placed.has(e.target)).map(e => e.target);
+    let position: Point;
+    if (preds.length) {
+      position = {
+        x: Math.max(...preds.map(id => placed.get(id)!.x + sizeOf(byId.get(id)!).width)) + PLACEMENT_GAP_X,
+        y: average(preds.map(id => placed.get(id)!.y)),
+      };
+    } else if (succs.length) {
+      position = {
+        x: Math.min(...succs.map(id => placed.get(id)!.x)) - sizeOf(node).width - PLACEMENT_GAP_X,
+        y: average(succs.map(id => placed.get(id)!.y)),
+      };
+    } else {
+      position = { x: minX, y: maxBottom + PLACEMENT_BELOW };
+    }
+    while (overlaps(node, position)) {
+      position = { x: position.x, y: position.y + sizeOf(node).height + PLACEMENT_GAP_Y };
+    }
+    placed.set(node.id, position);
+  }
+  return { ...workflow, nodes: workflow.nodes.map(node => hasPosition(node) ? node : { ...node, position: placed.get(node.id)! }) };
+}
+
+/**
+ * Chooses the layout for an imported or replaced document: a full layout only for a fully positioned graph
+ * whose nodes are stacked on one point (see {@link needsLayout}); otherwise {@link placeNewNodes}.
+ *
+ * @param workflow the incoming workflow
+ * @returns the workflow with every node positioned
+ */
+export function layoutForImport(workflow: Workflow): Workflow {
+  if (workflow.nodes.length >= 2 && workflow.nodes.every(hasPosition) && needsLayout(workflow.nodes)) {
+    return { ...workflow, nodes: layoutWorkflow(workflow.nodes, workflow.edges) };
+  }
+  return placeNewNodes(workflow);
 }

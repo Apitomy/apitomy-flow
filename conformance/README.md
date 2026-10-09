@@ -16,6 +16,8 @@ language-specific fixture is required.
 | `fork-budgets.json` | Per-MOVE fork budget, initial 100/101 children, partial-budget exact/excess forks, ordered arrivals and retained failure state |
 | `parallel-topology.json` | C2 topology acceptance/rejection, conditional parallel paths, nested regions, loops and branch completion orders |
 | `workflow-v1.schema.json` | Versioned structural wire schema; semantic validation remains in the runtime validators |
+| `content-revision.json` | Content revision hash vectors: key-order permutations, number formatting, layout stripping |
+| `changesets.json` | Change-set vectors for every op, `unset`, every error code, cascades, renames and ordering; `"@current"` as `baseRevision` is replaced by the input workflow's content revision; expected workflows are compared without layout |
 | `config-v1.json`, `config-invalid-v1.json` | All built-in configs, nullability/defaults, optional positions, nested host extensions, and shared rejection cases |
 
 Run from `engine/`: `mvn test`. Run from `ui/`: `npm test` and `npx tsc --noEmit`.

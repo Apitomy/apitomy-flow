@@ -1,8 +1,12 @@
 import { applyNodeChanges, applyEdgeChanges, type Connection, type Edge, type EdgeChange, type Node, type NodeChange } from '@xyflow/react';
 import type { Workflow, WorkflowNode } from '../types/workflow.ts';
 import { TIMEOUT_HANDLE, toReactFlowEdges, toReactFlowNodes, type FlowNodeData } from '../utils/conversion.ts';
-import { layoutWorkflow, needsLayout } from '../layout/layoutWorkflow.ts';
+import { layoutForImport, layoutWorkflow } from '../layout/layoutWorkflow.ts';
 import { jsonEqual } from '../utils/jsonEqual.ts';
+import { computeContentRevision } from '../changeset/contentRevision.ts';
+import { applyChangeSetChecked } from '../changeset/applyChangeSet.ts';
+import { changeStatus, highlightOf } from '../changeset/changeStatus.ts';
+import type { ChangeSet, Highlight, Origin, ProposalEvent, ProposalOutcome, StagedProposal } from '../changeset/types.ts';
 
 interface Selection {
     selectedNodeId: string | null;
@@ -16,6 +20,10 @@ interface Snapshot extends Selection {
     nodeKeys: Record<string, string>;
     selectedNodeIds: string[];
     selectedEdgeIds: string[];
+    /** Content revision of `semanticDocument`; layout-only edits keep it. */
+    contentRevision: string;
+    /** Origin of the change that produced this state. */
+    origin: Origin;
 }
 
 export interface EditorState extends Omit<Snapshot, 'selectedNodeIds' | 'selectedEdgeIds'> {
@@ -29,9 +37,23 @@ export interface EditorState extends Omit<Snapshot, 'selectedNodeIds' | 'selecte
     group?: string;
     simulating: boolean;
     interactive: boolean;
+    /** The single proposal under review, if any. Not part of undo history. */
+    proposal: StagedProposal | null;
+    /** Elements changed by the most recently applied change set. Not part of undo history. */
+    highlight: Highlight | null;
+    /** Recent proposal resolutions, drained by `createProposalPublisher`. */
+    proposalEvents: ProposalEvent[];
+    /** Sequence number of the last emitted proposal event. */
+    proposalSeq: number;
 }
 
 export type EditorCommand =
+    | { type: 'propose'; changeSet: ChangeSet; preview: Workflow }
+    | { type: 'withdraw'; id: string }
+    | { type: 'applyChangeSet'; changeSet: ChangeSet }
+    | { type: 'acceptProposal' }
+    | { type: 'rejectProposal' }
+    | { type: 'clearHighlights' }
     | { type: 'select'; nodeId?: string; edgeId?: string }
     | { type: 'mode'; simulating?: boolean; interactive?: boolean }
     | { type: 'endGroup' }
@@ -42,7 +64,7 @@ export type EditorCommand =
     | { type: 'addNode'; node: WorkflowNode }
     | { type: 'cloneNode'; id: string; newId: string }
     | { type: 'connect'; id: string; connection: Connection }
-    | { type: 'import'; workflow: Workflow }
+    | { type: 'import'; workflow: Workflow; origin?: Origin }
     | { type: 'metadata'; metadata: Pick<Workflow, 'id' | 'name' | 'description' | 'version'> }
     | { type: 'positions'; positions: Record<string, { x: number; y: number }> }
     | { type: 'commitPositions' }
@@ -53,14 +75,16 @@ export type EditorCommand =
 
 /** Initializes an owned document and its independent ReactFlow presentation. */
 export function createEditorState(workflow: Workflow): EditorState {
-    const fallback = needsLayout(workflow.nodes);
-    const document = structuredClone(fallback
-        ? { ...workflow, nodes: layoutWorkflow(workflow.nodes, workflow.edges) } : workflow);
+    const placed = layoutForImport(workflow);
+    const fallback = placed !== workflow;
+    const document = structuredClone(placed);
     return {
         document, semanticDocument: document, nodes: toReactFlowNodes(document.nodes), edges: toReactFlowEdges(document.edges),
         nodeKeys: Object.fromEntries(document.nodes.map(node => [node.id, `initial:${node.id}`])),
         selectedNodeId: null, selectedEdgeId: null, past: [], future: [], revision: fallback ? 1 : 0,
         simulating: false, interactive: true, draftReset: 0,
+        contentRevision: computeContentRevision(document), origin: 'user',
+        proposal: null, highlight: null, proposalEvents: [], proposalSeq: 0,
     };
 }
 
@@ -68,7 +92,8 @@ function snapshot(state: EditorState): Snapshot {
     return { document: state.document, semanticDocument: state.semanticDocument, nodeKeys: state.nodeKeys,
         selectedNodeIds: state.nodes.filter(node => node.selected).map(node => node.id),
         selectedEdgeIds: state.edges.filter(edge => edge.selected).map(edge => edge.id),
-        selectedNodeId: state.selectedNodeId, selectedEdgeId: state.selectedEdgeId };
+        selectedNodeId: state.selectedNodeId, selectedEdgeId: state.selectedEdgeId,
+        contentRevision: state.contentRevision, origin: state.origin };
 }
 
 function validSelection(document: Workflow, selection: Selection): Selection {
@@ -102,7 +127,10 @@ function commit(state: EditorState, document: Workflow, group?: string, selectio
         ? state.semanticDocument : owned;
     const nodeKeys = Object.fromEntries(owned.nodes.map(node => [node.id, keys[node.id] ?? `${state.revision + 1}:${node.id}`]));
     return {
-        ...state, document: owned, semanticDocument, nodeKeys, ...present(state, owned, nodeKeys, canvasSelection), ...validSelection(owned, selection),
+        ...state, document: owned, semanticDocument,
+        contentRevision: semanticDocument === state.semanticDocument
+            ? state.contentRevision : computeContentRevision(semanticDocument),
+        nodeKeys, ...present(state, owned, nodeKeys, canvasSelection), ...validSelection(owned, selection),
         past: group && state.group === group ? state.past : [...state.past, snapshot(state)].slice(-50),
         future: [], group, revision: state.revision + 1,
     };
@@ -116,8 +144,8 @@ function sameSemantics(left: Workflow, right: Workflow): boolean {
     return jsonEqual(withoutLayout(left), withoutLayout(right));
 }
 
-/** Applies one atomic editor command without effects, clocks, IDs, or mutable history refs. */
-export function editorReducer(state: EditorState, command: EditorCommand): EditorState {
+type ProposalCommandType = 'propose' | 'withdraw' | 'applyChangeSet' | 'acceptProposal' | 'rejectProposal' | 'clearHighlights';
+function reduceCommand(state: EditorState, command: Exclude<EditorCommand, { type: ProposalCommandType }>): EditorState {
     if (command.type === 'mode') {
         return {
             ...state, simulating: command.simulating ?? state.simulating,
@@ -141,10 +169,10 @@ export function editorReducer(state: EditorState, command: EditorCommand): Edito
         let next = changes.length ? { ...state, nodes: applyNodeChanges(changes, state.nodes) } : state;
         if (canvasEnabled) {
             const nodeIds = command.changes.filter(change => change.type === 'remove').map(change => change.id);
-            if (nodeIds.length) next = editorReducer(next, { type: 'delete', nodeIds });
+            if (nodeIds.length) next = reduceCommand(next, { type: 'delete', nodeIds });
             // Keyboard movement has no drag-stop callback; pointer movement commits only on release.
             if (changes.some(change => change.type === 'position' && change.dragging !== true)) {
-                next = editorReducer(next, { type: 'commitPositions' });
+                next = reduceCommand(next, { type: 'commitPositions' });
             }
         }
         return next;
@@ -153,7 +181,7 @@ export function editorReducer(state: EditorState, command: EditorCommand): Edito
         const changes = command.changes.filter(change => change.type === 'select');
         const next = changes.length ? { ...state, edges: applyEdgeChanges(changes, state.edges) } : state;
         const edgeIds = command.changes.filter(change => change.type === 'remove').map(change => change.id);
-        return canvasEnabled && edgeIds.length ? editorReducer(next, { type: 'delete', edgeIds }) : next;
+        return canvasEnabled && edgeIds.length ? reduceCommand(next, { type: 'delete', edgeIds }) : next;
     }
     if (state.simulating) return state;
     if (!state.interactive && ['addNode', 'cloneNode', 'connect', 'delete', 'positions', 'commitPositions', 'tidy']
@@ -211,7 +239,7 @@ export function editorReducer(state: EditorState, command: EditorCommand): Edito
                 { selectedNodeIds: [command.node.id], selectedEdgeIds: [] });
         case 'cloneNode': {
             const node = document.nodes.find(node => node.id === command.id);
-            return node ? editorReducer(state, { type: 'addNode', node: {
+            return node ? reduceCommand(state, { type: 'addNode', node: {
                 ...node, id: command.newId, name: `${node.name} (copy)`,
                 position: { x: (node.position?.x ?? 0) + 40, y: (node.position?.y ?? 0) + 40 },
             } }) : state;
@@ -227,8 +255,7 @@ export function editorReducer(state: EditorState, command: EditorCommand): Edito
         }
         case 'import': {
             const imported = command.workflow;
-            const next = commit(state, needsLayout(imported.nodes)
-                ? { ...imported, nodes: layoutWorkflow(imported.nodes, imported.edges) } : imported,
+            const next = commit(state, layoutForImport(imported),
             undefined, { selectedNodeId: null, selectedEdgeId: null }, {});
             return { ...next, draftReset: state.draftReset + 1,
                 selectedNodeId: null, selectedEdgeId: null,
@@ -244,8 +271,75 @@ export function editorReducer(state: EditorState, command: EditorCommand): Edito
             return commit(state, { ...document, nodes: document.nodes.map(node => command.positions[node.id]
                 ? { ...node, position: command.positions[node.id] } : node) }, undefined, state, state.nodeKeys, true);
         case 'commitPositions':
-            return editorReducer(state, { type: 'positions', positions: Object.fromEntries(
+            return reduceCommand(state, { type: 'positions', positions: Object.fromEntries(
                 state.nodes.map(node => [node.id, node.position]),
             ) });
     }
+}
+
+function commandOrigin(command: EditorCommand): Origin {
+    if (command.type === 'import' && command.origin) return command.origin;
+    return command.type === 'metadata' ? 'host' : 'user';
+}
+
+function emit(state: EditorState, id: string, outcome: ProposalOutcome): EditorState {
+    const seq = state.proposalSeq + 1;
+    return { ...state, proposalSeq: seq, proposalEvents: [...state.proposalEvents, { seq, id, outcome }].slice(-20) };
+}
+
+function markStale(state: EditorState): EditorState {
+    const proposal = state.proposal;
+    if (!proposal || proposal.stale) return state;
+    return { ...emit(state, proposal.changeSet.id, 'stale'), proposal: { ...proposal, stale: true } };
+}
+
+function applyChangeSetCommand(state: EditorState, changeSet: ChangeSet): EditorState {
+    const result = applyChangeSetChecked(state.document, changeSet, state.contentRevision);
+    if (!result.ok) return state;
+    const committed = commit(state, result.workflow);
+    let next: EditorState = { ...committed, origin: changeSet.author, group: undefined,
+        highlight: highlightOf(changeStatus(state.document, committed.document)) };
+    if (state.proposal?.changeSet.id === changeSet.id) {
+        next = { ...emit(next, changeSet.id, 'accepted'), proposal: null };
+    } else if (next.contentRevision !== state.contentRevision) {
+        next = markStale(next);
+    }
+    return next;
+}
+
+/** Applies one atomic editor command without effects, clocks, IDs, or mutable history refs. */
+export function editorReducer(state: EditorState, command: EditorCommand): EditorState {
+    switch (command.type) {
+        case 'propose': {
+            if (command.changeSet.baseRevision !== state.contentRevision) return state;
+            const next = state.proposal && !state.proposal.stale
+                ? emit(state, state.proposal.changeSet.id, 'withdrawn') : state;
+            return { ...next, proposal: { changeSet: command.changeSet, preview: command.preview, stale: false } };
+        }
+        case 'withdraw': {
+            const proposal = state.proposal;
+            if (!proposal || proposal.changeSet.id !== command.id) return state;
+            return { ...(proposal.stale ? state : emit(state, command.id, 'withdrawn')), proposal: null };
+        }
+        case 'rejectProposal': {
+            const proposal = state.proposal;
+            if (!proposal) return state;
+            return { ...(proposal.stale ? state : emit(state, proposal.changeSet.id, 'rejected')), proposal: null };
+        }
+        case 'acceptProposal':
+            return state.proposal && !state.proposal.stale ? applyChangeSetCommand(state, state.proposal.changeSet) : state;
+        case 'applyChangeSet':
+            return applyChangeSetCommand(state, command.changeSet);
+        case 'clearHighlights':
+            return state.highlight ? { ...state, highlight: null } : state;
+    }
+    const next = reduceCommand(state, command);
+    if (next === state || next.revision === state.revision) return next;
+    const origin = commandOrigin(command);
+    let result: EditorState = { ...next, origin };
+    if (result.contentRevision !== state.contentRevision) {
+        if (origin === 'user' && result.highlight) result = { ...result, highlight: null };
+        result = markStale(result);
+    }
+    return result;
 }

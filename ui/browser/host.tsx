@@ -1,7 +1,8 @@
-import { StrictMode, useMemo, useState } from 'react';
+import { StrictMode, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { WorkflowEditor, WorkflowViewer, WorkflowDiffViewer,
-    type Workflow, type EditorSpi, type ActionTypeDescriptor, type ValidationProblem } from '../src/index.ts';
+    type Workflow, type EditorSpi, type ActionTypeDescriptor, type ValidationProblem,
+    type WorkflowEditorHandle, type ChangeSet } from '../src/index.ts';
 import { workflow, importedWorkflow, instance } from './fixtures.ts';
 import '@patternfly/patternfly/patternfly.css';
 import '@xyflow/react/dist/style.css';
@@ -29,6 +30,17 @@ function EditorHost({ id }: { id: string }) {
             setValidationCount(pending.validations.length);
         }),
     } : undefined, [pending, provider]);
+    const editorRef = useRef<WorkflowEditorHandle>(null);
+    const [handleResults, setHandleResults] = useState<string[]>([]);
+    const [resolutions, setResolutions] = useState<string[]>([]);
+    const insertWait = (id: string): ChangeSet => ({ id, author: 'agent:demo', summary: 'Add a wait before End',
+        baseRevision: editorRef.current!.getSnapshot().contentRevision, ops: [
+            { op: 'removeEdge', id: 'he' },
+            { op: 'addNode', node: { id: 'w', type: 'wait', name: 'Wait', config: { duration: 'PT1M' } } },
+            { op: 'addEdge', edge: { id: 'hw', source: 'h', target: 'w', priority: 0, isDefault: false } },
+            { op: 'addEdge', edge: { id: 'we', source: 'w', target: 'e', priority: 0, isDefault: false } },
+        ] });
+    const record = (result: unknown) => setHandleResults(previous => [...previous, JSON.stringify(result)]);
     return <section data-testid={id}>
         <nav aria-label={`${id} host controls`}>
             <button onClick={() => setDocument(importedWorkflow())}>Replace props</button>
@@ -54,8 +66,16 @@ function EditorHost({ id }: { id: string }) {
                 { severity: 'error', code: 'STALE', message: 'Stale host warning', nodeId: 'a' },
             ]))}>Resolve stale validation</button>
             <button onClick={() => pending.validations.at(-1)?.reject()}>Reject validation</button>
+            {params.has('ai') && <>
+                <button onClick={() => record(editorRef.current!.propose(insertWait('cs-1')))}>Propose change</button>
+                <button onClick={() => record(editorRef.current!.apply(insertWait('cs-2')))}>Apply change</button>
+                <button onClick={() => record(editorRef.current!.propose({ ...insertWait('cs-3'), baseRevision: 'sha256:old' }))}>
+                    Propose stale change</button>
+                <button onClick={() => editorRef.current!.withdraw('cs-1')}>Withdraw change</button>
+            </>}
         </nav>
-        <div className="surface"><WorkflowEditor key={mount} workflow={document} spi={spi} onChange={next => {
+        <div className="surface"><WorkflowEditor key={mount} workflow={document} spi={spi} ref={editorRef}
+            onProposalResolved={(id, outcome) => setResolutions(previous => [...previous, `${id}:${outcome}`])} onChange={next => {
             setChanges(previous => [...previous, structuredClone(next)]);
             if (params.has('echo')) setDocument(next);
             if (params.has('mutate')) next.nodes.length = 0;
@@ -63,6 +83,8 @@ function EditorHost({ id }: { id: string }) {
         <output data-testid="changes">{JSON.stringify(changes)}</output>
         <output data-testid="validation-count">{validationCount}</output>
         <output data-testid="validation-documents">{JSON.stringify(pending.validations.map(item => item.workflow))}</output>
+        <output data-testid="handle-results">{JSON.stringify(handleResults)}</output>
+        <output data-testid="proposal-resolutions">{JSON.stringify(resolutions)}</output>
     </section>;
 }
 

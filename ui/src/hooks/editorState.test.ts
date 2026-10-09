@@ -365,4 +365,15 @@ describe('editor transactions', () => {
         ] });
         expect(measured.nodes[0].measured).toEqual({ width: 100, height: 60 });
     });
+
+    it('import keeps existing coordinates and places only positionless nodes', () => {
+        const state = createEditorState({ id: 'w', name: 'W', edges: [],
+            nodes: [{ id: 's', type: 'start', name: 'S', config: {}, position: { x: 5, y: 6 } }] });
+        const next = editorReducer(state, { type: 'import', workflow: { id: 'w', name: 'W', edges: [
+            { id: 'sx', source: 's', target: 'x', priority: 0, isDefault: false }],
+            nodes: [{ id: 's', type: 'start', name: 'S', config: {}, position: { x: 5, y: 6 } },
+                { id: 'x', type: 'end', name: 'X', config: {} }] } });
+        expect(next.document.nodes[0].position).toEqual({ x: 5, y: 6 });
+        expect(next.document.nodes[1].position).toBeDefined();
+    });
 });

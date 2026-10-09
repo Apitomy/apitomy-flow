@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createDocumentPublisher } from './editorNotifications.ts';
+import { createDocumentPublisher, createProposalPublisher, createSelectionPublisher } from './editorNotifications.ts';
 import { createEditorState, editorReducer } from './editorState.ts';
 import type { Workflow } from '../types/workflow.ts';
 
@@ -57,5 +57,27 @@ describe('committed document notifications', () => {
         expect(received).toHaveLength(1);
         expect(received[0].nodes[1].position!.x).toBeGreaterThan(received[0].nodes[0].position!.x);
         expect(editorReducer(state, { type: 'undo' })).toBe(state);
+    });
+
+    it('publishes each proposal resolution once', () => {
+        const resolved: string[] = [];
+        const publish = createProposalPublisher();
+        const state = { ...createEditorState(workflow), proposalSeq: 2, proposalEvents: [
+            { seq: 1, id: 'a', outcome: 'withdrawn' as const }, { seq: 2, id: 'b', outcome: 'accepted' as const }] };
+        publish(state, (id, outcome) => resolved.push(`${id}:${outcome}`));
+        publish(state, (id, outcome) => resolved.push(`${id}:${outcome}`));
+        expect(resolved).toEqual(['a:withdrawn', 'b:accepted']);
+    });
+
+    it('publishes selection only when it changes', () => {
+        const seen: unknown[] = [];
+        const publish = createSelectionPublisher();
+        const initial = createEditorState(workflow);
+        publish(initial, selection => seen.push(selection));
+        const nodeId = initial.document.nodes[0].id;
+        const selected = editorReducer(initial, { type: 'select', nodeId });
+        publish(selected, selection => seen.push(selection));
+        publish(selected, selection => seen.push(selection));
+        expect(seen).toEqual([{ nodeIds: [nodeId], edgeIds: [] }]);
     });
 });

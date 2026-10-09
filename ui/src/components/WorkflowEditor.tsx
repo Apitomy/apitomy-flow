@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, useEffect, useRef, useId, type DragEvent } from 'react';
+import { useCallback, useMemo, useState, useEffect, useRef, useId, useImperativeHandle, useLayoutEffect, type DragEvent, type Ref } from 'react';
 import {
   ReactFlow,
   Background,
@@ -26,6 +26,9 @@ import { simNodeClass, activeNodeIds, parallelRole } from '../utils/parallelView
 import { validateWorkflow } from '../validation/validateWorkflow.ts';
 import { analyzeParallelRegions } from '../simulation/parallelRegions.ts';
 import { useHostValidation } from '../hooks/useHostValidation.ts';
+import { buildProposalOverlay, formatCounts, proposalCounts, proposalDetails, validationText } from '../changeset/proposalOverlay.ts';
+import { validationDelta } from '../changeset/validationDelta.ts';
+import { ProposalReviewBar } from './panels/ProposalReviewBar.tsx';
 import { nodeTypes } from './nodes/nodeTypes.ts';
 import { edgeTypes } from './edges/edgeTypes.ts';
 import { NodePalette } from './panels/NodePalette.tsx';
@@ -36,7 +39,9 @@ import { NodeContextMenu } from './NodeContextMenu.tsx';
 import { useEditorState } from '../hooks/useEditorState.ts';
 import { editorShortcut } from '../hooks/editorShortcuts.ts';
 import { readOnlyCommand } from '../hooks/editorReadOnly.ts';
-import { type EditorCommand } from '../hooks/editorState.ts';
+import { editorReducer, type EditorCommand } from '../hooks/editorState.ts';
+import { createEditorHandle, type WorkflowEditorHandle } from '../hooks/editorHandle.ts';
+import { type EditorSelection } from '../hooks/editorNotifications.ts';
 import { deleteWithEditorFocus } from '../hooks/editorDeletion.ts';
 import {
   startSimulation,
@@ -48,6 +53,7 @@ import {
 } from '../simulation/simulate.ts';
 import './theme.css';
 import './WorkflowEditor.css';
+import type { ChangeMeta, ProposalOutcome } from '../changeset/types.ts';
 
 export type FlowTheme = 'light' | 'dark';
 
@@ -91,8 +97,12 @@ const ignoreChange = (): void => {};
 
 export interface WorkflowEditorProps {
   workflow: Workflow;
-  /** Receives each committed revision of the workflow. Never called when {@link readOnly} is true. */
-  onChange?: (workflow: Workflow) => void;
+  /**
+   * Called with every committed revision. `meta.origin` tells host- and agent-made changes apart from the
+   * user's; `meta.contentRevision` is the base revision for the next change set. Never called when
+   * {@link readOnly} is true.
+   */
+  onChange?: (workflow: Workflow, meta: ChangeMeta) => void;
   /**
    * When true, the workflow is presented but cannot be changed: the palette and editing toolbar
    * actions are hidden, nodes/edges cannot be added, removed, moved or connected, the properties
@@ -104,10 +114,22 @@ export interface WorkflowEditorProps {
   onValidationChange?: (problems: ValidationProblem[]) => void;
   theme?: FlowTheme;
   spi?: EditorSpi;
+  /** Imperative handle for staging and applying change sets (React 19 ref prop). */
+  ref?: Ref<WorkflowEditorHandle>;
+  /** Called once for every proposal resolution: accepted, rejected, stale or withdrawn. */
+  onProposalResolved?: (id: string, outcome: ProposalOutcome) => void;
+  /** Called when the set of selected nodes/edges changes. */
+  onSelectionChange?: (selection: EditorSelection) => void;
+  /** Keep elements changed by the last applied change set highlighted. Defaults to true. */
+  highlightApplied?: boolean;
 }
 
-function WorkflowEditorInner({ workflow, onChange, readOnly = false, onValidationChange, theme = 'light', spi }: WorkflowEditorProps) {
-  const { state, dispatch: rawDispatch } = useEditorState(workflow, readOnly ? ignoreChange : onChange ?? ignoreChange);
+function WorkflowEditorInner({
+  workflow, onChange, readOnly = false, onValidationChange, theme = 'light', spi, ref, onProposalResolved, onSelectionChange,
+  highlightApplied = true,
+}: WorkflowEditorProps) {
+  const { state, dispatch: rawDispatch } = useEditorState(workflow, readOnly ? ignoreChange : onChange ?? ignoreChange,
+    { onProposalResolved, onSelectionChange });
   // In read-only mode every mutating command is dropped before it reaches the reducer.
   const dispatch = useCallback((command: EditorCommand) => {
     const allowed = readOnly ? readOnlyCommand(command) : command;
@@ -155,9 +177,41 @@ function WorkflowEditorInner({ workflow, onChange, readOnly = false, onValidatio
     [builtInProblems, hostProblems],
   );
 
+  const proposal = state.proposal;
+  const previewBuiltInProblems = useMemo(
+    () => (proposal ? validateWorkflow(proposal.preview) : []),
+    [proposal],
+  );
+  const previewHostProblems = useHostValidation(proposal?.preview ?? semanticWorkflow, proposal ? spi?.validate : undefined);
+  const proposalValidation = useMemo(
+    () => validationText(validationDelta(validationProblems, [...previewBuiltInProblems, ...previewHostProblems])),
+    [validationProblems, previewBuiltInProblems, previewHostProblems],
+  );
+
   useEffect(() => {
     onValidationChange?.(validationProblems);
   }, [validationProblems, onValidationChange]);
+
+  // The handle reads the latest committed state; dispatches update it eagerly with the same pure reducer so
+  // consecutive handle calls (propose → apply) observe each other before React re-renders.
+  const stateRef = useRef(state);
+  const problemsRef = useRef(validationProblems);
+  useLayoutEffect(() => {
+    stateRef.current = state;
+    problemsRef.current = validationProblems;
+  }, [state, validationProblems]);
+  useImperativeHandle(ref, () => createEditorHandle({
+    state: () => stateRef.current,
+    dispatch: (command) => {
+      // Host document replacement bypasses the read-only filter; everything else obeys it.
+      const allowed = command.type === 'import' ? command : readOnly ? readOnlyCommand(command) : command;
+      if (!allowed) return;
+      stateRef.current = editorReducer(stateRef.current, allowed);
+      rawDispatch(allowed);
+    },
+    readOnly: () => readOnly,
+    problems: () => problemsRef.current,
+  }), [readOnly, rawDispatch]);
 
   const nodesWithValidation = useMemo(() => {
     if (!validationProblems?.length && !parallelAnalysis) return nodes;
@@ -180,9 +234,24 @@ function WorkflowEditorInner({ workflow, onChange, readOnly = false, onValidatio
     [validationProblems, selectedNodeId],
   );
 
+  // Ghost (proposed) nodes are not part of the editor state, so React Flow's measurements for them are kept
+  // here; without them React Flow keeps the ghosts hidden.
+  const [ghostSizes, setGhostSizes] = useState<Record<string, { width: number; height: number }>>({});
   const handleNodesChange = useCallback((changes: NodeChange<Node<FlowNodeData>>[]) => {
-    dispatch({ type: 'nodesChange', changes });
-  }, [dispatch]);
+    const known = new Set(nodes.map(node => node.id));
+    const ghostChanges = changes.filter(change => change.type === 'dimensions' && !known.has(change.id) && change.dimensions);
+    if (ghostChanges.length) {
+      setGhostSizes(previous => {
+        const next = { ...previous };
+        ghostChanges.forEach(change => {
+          if (change.type === 'dimensions' && change.dimensions) next[change.id] = change.dimensions;
+        });
+        return next;
+      });
+    }
+    const rest = changes.filter(change => !ghostChanges.includes(change));
+    if (rest.length) dispatch({ type: 'nodesChange', changes: rest });
+  }, [dispatch, nodes]);
 
   const handleEdgesChange = useCallback((changes: EdgeChange[]) => {
     dispatch({ type: 'edgesChange', changes });
@@ -471,6 +540,28 @@ function WorkflowEditorInner({ workflow, onChange, readOnly = false, onValidatio
     });
   }, [edges, simActive, simState]);
 
+  const overlay = useMemo(() => {
+    const built = buildProposalOverlay(displayNodes, displayEdges, currentWorkflow, proposal,
+      highlightApplied ? state.highlight : null);
+    return { ...built, nodes: built.nodes.map(node => built.status?.nodes[node.id] === 'added' && ghostSizes[node.id]
+      ? { ...node, measured: ghostSizes[node.id] } : node) };
+  }, [displayNodes, displayEdges, currentWorkflow, proposal, highlightApplied, state.highlight, ghostSizes]);
+  // Focus is tied to a proposal id so it resets automatically when the proposal changes.
+  const [proposalFocus, setProposalFocus] = useState<{ proposalId: string; elementId: string } | null>(null);
+  const focusedDetails = proposal && proposalFocus?.proposalId === proposal.changeSet.id
+    ? proposalDetails(currentWorkflow, proposal.preview, proposalFocus.elementId) : null;
+  const focusProposalElement = useCallback((id: string, kind: 'nodes' | 'edges') => {
+    const changed = overlay.status && overlay.status[kind][id] && overlay.status[kind][id] !== 'unchanged';
+    setProposalFocus(changed && proposal ? { proposalId: proposal.changeSet.id, elementId: id } : null);
+    return overlay.status?.[kind][id] === 'added';
+  }, [overlay.status, proposal]);
+  const onCanvasNodeClick: typeof onNodeClick = useCallback((event, node) => {
+    if (!focusProposalElement(node.id, 'nodes')) onNodeClick(event, node);
+  }, [focusProposalElement, onNodeClick]);
+  const onCanvasEdgeClick: typeof onEdgeClick = useCallback((event, edge) => {
+    if (!focusProposalElement(edge.id, 'edges')) onEdgeClick(event, edge);
+  }, [focusProposalElement, onEdgeClick]);
+
   return (
     <div ref={editorRootRef} className={`workflow-editor${readOnly ? ' workflow-editor--readonly' : ''}`}
       data-flow-theme={theme} data-read-only={readOnly || undefined}
@@ -489,15 +580,15 @@ function WorkflowEditorInner({ workflow, onChange, readOnly = false, onValidatio
       <div className="workflow-editor__body">
         <div className={`workflow-editor__canvas${simActive ? ' workflow-editor__canvas--simulating' : ''}`}>
           <ReactFlow
-            nodes={displayNodes}
-            edges={displayEdges}
+            nodes={overlay.nodes}
+            edges={overlay.edges}
             onNodesChange={handleNodesChange}
             onEdgesChange={handleEdgesChange}
             onConnect={onConnect}
             onDrop={onDrop}
             onDragOver={onDragOver}
-            onNodeClick={onNodeClick}
-            onEdgeClick={onEdgeClick}
+            onNodeClick={onCanvasNodeClick}
+            onEdgeClick={onCanvasEdgeClick}
             onPaneClick={onPaneClick}
             onNodeContextMenu={onNodeContextMenu}
             onNodeDragStop={onNodeDragStop}
@@ -574,6 +665,18 @@ function WorkflowEditorInner({ workflow, onChange, readOnly = false, onValidatio
                     &times;
                   </button>
                 </div>
+              </Panel>
+            )}
+            {proposal && !readOnly && (
+              <Panel position="bottom-center">
+                <ProposalReviewBar
+                  proposal={proposal}
+                  counts={formatCounts(proposalCounts(overlay.status!))}
+                  validation={proposalValidation}
+                  details={focusedDetails}
+                  onAccept={() => dispatch({ type: 'acceptProposal' })}
+                  onReject={() => dispatch({ type: 'rejectProposal' })}
+                />
               </Panel>
             )}
           </ReactFlow>
