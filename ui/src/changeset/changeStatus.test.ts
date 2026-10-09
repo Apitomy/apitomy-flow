@@ -30,3 +30,11 @@ describe('highlightOf', () => {
         expect(highlightOf(changeStatus(before, before))).toBeNull();
     });
 });
+
+describe('changeStatus for edges', () => {
+    it('classifies modified and removed edges', () => {
+        const changed: Workflow = { ...before, edges: [{ ...before.edges[0], condition: 'x == 1' }] };
+        expect(changeStatus(before, changed).edges).toEqual({ sa: 'modified' });
+        expect(changeStatus(before, { ...before, edges: [] }).edges).toEqual({ sa: 'removed' });
+    });
+});

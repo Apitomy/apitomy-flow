@@ -26,7 +26,9 @@ import { simNodeClass, activeNodeIds, parallelRole } from '../utils/parallelView
 import { validateWorkflow } from '../validation/validateWorkflow.ts';
 import { analyzeParallelRegions } from '../simulation/parallelRegions.ts';
 import { useHostValidation } from '../hooks/useHostValidation.ts';
-import { buildProposalOverlay, formatCounts, proposalCounts, proposalDetails, validationText } from '../changeset/proposalOverlay.ts';
+import {
+  buildProposalOverlay, formatCounts, proposalCounts, proposalDetails, splitGhostChanges, validationText, type GhostSizes,
+} from '../changeset/proposalOverlay.ts';
 import { validationDelta } from '../changeset/validationDelta.ts';
 import { ProposalReviewBar } from './panels/ProposalReviewBar.tsx';
 import { nodeTypes } from './nodes/nodeTypes.ts';
@@ -235,23 +237,18 @@ function WorkflowEditorInner({
   );
 
   // Ghost (proposed) nodes are not part of the editor state, so React Flow's measurements for them are kept
-  // here; without them React Flow keeps the ghosts hidden.
-  const [ghostSizes, setGhostSizes] = useState<Record<string, { width: number; height: number }>>({});
+  // here, keyed by proposal so a new proposal never reuses an old one's sizes; without them React Flow keeps
+  // the ghosts hidden.
+  const [ghostSizes, setGhostSizes] = useState<{ proposalId: string; sizes: GhostSizes } | null>(null);
+  const proposalId = state.proposal?.changeSet.id;
   const handleNodesChange = useCallback((changes: NodeChange<Node<FlowNodeData>>[]) => {
-    const known = new Set(nodes.map(node => node.id));
-    const ghostChanges = changes.filter(change => change.type === 'dimensions' && !known.has(change.id) && change.dimensions);
-    if (ghostChanges.length) {
-      setGhostSizes(previous => {
-        const next = { ...previous };
-        ghostChanges.forEach(change => {
-          if (change.type === 'dimensions' && change.dimensions) next[change.id] = change.dimensions;
-        });
-        return next;
-      });
+    const { ghostSizes: measured, rest } = splitGhostChanges(changes, new Set(nodes.map(node => node.id)));
+    if (proposalId && Object.keys(measured).length) {
+      setGhostSizes(previous => ({ proposalId,
+        sizes: { ...(previous?.proposalId === proposalId ? previous.sizes : {}), ...measured } }));
     }
-    const rest = changes.filter(change => !ghostChanges.includes(change));
     if (rest.length) dispatch({ type: 'nodesChange', changes: rest });
-  }, [dispatch, nodes]);
+  }, [dispatch, nodes, proposalId]);
 
   const handleEdgesChange = useCallback((changes: EdgeChange[]) => {
     dispatch({ type: 'edgesChange', changes });
@@ -543,8 +540,9 @@ function WorkflowEditorInner({
   const overlay = useMemo(() => {
     const built = buildProposalOverlay(displayNodes, displayEdges, currentWorkflow, proposal,
       highlightApplied ? state.highlight : null);
-    return { ...built, nodes: built.nodes.map(node => built.status?.nodes[node.id] === 'added' && ghostSizes[node.id]
-      ? { ...node, measured: ghostSizes[node.id] } : node) };
+    const sizes = proposal && ghostSizes?.proposalId === proposal.changeSet.id ? ghostSizes.sizes : {};
+    return { ...built, nodes: built.nodes.map(node => built.status?.nodes[node.id] === 'added' && sizes[node.id]
+      ? { ...node, measured: sizes[node.id] } : node) };
   }, [displayNodes, displayEdges, currentWorkflow, proposal, highlightApplied, state.highlight, ghostSizes]);
   // Focus is tied to a proposal id so it resets automatically when the proposal changes.
   const [proposalFocus, setProposalFocus] = useState<{ proposalId: string; elementId: string } | null>(null);

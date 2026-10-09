@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { buildProposalOverlay, formatCounts, proposalCounts, proposalDetails, validationText } from './proposalOverlay.ts';
+import {
+    buildProposalOverlay, formatCounts, proposalCounts, proposalDetails, splitGhostChanges, validationText,
+} from './proposalOverlay.ts';
 import { changeStatus } from './changeStatus.ts';
 import { toReactFlowEdges, toReactFlowNodes } from '../utils/conversion.ts';
 import type { StagedProposal } from './types.ts';
@@ -71,5 +73,34 @@ describe('proposalDetails', () => {
         expect(proposalDetails(current, preview, 'n')?.before).toBeNull();
         expect(proposalDetails(current, preview, 'ax')).toMatchObject({ kind: 'edge', after: null });
         expect(proposalDetails(current, preview, 's')).toBeNull();
+    });
+});
+
+describe('overlay pass-through and unknown ids', () => {
+    it('returns the editor elements unchanged with no proposal and no highlight', () => {
+        const nodes = rfNodes();
+        const edges = rfEdges();
+        const overlay = buildProposalOverlay(nodes, edges, current, null, null);
+        expect(overlay.nodes).toBe(nodes);
+        expect(overlay.edges).toBe(edges);
+        expect(overlay.status).toBeNull();
+    });
+
+    it('has no details for an id in neither document', () => {
+        expect(proposalDetails(current, preview, 'nope')).toBeNull();
+    });
+});
+
+describe('splitGhostChanges', () => {
+    it('captures dimensions of unknown (ghost) nodes and passes everything else through', () => {
+        const changes = [
+            { type: 'dimensions' as const, id: 'ghost', dimensions: { width: 160, height: 50 } },
+            { type: 'dimensions' as const, id: 's', dimensions: { width: 120, height: 44 } },
+            { type: 'dimensions' as const, id: 'pending' },
+            { type: 'select' as const, id: 'ghost', selected: true },
+        ];
+        const result = splitGhostChanges(changes, new Set(['s']));
+        expect(result.ghostSizes).toEqual({ ghost: { width: 160, height: 50 } });
+        expect(result.rest).toEqual([changes[1], changes[2], changes[3]]);
     });
 });

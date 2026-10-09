@@ -61,7 +61,7 @@ public final class ChangeSets {
                 "Change set must be a JSON object"));
         }
         String current = ContentRevision.of(workflow);
-        String base = changeSet == null ? null : changeSet.path("baseRevision").asText(null);
+        String base = changeSet.path("baseRevision").asText(null);
         if (!current.equals(base)) {
             return new ChangeSetResult.Rejected(new ChangeSetError("stale", null,
                 "Change set is based on " + base + " but the workflow is at " + current));
@@ -84,6 +84,11 @@ public final class ChangeSets {
 
     private static boolean isString(JsonNode node) {
         return node != null && node.isTextual() && !node.asText().isEmpty();
+    }
+
+    /** Strict id comparison matching the editor's {@code ===}: only JSON strings can equal an id. */
+    private static boolean hasId(JsonNode value, String id) {
+        return value != null && value.isTextual() && value.asText().equals(id);
     }
 
     private static ObjectNode requireObject(JsonNode node, String label) {
@@ -133,7 +138,7 @@ public final class ChangeSets {
 
     private static ObjectNode findById(ArrayNode items, String id) {
         for (JsonNode item : items) {
-            if (id.equals(item.path("id").asText(null))) {
+            if (hasId(item.get("id"), id)) {
                 return (ObjectNode) item;
             }
         }
@@ -150,7 +155,7 @@ public final class ChangeSets {
 
     private static void removeById(ArrayNode items, String id) {
         for (Iterator<JsonNode> it = items.iterator(); it.hasNext();) {
-            if (id.equals(it.next().path("id").asText(null))) {
+            if (hasId(it.next().get("id"), id)) {
                 it.remove();
             }
         }
@@ -238,10 +243,10 @@ public final class ChangeSets {
         node.put("id", newId);
         for (JsonNode edge : edges(draft)) {
             ObjectNode e = (ObjectNode) edge;
-            if (id.equals(e.path("source").asText(null))) {
+            if (hasId(e.get("source"), id)) {
                 e.put("source", newId);
             }
-            if (id.equals(e.path("target").asText(null))) {
+            if (hasId(e.get("target"), id)) {
                 e.put("target", newId);
             }
         }
@@ -255,7 +260,7 @@ public final class ChangeSets {
         removeById(nodes(draft), id);
         for (Iterator<JsonNode> it = edges(draft).iterator(); it.hasNext();) {
             JsonNode edge = it.next();
-            if (id.equals(edge.path("source").asText(null)) || id.equals(edge.path("target").asText(null))) {
+            if (hasId(edge.get("source"), id) || hasId(edge.get("target"), id)) {
                 it.remove();
             }
         }
