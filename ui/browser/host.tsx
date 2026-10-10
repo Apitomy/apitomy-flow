@@ -2,7 +2,7 @@ import { StrictMode, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { WorkflowEditor, WorkflowViewer, WorkflowDiffViewer,
     type Workflow, type EditorSpi, type ActionTypeDescriptor, type ValidationProblem,
-    type WorkflowEditorHandle, type ChangeSet } from '../src/index.ts';
+    type WorkflowEditorHandle, type ChangeSet, type FlowContext, type ContextAction } from '../src/index.ts';
 import { workflow, importedWorkflow, instance } from './fixtures.ts';
 import '@patternfly/patternfly/patternfly.css';
 import '@xyflow/react/dist/style.css';
@@ -20,7 +20,7 @@ function EditorHost({ id }: { id: string }) {
         actions: [] as { generation: number; resolve: (value: ActionTypeDescriptor[]) => void; reject: () => void }[],
         validations: [] as { workflow: Workflow; resolve: (value: ValidationProblem[]) => void; reject: () => void }[],
     }));
-    const spi = useMemo<EditorSpi | undefined>(() => params.has('async') ? {
+    const asyncSpi = useMemo<EditorSpi | undefined>(() => params.has('async') ? {
         actionTypes: () => new Promise((resolve, reject) => {
             pending.actions.push({ generation: provider, resolve, reject: () => reject(new Error('Host unavailable')) });
         }),
@@ -30,6 +30,22 @@ function EditorHost({ id }: { id: string }) {
             setValidationCount(pending.validations.length);
         }),
     } : undefined, [pending, provider]);
+    const [contextLog, setContextLog] = useState<unknown[]>([]);
+    const contextActions = useMemo(() => (params.has('context') ? (context: FlowContext): ContextAction[] => {
+        if (params.has('contextThrow')) throw new Error('Host context actions failed');
+        if (params.has('contextEmpty')) return [];
+        const record = (id: string) => (chosen: FlowContext) => setContextLog(previous => [...previous, {
+            id, target: chosen.target, contentRevision: chosen.contentRevision, selection: chosen.selection,
+            readOnly: chosen.readOnly, problems: chosen.problems.length, nodes: chosen.workflow.nodes.length,
+            screenPosition: chosen.screenPosition,
+        }]);
+        return [
+            { id: 'ask', label: `Ask AI about ${context.target.kind}`, onSelect: record('ask') },
+            { id: 'later', label: 'Not available', disabled: true, onSelect: record('later') },
+        ];
+    } : undefined), []);
+    const spi = useMemo<EditorSpi | undefined>(() => (asyncSpi || contextActions
+        ? { ...asyncSpi, ...(contextActions ? { contextActions } : {}) } : undefined), [asyncSpi, contextActions]);
     const editorRef = useRef<WorkflowEditorHandle>(null);
     const [handleResults, setHandleResults] = useState<string[]>([]);
     const [resolutions, setResolutions] = useState<string[]>([]);
@@ -74,7 +90,7 @@ function EditorHost({ id }: { id: string }) {
                 <button onClick={() => editorRef.current!.withdraw('cs-1')}>Withdraw change</button>
             </>}
         </nav>
-        <div className="surface"><WorkflowEditor key={mount} workflow={document} spi={spi} ref={editorRef}
+        <div className="surface"><WorkflowEditor key={mount} workflow={document} spi={spi} ref={editorRef} readOnly={params.has('readonly')}
             onProposalResolved={(id, outcome) => setResolutions(previous => [...previous, `${id}:${outcome}`])} onChange={next => {
             setChanges(previous => [...previous, structuredClone(next)]);
             if (params.has('echo')) setDocument(next);
@@ -85,6 +101,7 @@ function EditorHost({ id }: { id: string }) {
         <output data-testid="validation-documents">{JSON.stringify(pending.validations.map(item => item.workflow))}</output>
         <output data-testid="handle-results">{JSON.stringify(handleResults)}</output>
         <output data-testid="proposal-resolutions">{JSON.stringify(resolutions)}</output>
+        <output data-testid="context-log">{JSON.stringify(contextLog)}</output>
     </section>;
 }
 

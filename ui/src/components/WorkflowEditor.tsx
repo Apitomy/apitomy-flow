@@ -151,6 +151,7 @@ function WorkflowEditorInner({
   const [importError, setImportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editorRootRef = useRef<HTMLDivElement>(null);
+  const menuOpenRef = useRef(false);
   const [menu, setMenu] = useState<{
     entries: MenuEntry[];
     position: { x: number; y: number };
@@ -295,6 +296,7 @@ function WorkflowEditorInner({
 
   const onPaneClick = useCallback(() => {
     dispatch({ type: 'select' });
+    menuOpenRef.current = false;
     setMenu(null);
   }, [dispatch]);
 
@@ -320,13 +322,42 @@ function WorkflowEditorInner({
     const bounds = box
       ? { left: box.left, top: box.top, right: box.right, bottom: box.bottom }
       : { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
+    menuOpenRef.current = true;
     setMenu({ entries, position: { ...screenPosition }, bounds, returnFocus });
     return true;
   }, [simActive, state, validationProblems, readOnly, interactivityEnabled, builtInHandlers, spi]);
 
   const onNodeContextMenu = useCallback((event: React.MouseEvent, node: Node<FlowNodeData>) => {
+    if (menuOpenRef.current) { event.preventDefault(); return; }
     const opener = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
     if (openMenu({ kind: 'node', nodeId: node.id }, { x: event.clientX, y: event.clientY }, opener)) {
+      event.preventDefault();
+    }
+  }, [openMenu]);
+
+  const onEdgeContextMenu = useCallback((event: React.MouseEvent, edge: Edge) => {
+    if (menuOpenRef.current) { event.preventDefault(); return; }
+    const opener = event.currentTarget instanceof HTMLElement || event.currentTarget instanceof SVGElement
+      ? event.currentTarget : null;
+    if (openMenu({ kind: 'edge', edgeId: edge.id }, { x: event.clientX, y: event.clientY }, opener)) {
+      event.preventDefault();
+    }
+  }, [openMenu]);
+
+  const onPaneContextMenu = useCallback((event: MouseEvent | React.MouseEvent<Element, MouseEvent>) => {
+    if (menuOpenRef.current) { event.preventDefault(); return; }
+    const screenPosition = { x: event.clientX, y: event.clientY };
+    if (openMenu({ kind: 'canvas', flowPosition: screenToFlowPosition(screenPosition) }, screenPosition,
+      editorRootRef.current)) {
+      event.preventDefault();
+    }
+  }, [openMenu, screenToFlowPosition]);
+
+  // Right-click on the box-selection rectangle: target the selection through its first node.
+  const onSelectionContextMenu = useCallback((event: React.MouseEvent, selected: Node[]) => {
+    if (menuOpenRef.current) { event.preventDefault(); return; }
+    if (selected.length && openMenu({ kind: 'node', nodeId: selected[0].id },
+      { x: event.clientX, y: event.clientY }, editorRootRef.current)) {
       event.preventDefault();
     }
   }, [openMenu]);
@@ -422,6 +453,20 @@ function WorkflowEditorInner({
     const target = event.target instanceof Element ? event.target : null;
     const owned = target?.closest('[data-workflow-editor]') === event.currentTarget;
     const textEditing = !!target?.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], .monaco-editor');
+    if (owned && !textEditing && (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) {
+      const element = target?.closest<HTMLElement | SVGElement>('.react-flow__node[data-id], .react-flow__edge[data-id]');
+      const id = element?.getAttribute('data-id');
+      if (element && id) {
+        const box = element.getBoundingClientRect();
+        const subject: MenuSubject = element.classList.contains('react-flow__node')
+          ? { kind: 'node', nodeId: id } : { kind: 'edge', edgeId: id };
+        if (openMenu(subject, { x: box.left + box.width / 2, y: box.top + box.height / 2 }, element)) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      }
+      return;
+    }
     const shortcut = editorShortcut({ key: event.key, ctrlKey: event.ctrlKey, metaKey: event.metaKey,
       shiftKey: event.shiftKey, altKey: event.altKey, defaultPrevented: event.defaultPrevented,
       isComposing: event.nativeEvent.isComposing }, owned, textEditing, simActive, readOnly);
@@ -436,7 +481,7 @@ function WorkflowEditorInner({
     } else {
       dispatch({ type: shortcut });
     }
-  }, [dispatch, nodes, edges, simActive, interactivityEnabled, state, readOnly]);
+  }, [dispatch, nodes, edges, simActive, interactivityEnabled, state, readOnly, openMenu]);
 
   const onResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -510,6 +555,7 @@ function WorkflowEditorInner({
 
   const toggleSim = useCallback(() => {
     dispatch({ type: 'mode', simulating: !simActive });
+    menuOpenRef.current = false;
     setMenu(null);
     if (simActive) {
       setSimState(null);
@@ -615,6 +661,9 @@ function WorkflowEditorInner({
             onEdgeClick={onCanvasEdgeClick}
             onPaneClick={onPaneClick}
             onNodeContextMenu={onNodeContextMenu}
+            onEdgeContextMenu={onEdgeContextMenu}
+            onPaneContextMenu={onPaneContextMenu}
+            onSelectionContextMenu={onSelectionContextMenu}
             onNodeDragStop={onNodeDragStop}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
@@ -706,7 +755,7 @@ function WorkflowEditorInner({
           </ReactFlow>
           {menu && (
             <ContextMenu entries={menu.entries} position={menu.position} bounds={menu.bounds}
-              returnFocus={menu.returnFocus} onClose={() => setMenu(null)} />
+              returnFocus={menu.returnFocus} onClose={() => { menuOpenRef.current = false; setMenu(null); }} />
           )}
         </div>
         {simActive ? (
