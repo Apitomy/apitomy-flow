@@ -16,6 +16,8 @@ function EditorHost({ id }: { id: string }) {
     const [mount, setMount] = useState(0);
     const [provider, setProvider] = useState(0);
     const [validationCount, setValidationCount] = useState(0);
+    const [catalog, setCatalog] = useState<ActionTypeDescriptor[]>([{ value: 'http', label: 'HTTP' }]);
+    const [openRequests, setOpenRequests] = useState<unknown[]>([]);
     const [pending] = useState(() => ({
         actions: [] as { generation: number; resolve: (value: ActionTypeDescriptor[]) => void; reject: () => void }[],
         validations: [] as { workflow: Workflow; resolve: (value: ValidationProblem[]) => void; reject: () => void }[],
@@ -44,8 +46,17 @@ function EditorHost({ id }: { id: string }) {
             { id: 'later', label: 'Not available', disabled: true, onSelect: record('later') },
         ];
     } : undefined), []);
-    const spi = useMemo<EditorSpi | undefined>(() => (asyncSpi || contextActions
-        ? { ...asyncSpi, ...(contextActions ? { contextActions } : {}) } : undefined), [asyncSpi, contextActions]);
+    const spi = useMemo<EditorSpi | undefined>(() => (asyncSpi || contextActions || params.has('catalog')
+        ? {
+            ...asyncSpi,
+            ...(contextActions ? { contextActions } : {}),
+            ...(params.has('catalog') ? {
+                actionTypes: catalog,
+                ...(params.has('noOpen') ? {} : {
+                    openActionType: (request: unknown) => setOpenRequests(previous => [...previous, request]),
+                }),
+            } : {}),
+        } : undefined), [asyncSpi, contextActions, catalog]);
     const editorRef = useRef<WorkflowEditorHandle>(null);
     const [handleResults, setHandleResults] = useState<string[]>([]);
     const [resolutions, setResolutions] = useState<string[]>([]);
@@ -82,6 +93,8 @@ function EditorHost({ id }: { id: string }) {
                 { severity: 'error', code: 'STALE', message: 'Stale host warning', nodeId: 'a' },
             ]))}>Resolve stale validation</button>
             <button onClick={() => pending.validations.at(-1)?.reject()}>Reject validation</button>
+            {params.has('catalog') && <button onClick={() => setCatalog(previous => [...previous, { value: 'noop', label: 'No-op' }])}>
+                Add noop to catalog</button>}
             {params.has('ai') && <>
                 <button onClick={() => record(editorRef.current!.propose(insertWait('cs-1')))}>Propose change</button>
                 <button onClick={() => record(editorRef.current!.apply(insertWait('cs-2')))}>Apply change</button>
@@ -102,6 +115,7 @@ function EditorHost({ id }: { id: string }) {
         <output data-testid="handle-results">{JSON.stringify(handleResults)}</output>
         <output data-testid="proposal-resolutions">{JSON.stringify(resolutions)}</output>
         <output data-testid="context-log">{JSON.stringify(contextLog)}</output>
+        <output data-testid="open-requests">{JSON.stringify(openRequests)}</output>
     </section>;
 }
 

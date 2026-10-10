@@ -5,7 +5,7 @@ import { type FlowNodeData } from '../../utils/conversion.ts';
 import type { WorkflowInput, ReceiveEventConfig } from '../../types/workflow.ts';
 import { type EditorSpi } from '../../types/spi.ts';
 import { type ActionTypeDescriptor } from '../../types/spi.ts';
-import { type ActionTypeCatalog } from '../../hooks/actionTypeCatalogState.ts';
+import { type ActionTypeCatalog, type CatalogStatus } from '../../hooks/actionTypeCatalogState.ts';
 import { type HumanTaskOutput, type OutputWidget, type ActionOutputConfig, type EventOutputMapping } from '../../types/workflow.ts';
 import { type ValidationProblem } from '../../types/validation.ts';
 import { inputValueText } from '../../utils/mapInputs.ts';
@@ -441,6 +441,7 @@ export function PropertiesPanel(props: PropertiesPanelProps) {
             onNodeChange={onNodeChange}
             actionTypes={actionTypes}
             actionTypesLoading={actionTypesLoading}
+            catalogStatus={catalog.status}
           />
         )}
         {selectedNode.data.nodeType === 'receive-event' && (
@@ -753,18 +754,20 @@ function ConditionTester({ condition, sampleContext }: {
   );
 }
 
-function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading, draftIdentity, readOnly = false }: {
+function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading, catalogStatus, draftIdentity, readOnly = false }: {
   draftIdentity?: string;
   readOnly?: boolean;
   node: Node<FlowNodeData>;
   onNodeChange: (id: string, data: Partial<FlowNodeData>) => void;
   actionTypes: ActionTypeDescriptor[];
   actionTypesLoading: boolean;
+  catalogStatus: CatalogStatus;
 }) {
   if (node.data.nodeType !== 'action') return null;
   const config = node.data.config;
   const currentActionType = config.actionType || '';
   const descriptor = actionTypes.find(at => at.value === currentActionType);
+  const unresolved = catalogStatus === 'ready' && currentActionType.trim() !== '' && !descriptor;
   const hasSpi = actionTypes.length > 0 || actionTypesLoading;
 
   const onActionTypeSelected = (value: string) => {
@@ -824,6 +827,9 @@ function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading,
         )}
         {descriptor?.description && (
           <div className="properties-panel__field-hint">{descriptor.description}</div>
+        )}
+        {unresolved && (
+          <div className="properties-panel__field-hint properties-panel__field-hint--unresolved">Not in the catalog yet</div>
         )}
       </div>
 
