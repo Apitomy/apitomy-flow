@@ -106,8 +106,10 @@ Target selection:
 
 The "⋯" button on a Problems panel row is rendered only when `contextActions` is configured. To decide
 whether it is enabled, Flow calls `contextActions` with that row's `problem` context, using
-`screenPosition` `{ x: 0, y: 0 }`. Errors during this probe are not logged; they are logged when the menu
-actually opens. The button is disabled when the host returns no items, and during simulation.
+`screenPosition` `{ x: 0, y: 0 }`. The probe runs when a row renders after the document, the problems, or
+the read-only/simulation state change (not on selection or layout changes). Probe contexts share one
+workflow copy, so hosts must not mutate it. Errors during this probe are not logged; they are logged when
+the menu actually opens. The button is disabled when the host returns no items, and during simulation.
 
 **Rules:**
 

@@ -46,8 +46,9 @@ export interface EditorSpi {
   validate?: WorkflowValidator;
   /**
    * Called each time a context menu opens on the canvas or a Problems panel row. Returns the host items
-   * shown below the built-in ones. It may also be called to decide whether a Problems row's actions button
-   * is enabled.
+   * shown below the built-in ones. It is also called (silently) to decide whether a Problems row's actions
+   * button is enabled: this probe runs when a row renders after the document, the problems, or the
+   * read-only/simulation state change. Probe contexts share one workflow copy, so hosts must not mutate it.
    */
   contextActions?: (context: FlowContext) => ContextAction[];
 }

@@ -72,6 +72,20 @@ test('the menu opens from the keyboard, wraps, skips disabled items and restores
     await expect(editor.locator('.react-flow__node')).toHaveCount(5);
 });
 
+test('a synthetic ContextMenu keydown on a focused edge opens its menu', async ({ page }) => {
+    await page.goto('/?context');
+    const editor = page.getByTestId('one');
+    await ready(editor);
+    const edge = editor.locator('.react-flow__edge[data-id="sa"]');
+    await edge.focus();
+    await expect(edge).toBeFocused();
+    await edge.evaluate(element => element.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ContextMenu', bubbles: true, cancelable: true })));
+    await expect(items(editor)).toHaveText(['Delete', 'Ask AI about edge', 'Not available']);
+    await items(editor).filter({ hasText: 'Ask AI about edge' }).click();
+    expect((await log(editor))[0].target).toEqual({ kind: 'edge', edgeId: 'sa' });
+});
+
 test('a read-only editor shows host items only', async ({ page }) => {
     await page.goto('/?context&readonly');
     const editor = page.getByTestId('one');
@@ -110,6 +124,7 @@ test('problem rows open host actions by right-click and from their actions butto
     await expect(items(editor)).toHaveText(['Ask AI about problem', 'Not available']);
     await page.keyboard.press('Escape');
     await expect(menu(editor)).toHaveCount(0);
+    await expect(row).toBeFocused();
     const button = row.getByRole('button', { name: 'Actions for MISSING_START_INPUTS' });
     await button.click();
     await items(editor).filter({ hasText: 'Ask AI about problem' }).click();

@@ -62,11 +62,20 @@ function hostActions(contextActions: ((context: FlowContext) => ContextAction[])
         log('contextActions must return an array; ignoring', result);
         return [];
     }
+    const seen = new Set<string>();
     return result.filter((action): action is ContextAction => {
         const valid = !!action && typeof action === 'object' && typeof action.id === 'string'
             && typeof action.label === 'string' && typeof action.onSelect === 'function';
-        if (!valid) log('Ignoring invalid context action (needs string id, string label and onSelect)', action);
-        return valid;
+        if (!valid) {
+            log('Ignoring invalid context action (needs string id, string label and onSelect)', action);
+            return false;
+        }
+        if (seen.has(action.id)) {
+            log(`Ignoring context action with duplicate id "${action.id}"`, action);
+            return false;
+        }
+        seen.add(action.id);
+        return true;
     });
 }
 

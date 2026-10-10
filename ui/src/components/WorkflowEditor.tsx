@@ -17,7 +17,7 @@ import { Switch } from '@patternfly/react-core';
 import { UndoIcon, RedoIcon, LockIcon, LockOpenIcon, UploadIcon, DownloadIcon, ImageIcon } from '@patternfly/react-icons';
 import { type Workflow } from '../types/workflow.ts';
 import { type ValidationProblem } from '../types/validation.ts';
-import { type EditorSpi } from '../types/spi.ts';
+import { type EditorSpi, type FlowContext } from '../types/spi.ts';
 import { type FlowNodeData } from '../utils/conversion.ts';
 import { generateNodeId, generateEdgeId } from '../utils/id.ts';
 import { parseWorkflow, downloadWorkflowJson, workflowFileName } from '../utils/workflowIo.ts';
@@ -300,14 +300,20 @@ function WorkflowEditorInner({
     setMenu(null);
   }, [dispatch]);
 
+  // Latest state, read at call time by menu handlers and the Problems probe so they never act on a stale copy.
+  const latestStateRef = useRef(state);
+  useLayoutEffect(() => {
+    latestStateRef.current = state;
+  }, [state]);
+
   const builtInHandlers = useMemo<BuiltInHandlers>(() => ({
     clone: nodeId => {
-      const node = currentWorkflow.nodes.find(candidate => candidate.id === nodeId);
+      const node = latestStateRef.current.document.nodes.find(candidate => candidate.id === nodeId);
       if (node) dispatch({ type: 'cloneNode', id: nodeId, newId: generateNodeId(node.type) });
     },
-    deleteElements: (nodeIds, edgeIds) =>
-      deleteWithEditorFocus(state, { type: 'delete', nodeIds, edgeIds }, editorRootRef.current, dispatch),
-  }), [currentWorkflow, state, dispatch]);
+    deleteElements: (nodeIds, edgeIds) => deleteWithEditorFocus(latestStateRef.current,
+      { type: 'delete', nodeIds, edgeIds }, editorRootRef.current, dispatch),
+  }), [dispatch]);
 
   /** Opens a context menu for a subject; returns false (and opens nothing) when there is nothing to show. */
   const openMenu = useCallback((subject: MenuSubject, screenPosition: { x: number; y: number },
@@ -333,20 +339,33 @@ function WorkflowEditorInner({
     return openMenu({ kind: 'problem', problem }, screenPosition, opener);
   }, [openMenu]);
 
-  // Probes the host (silently) to decide whether a row's actions button is enabled; cached per render input.
+  // Probes the host (silently) to decide whether a row's actions button is enabled. Cached per document,
+  // problems and mode only; selection is read from the latest state (the probe is advisory). All rows share
+  // one lazily built base context, so the document is cloned at most once per cache.
+  const contextActions = spi?.contextActions;
+  const problemDocument = state.document;
+  const problemRevision = state.contentRevision;
   const problemMenuEnabled = useMemo(() => {
-    const contextActions = spi?.contextActions;
     if (!contextActions) return undefined;
     const cache = new Map<ValidationProblem, boolean>();
+    let base: Omit<FlowContext, 'target'> | undefined;
     return (problem: ValidationProblem): boolean => {
       if (simActive) return false;
       if (!cache.has(problem)) {
-        const context = buildFlowContext(state, { kind: 'problem', problem }, validationProblems, readOnly, { x: 0, y: 0 });
+        base ??= {
+          workflow: structuredClone(problemDocument),
+          contentRevision: problemRevision,
+          selection: selectionOf(latestStateRef.current),
+          problems: structuredClone(validationProblems),
+          readOnly,
+          screenPosition: { x: 0, y: 0 },
+        };
+        const context: FlowContext = { ...base, target: { kind: 'problem', problem: structuredClone(problem) } };
         cache.set(problem, resolveMenuItems([], contextActions, context, () => {}).length > 0);
       }
       return cache.get(problem)!;
     };
-  }, [spi, simActive, state, validationProblems, readOnly]);
+  }, [contextActions, simActive, problemDocument, problemRevision, validationProblems, readOnly]);
 
   const onNodeContextMenu = useCallback((event: React.MouseEvent, node: Node<FlowNodeData>) => {
     if (menuOpenRef.current) { event.preventDefault(); return; }
@@ -484,9 +503,9 @@ function WorkflowEditorInner({
         if (openMenu(subject, { x: box.left + box.width / 2, y: box.top + box.height / 2 }, element)) {
           event.preventDefault();
           event.stopPropagation();
+          return;
         }
       }
-      return;
     }
     const shortcut = editorShortcut({ key: event.key, ctrlKey: event.ctrlKey, metaKey: event.metaKey,
       shiftKey: event.shiftKey, altKey: event.altKey, defaultPrevented: event.defaultPrevented,

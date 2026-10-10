@@ -30,7 +30,7 @@ export function ProblemsPanel({ problems, onProblemClick, onProblemMenu, problem
       {!collapsed && sorted.length > 0 && (
         <ul className="problems-panel__list">
           {sorted.map((p, i) => (
-            <li key={`${p.code}-${p.nodeId ?? p.edgeId ?? i}`} className="problems-panel__item" onClick={() => onProblemClick(p)}
+            <li key={`${p.code}-${p.nodeId ?? p.edgeId ?? i}`} className="problems-panel__item" tabIndex={-1} onClick={() => onProblemClick(p)}
               onContextMenu={event => {
                 if (onProblemMenu?.(p, { x: event.clientX, y: event.clientY }, event.currentTarget)) event.preventDefault();
               }}>

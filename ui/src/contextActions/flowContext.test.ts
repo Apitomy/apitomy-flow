@@ -29,7 +29,9 @@ describe('menuTarget', () => {
         expect(result).toEqual(canvas);
         expect(result).not.toBe(canvas);
         const problem = { kind: 'problem' as const, problem: { severity: 'error' as const, code: 'X', message: 'm' } };
-        expect(menuTarget(problem, { nodeIds: [], edgeIds: [] })).toEqual(problem);
+        const problemTarget = menuTarget(problem, { nodeIds: [], edgeIds: [] });
+        expect(problemTarget).toEqual(problem);
+        expect(problemTarget).not.toBe(problem);
     });
 });
 

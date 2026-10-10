@@ -214,7 +214,11 @@ const spi: EditorSpi = {
 
 - **Read-only editors:** built-in items are hidden but host items are shown. Check `context.readOnly` to
   hide your own items as well.
+- **Interactivity lock:** when the canvas interactivity lock is on, built-in items are hidden and host items
+  are still shown.
 - **Simulation:** no menus open while simulating.
+- **Problems "⋯" button:** disabled while simulating, and when `contextActions` returns no items for that
+  row.
 - **Nothing to show:** if neither Flow nor the host has an item, no menu opens.
 - **Fresh items:** `contextActions` runs on every opening, so items can depend on the current state, for
   example to hide AI actions while an agent is busy. It is also called, with errors silenced, to decide

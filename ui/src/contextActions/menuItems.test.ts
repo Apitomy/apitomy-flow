@@ -61,6 +61,18 @@ describe('resolveMenuItems', () => {
         expect(log).toHaveBeenCalledTimes(4);
     });
 
+    it('drops host actions whose id duplicates an earlier one', () => {
+        const log = vi.fn();
+        const actions: ContextAction[] = [
+            { id: 'a', label: 'First', onSelect: () => {} },
+            { id: 'b', label: 'Other', onSelect: () => {} },
+            { id: 'a', label: 'Second', onSelect: () => {} },
+        ];
+        expect(labels(resolveMenuItems([], () => actions, context, log))).toEqual(['First', 'Other']);
+        expect(log).toHaveBeenCalledTimes(1);
+        expect(log.mock.calls[0][1]).toBe(actions[2]);
+    });
+
     it('treats an item without a function onSelect as invalid', () => {
         const log = vi.fn();
         const items = [{ id: 'x', label: 'X' }] as unknown as ContextAction[];
