@@ -255,6 +255,8 @@ setCatalog(previous => [...previous, created]);
   **Create…** for an unresolved value) next to the Action Type field. This also applies in read-only
   editors. To offer the same from the canvas, add a host item with `contextActions`.
 
+![Unresolved Action Type marked on the canvas and in the panel](images/action-type-catalog/after-unresolved.png)
+
 ## Events
 
 - `onChange(workflow, { contentRevision, origin })` — `origin` is `'user'`, `'host'` or `agent:<name>`.
