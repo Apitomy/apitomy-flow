@@ -180,6 +180,48 @@ A user content edit makes the proposal stale. Only Dismiss remains, and the over
 
 ![Stale proposal](images/ai-assisted-editing/after-proposal-stale.png)
 
+## Context actions
+
+Context menus are the place to start AI work from the canvas. `spi.contextActions` is called each time a
+menu opens. It receives a `FlowContext` and returns the host items, which are shown below the built-in
+Clone/Delete items. Flow never shows a prompt itself: open your own UI from `onSelect`, anchored at
+`screenPosition`.
+
+| Surface | Opened by | Target |
+|---|---|---|
+| Canvas background | Right-click | `{ kind: 'canvas', flowPosition }` |
+| Node | Right-click; ContextMenu key or Shift+F10 when focused | `{ kind: 'node', nodeId }` |
+| Edge | Right-click; ContextMenu key or Shift+F10 when focused | `{ kind: 'edge', edgeId }` |
+| Inside a multi-selection | Right-click on a selected element | `{ kind: 'selection', nodeIds, edgeIds }` |
+| Problems panel row | Right-click; the row's "⋯" button | `{ kind: 'problem', problem }` |
+
+```tsx
+const spi: EditorSpi = {
+  contextActions: (context) => [
+    {
+      id: 'ask-ai',
+      label: context.target.kind === 'problem' ? 'Ask AI to fix this' : 'Ask AI…',
+      onSelect: (chosen) => openPrompt({
+        anchor: chosen.screenPosition,
+        // Use the revision the user was looking at as the change set's base.
+        onSubmit: async (text) => editorRef.current?.propose(
+          await agent.proposeChange({ text, context: chosen, baseRevision: chosen.contentRevision })),
+      }),
+    },
+  ],
+};
+```
+
+- **Read-only editors:** built-in items are hidden but host items are shown. Check `context.readOnly` to
+  hide your own items as well.
+- **Simulation:** no menus open while simulating.
+- **Nothing to show:** if neither Flow nor the host has an item, no menu opens.
+- **Fresh items:** `contextActions` runs on every opening, so items can depend on the current state, for
+  example to hide AI actions while an agent is busy. It is also called, with errors silenced, to decide
+  whether a Problems row's "⋯" button is enabled.
+- **Errors:** if `contextActions` throws or returns something invalid, Flow logs it and still shows the
+  built-in items. If an `onSelect` throws, the error is logged and the menu closes.
+
 ## Events
 
 - `onChange(workflow, { contentRevision, origin })` — `origin` is `'user'`, `'host'` or `agent:<name>`.
