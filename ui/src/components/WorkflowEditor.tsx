@@ -325,9 +325,12 @@ function WorkflowEditorInner({
       spi?.contextActions, context);
     if (!entries.length) return false;
     const box = editorRootRef.current?.getBoundingClientRect();
-    const bounds = box
-      ? { left: box.left, top: box.top, right: box.right, bottom: box.bottom }
-      : { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
+    // Keep the menu inside both the editor and the browser viewport.
+    const bounds = {
+      left: Math.max(0, box?.left ?? 0), top: Math.max(0, box?.top ?? 0),
+      right: Math.min(window.innerWidth, box?.right ?? window.innerWidth),
+      bottom: Math.min(window.innerHeight, box?.bottom ?? window.innerHeight),
+    };
     menuOpenRef.current = true;
     setMenu({ entries, position: { ...screenPosition }, bounds, returnFocus });
     return true;

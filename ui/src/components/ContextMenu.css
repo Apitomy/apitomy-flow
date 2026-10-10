@@ -11,6 +11,8 @@
   border-radius: 6px;
   box-shadow: 0 4px 12px var(--flow-shadow-heavy, rgba(0, 0, 0, 0.15));
   min-width: 160px;
+  width: max-content;
+  max-width: 320px;
   padding: 4px 0;
   outline: none;
 }

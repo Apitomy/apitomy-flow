@@ -226,6 +226,10 @@ const spi: EditorSpi = {
 - **Errors:** if `contextActions` throws or returns something invalid, Flow logs it and still shows the
   built-in items. If an `onSelect` throws, the error is logged and the menu closes.
 
+![Node menu with host actions](images/context-actions/after-node-menu.png)
+
+![Problems row menu](images/context-actions/after-problem-menu.png)
+
 ## Events
 
 - `onChange(workflow, { contentRevision, origin })` — `origin` is `'user'`, `'host'` or `agent:<name>`.
