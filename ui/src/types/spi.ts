@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+import type { EditorSelection } from '../hooks/editorNotifications.ts';
 import { type Workflow } from './workflow.ts';
 import { type ValidationProblem } from './validation.ts';
 
@@ -42,4 +44,45 @@ export interface EditorSpi {
   actionTypes?: ActionTypeProvider;
   /** Optional host-provided additional validation (see {@link WorkflowValidator}). */
   validate?: WorkflowValidator;
+  /**
+   * Called each time a context menu opens on the canvas or a Problems panel row. Returns the host items
+   * shown below the built-in ones. It is also called (silently) to decide whether a Problems row's actions
+   * button is enabled: this probe runs when a row renders after the document, the problems, or the
+   * read-only/simulation state change. Probe contexts share one workflow copy, so hosts must not mutate it.
+   */
+  contextActions?: (context: FlowContext) => ContextAction[];
+}
+
+/** What a context menu was opened on. */
+export type FlowTarget =
+  | { kind: 'canvas'; flowPosition: { x: number; y: number } }
+  | { kind: 'node'; nodeId: string }
+  | { kind: 'edge'; edgeId: string }
+  | { kind: 'selection'; nodeIds: string[]; edgeIds: string[] }
+  | { kind: 'problem'; problem: ValidationProblem };
+
+/** Snapshot handed to `contextActions` and to the chosen action; built once per menu opening. */
+export interface FlowContext {
+  target: FlowTarget;
+  /** Detached copy of the current document. */
+  workflow: Workflow;
+  /** Revision of `workflow`; use it as the `baseRevision` of change sets produced from this context. */
+  contentRevision: string;
+  /** Canvas selection when the menu opened, sorted by id. */
+  selection: EditorSelection;
+  /** Built-in and host problems shown in the Problems panel. */
+  problems: ValidationProblem[];
+  readOnly: boolean;
+  /** Viewport (client) coordinates of the click, or the centre of the focused element for keyboard opens. */
+  screenPosition: { x: number; y: number };
+}
+
+/** A host-defined context menu item. */
+export interface ContextAction {
+  id: string;
+  label: string;
+  icon?: ReactNode;
+  danger?: boolean;
+  disabled?: boolean;
+  onSelect: (context: FlowContext) => void;
 }

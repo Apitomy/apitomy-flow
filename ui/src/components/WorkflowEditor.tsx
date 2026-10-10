@@ -17,7 +17,7 @@ import { Switch } from '@patternfly/react-core';
 import { UndoIcon, RedoIcon, LockIcon, LockOpenIcon, UploadIcon, DownloadIcon, ImageIcon } from '@patternfly/react-icons';
 import { type Workflow } from '../types/workflow.ts';
 import { type ValidationProblem } from '../types/validation.ts';
-import { type EditorSpi } from '../types/spi.ts';
+import { type EditorSpi, type FlowContext } from '../types/spi.ts';
 import { type FlowNodeData } from '../utils/conversion.ts';
 import { generateNodeId, generateEdgeId } from '../utils/id.ts';
 import { parseWorkflow, downloadWorkflowJson, workflowFileName } from '../utils/workflowIo.ts';
@@ -37,13 +37,15 @@ import { NodePalette } from './panels/NodePalette.tsx';
 import { PropertiesPanel } from './panels/PropertiesPanel.tsx';
 import { ProblemsPanel } from './panels/ProblemsPanel.tsx';
 import { SimulationPanel } from './panels/SimulationPanel.tsx';
-import { NodeContextMenu } from './NodeContextMenu.tsx';
+import { ContextMenu } from './ContextMenu.tsx';
+import { buildFlowContext, menuTarget, type MenuSubject } from '../contextActions/flowContext.ts';
+import { builtInItems, resolveMenuItems, type BuiltInHandlers, type MenuEntry } from '../contextActions/menuItems.ts';
 import { useEditorState } from '../hooks/useEditorState.ts';
 import { editorShortcut } from '../hooks/editorShortcuts.ts';
 import { readOnlyCommand } from '../hooks/editorReadOnly.ts';
 import { editorReducer, type EditorCommand } from '../hooks/editorState.ts';
 import { createEditorHandle, type WorkflowEditorHandle } from '../hooks/editorHandle.ts';
-import { type EditorSelection } from '../hooks/editorNotifications.ts';
+import { selectionOf, type EditorSelection } from '../hooks/editorNotifications.ts';
 import { deleteWithEditorFocus } from '../hooks/editorDeletion.ts';
 import {
   startSimulation,
@@ -149,7 +151,13 @@ function WorkflowEditorInner({
   const [importError, setImportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editorRootRef = useRef<HTMLDivElement>(null);
-  const [contextMenu, setContextMenu] = useState<{ node: Node<FlowNodeData>; position: { x: number; y: number } } | null>(null);
+  const menuOpenRef = useRef(false);
+  const [menu, setMenu] = useState<{
+    entries: MenuEntry[];
+    position: { x: number; y: number };
+    bounds: { left: number; top: number; right: number; bottom: number };
+    returnFocus: HTMLElement | SVGElement | null;
+  } | null>(null);
   const [panelWidth, setPanelWidth] = useState(340);
   const [simState, setSimState] = useState<SimState | null>(null);
   const [simContextText, setSimContextText] = useState('{\n  \n}');
@@ -288,22 +296,114 @@ function WorkflowEditorInner({
 
   const onPaneClick = useCallback(() => {
     dispatch({ type: 'select' });
-    setContextMenu(null);
+    menuOpenRef.current = false;
+    setMenu(null);
   }, [dispatch]);
+
+  // Latest state, read at call time by menu handlers and the Problems probe so they never act on a stale copy.
+  const latestStateRef = useRef(state);
+  useLayoutEffect(() => {
+    latestStateRef.current = state;
+  }, [state]);
+
+  const builtInHandlers = useMemo<BuiltInHandlers>(() => ({
+    clone: nodeId => {
+      const node = latestStateRef.current.document.nodes.find(candidate => candidate.id === nodeId);
+      if (node) dispatch({ type: 'cloneNode', id: nodeId, newId: generateNodeId(node.type) });
+    },
+    deleteElements: (nodeIds, edgeIds) => deleteWithEditorFocus(latestStateRef.current,
+      { type: 'delete', nodeIds, edgeIds }, editorRootRef.current, dispatch),
+  }), [dispatch]);
+
+  /** Opens a context menu for a subject; returns false (and opens nothing) when there is nothing to show. */
+  const openMenu = useCallback((subject: MenuSubject, screenPosition: { x: number; y: number },
+    returnFocus: HTMLElement | SVGElement | null): boolean => {
+    if (simActive) return false;
+    const target = menuTarget(subject, selectionOf(state));
+    const context = buildFlowContext(state, target, validationProblems, readOnly, screenPosition);
+    const entries = resolveMenuItems(interactivityEnabled ? builtInItems(target, builtInHandlers) : [],
+      spi?.contextActions, context);
+    if (!entries.length) return false;
+    const box = editorRootRef.current?.getBoundingClientRect();
+    // Keep the menu inside both the editor and the browser viewport.
+    const bounds = {
+      left: Math.max(0, box?.left ?? 0), top: Math.max(0, box?.top ?? 0),
+      right: Math.min(window.innerWidth, box?.right ?? window.innerWidth),
+      bottom: Math.min(window.innerHeight, box?.bottom ?? window.innerHeight),
+    };
+    menuOpenRef.current = true;
+    setMenu({ entries, position: { ...screenPosition }, bounds, returnFocus });
+    return true;
+  }, [simActive, state, validationProblems, readOnly, interactivityEnabled, builtInHandlers, spi]);
+
+  const onProblemMenu = useCallback((problem: ValidationProblem, screenPosition: { x: number; y: number },
+    opener: HTMLElement): boolean => {
+    if (menuOpenRef.current) return true;
+    return openMenu({ kind: 'problem', problem }, screenPosition, opener);
+  }, [openMenu]);
+
+  // Probes the host (silently) to decide whether a row's actions button is enabled. Cached per document,
+  // problems and mode only; selection is read from the latest state (the probe is advisory). All rows share
+  // one lazily built base context, so the document is cloned at most once per cache.
+  const contextActions = spi?.contextActions;
+  const problemDocument = state.document;
+  const problemRevision = state.contentRevision;
+  const problemMenuEnabled = useMemo(() => {
+    if (!contextActions) return undefined;
+    const cache = new Map<ValidationProblem, boolean>();
+    let base: Omit<FlowContext, 'target'> | undefined;
+    return (problem: ValidationProblem): boolean => {
+      if (simActive) return false;
+      if (!cache.has(problem)) {
+        base ??= {
+          workflow: structuredClone(problemDocument),
+          contentRevision: problemRevision,
+          selection: selectionOf(latestStateRef.current),
+          problems: structuredClone(validationProblems),
+          readOnly,
+          screenPosition: { x: 0, y: 0 },
+        };
+        const context: FlowContext = { ...base, target: { kind: 'problem', problem: structuredClone(problem) } };
+        cache.set(problem, resolveMenuItems([], contextActions, context, () => {}).length > 0);
+      }
+      return cache.get(problem)!;
+    };
+  }, [contextActions, simActive, problemDocument, problemRevision, validationProblems, readOnly]);
 
   const onNodeContextMenu = useCallback((event: React.MouseEvent, node: Node<FlowNodeData>) => {
-    event.preventDefault();
-    if (!interactivityEnabled) return;
-    setContextMenu({ node: node as Node<FlowNodeData>, position: { x: event.clientX, y: event.clientY } });
-  }, [interactivityEnabled]);
+    if (menuOpenRef.current) { event.preventDefault(); return; }
+    const opener = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+    if (openMenu({ kind: 'node', nodeId: node.id }, { x: event.clientX, y: event.clientY }, opener)) {
+      event.preventDefault();
+    }
+  }, [openMenu]);
 
-  const onCloneNode = useCallback((node: Node<FlowNodeData>) => {
-    dispatch({ type: 'cloneNode', id: node.id, newId: generateNodeId(node.data.nodeType) });
-  }, [dispatch]);
+  const onEdgeContextMenu = useCallback((event: React.MouseEvent, edge: Edge) => {
+    if (menuOpenRef.current) { event.preventDefault(); return; }
+    const opener = event.currentTarget instanceof HTMLElement || event.currentTarget instanceof SVGElement
+      ? event.currentTarget : null;
+    if (openMenu({ kind: 'edge', edgeId: edge.id }, { x: event.clientX, y: event.clientY }, opener)) {
+      event.preventDefault();
+    }
+  }, [openMenu]);
 
-  const onDeleteNode = useCallback((nodeId: string) => {
-    deleteWithEditorFocus(state, { type: 'delete', nodeIds: [nodeId] }, editorRootRef.current, dispatch);
-  }, [state, dispatch]);
+  const onPaneContextMenu = useCallback((event: MouseEvent | React.MouseEvent<Element, MouseEvent>) => {
+    if (menuOpenRef.current) { event.preventDefault(); return; }
+    const screenPosition = { x: event.clientX, y: event.clientY };
+    if (openMenu({ kind: 'canvas', flowPosition: screenToFlowPosition(screenPosition) }, screenPosition,
+      editorRootRef.current)) {
+      event.preventDefault();
+    }
+  }, [openMenu, screenToFlowPosition]);
+
+  // Right-click on the box-selection rectangle: target the selection through its first node.
+  const onSelectionContextMenu = useCallback((event: React.MouseEvent, selected: Node[]) => {
+    if (menuOpenRef.current) { event.preventDefault(); return; }
+    if (selected.length && openMenu({ kind: 'node', nodeId: selected[0].id },
+      { x: event.clientX, y: event.clientY }, editorRootRef.current)) {
+      event.preventDefault();
+    }
+  }, [openMenu]);
 
   const onNodeDragStop = useCallback(() => {
     dispatch({ type: 'commitPositions' });
@@ -396,6 +496,20 @@ function WorkflowEditorInner({
     const target = event.target instanceof Element ? event.target : null;
     const owned = target?.closest('[data-workflow-editor]') === event.currentTarget;
     const textEditing = !!target?.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], .monaco-editor');
+    if (owned && !textEditing && (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) {
+      const element = target?.closest<HTMLElement | SVGElement>('.react-flow__node[data-id], .react-flow__edge[data-id]');
+      const id = element?.getAttribute('data-id');
+      if (element && id) {
+        const box = element.getBoundingClientRect();
+        const subject: MenuSubject = element.classList.contains('react-flow__node')
+          ? { kind: 'node', nodeId: id } : { kind: 'edge', edgeId: id };
+        if (openMenu(subject, { x: box.left + box.width / 2, y: box.top + box.height / 2 }, element)) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+      }
+    }
     const shortcut = editorShortcut({ key: event.key, ctrlKey: event.ctrlKey, metaKey: event.metaKey,
       shiftKey: event.shiftKey, altKey: event.altKey, defaultPrevented: event.defaultPrevented,
       isComposing: event.nativeEvent.isComposing }, owned, textEditing, simActive, readOnly);
@@ -410,7 +524,7 @@ function WorkflowEditorInner({
     } else {
       dispatch({ type: shortcut });
     }
-  }, [dispatch, nodes, edges, simActive, interactivityEnabled, state, readOnly]);
+  }, [dispatch, nodes, edges, simActive, interactivityEnabled, state, readOnly, openMenu]);
 
   const onResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -484,7 +598,8 @@ function WorkflowEditorInner({
 
   const toggleSim = useCallback(() => {
     dispatch({ type: 'mode', simulating: !simActive });
-    setContextMenu(null);
+    menuOpenRef.current = false;
+    setMenu(null);
     if (simActive) {
       setSimState(null);
     } else {
@@ -589,6 +704,9 @@ function WorkflowEditorInner({
             onEdgeClick={onCanvasEdgeClick}
             onPaneClick={onPaneClick}
             onNodeContextMenu={onNodeContextMenu}
+            onEdgeContextMenu={onEdgeContextMenu}
+            onPaneContextMenu={onPaneContextMenu}
+            onSelectionContextMenu={onSelectionContextMenu}
             onNodeDragStop={onNodeDragStop}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
@@ -678,14 +796,9 @@ function WorkflowEditorInner({
               </Panel>
             )}
           </ReactFlow>
-          {contextMenu && interactivityEnabled && (
-            <NodeContextMenu
-              node={contextMenu.node}
-              position={contextMenu.position}
-              onClone={onCloneNode}
-              onDelete={onDeleteNode}
-              onClose={() => setContextMenu(null)}
-            />
+          {menu && (
+            <ContextMenu entries={menu.entries} position={menu.position} bounds={menu.bounds}
+              returnFocus={menu.returnFocus} onClose={() => { menuOpenRef.current = false; setMenu(null); }} />
           )}
         </div>
         {simActive ? (
@@ -722,7 +835,7 @@ function WorkflowEditorInner({
           />
         )}
       </div>
-      <ProblemsPanel problems={validationProblems} onProblemClick={onProblemClick} />
+      <ProblemsPanel problems={validationProblems} onProblemClick={onProblemClick} onProblemMenu={onProblemMenu} problemMenuEnabled={problemMenuEnabled} />
     </div>
   );
 }

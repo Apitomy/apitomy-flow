@@ -182,7 +182,7 @@ test('context-menu deletion transfers focus before removal and keeps undo availa
     const editor = page.getByTestId('one');
     await ready(editor);
     await editor.locator('.react-flow__node[data-id="a"]').click({ button: 'right' });
-    await editor.getByRole('button', { name: /Delete/ }).click();
+    await editor.getByRole('menuitem', { name: 'Delete' }).click();
     await expect(editor.locator('[data-workflow-editor]')).toBeFocused();
     await expect(editor.locator('.react-flow__node')).toHaveCount(3);
     const deleted = await changes(editor);
@@ -279,7 +279,7 @@ test('host and property text focus excludes document shortcuts and simulation lo
     for (const name of ['Undo', 'Redo', 'Tidy up', 'Import']) {
         await expect(editor.getByRole('button', { name, exact: true })).toBeDisabled();
     }
-    await expect(editor.getByRole('button', { name: /Delete/ })).toHaveCount(0);
+    await expect(editor.getByRole('menuitem', { name: 'Delete' })).toHaveCount(0);
     const switches = await page.getByRole('switch').evaluateAll(elements => elements.map(element => element.id));
     expect(new Set(switches).size).toBe(2);
     await editor.locator('[data-workflow-editor]').focus();

@@ -1,5 +1,4 @@
 import { type WorkflowViewerNodeMenuItem } from './WorkflowViewer.tsx';
-import './NodeContextMenu.css';
 import './NodeActionMenu.css';
 
 interface NodeActionMenuProps {

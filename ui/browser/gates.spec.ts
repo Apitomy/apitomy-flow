@@ -26,7 +26,7 @@ for (const mode of ['simulation', 'manual lock']) {
         await page.mouse.up();
         await expect(action).toHaveAttribute('style', position!);
         await action.click({ button: 'right' });
-        await expect(editor.locator('.node-context-menu')).toHaveCount(0);
+        await expect(editor.locator('.flow-context-menu')).toHaveCount(0);
         const source = action.locator('.react-flow__handle.source');
         const target = editor.locator('.react-flow__node[data-id="e"] .react-flow__handle.target');
         await source.dragTo(target);
