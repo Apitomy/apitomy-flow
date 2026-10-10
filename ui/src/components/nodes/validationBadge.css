@@ -56,3 +56,23 @@
 
 .flow-node-badge__tooltip-item--error::before { background: var(--flow-status-danger, #c9190b); }
 .flow-node-badge__tooltip-item--warning::before { background: var(--flow-status-warning, #f0ab00); }
+
+/* Unresolved Action Type marker: straddles the top-right corner. */
+.flow-node-unresolved {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    z-index: 2;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--flow-status-info, #2b9af3);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 16px;
+    text-align: center;
+    cursor: help;
+    pointer-events: auto;
+    box-shadow: 0 0 0 1px var(--flow-bg-primary, #fff);
+}

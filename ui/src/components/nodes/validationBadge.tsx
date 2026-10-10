@@ -51,12 +51,23 @@ function ValidationBadge({ problems }: { problems: ValidationProblem[] }) {
     );
 }
 
+/** A "?" marker on the node's top-right corner for an Action Type missing from the catalog. */
+function UnresolvedActionTypeMarker({ value }: { value: string }) {
+    const label = `Unknown Action Type: ${value}`;
+    return (
+        <Tooltip content={label} position="top">
+            <span className="flow-node-unresolved" role="img" aria-label={label}>?</span>
+        </Tooltip>
+    );
+}
+
 /**
  * Wraps a React Flow node component so it renders a corner validation badge
- * whenever its data carries {@link FlowNodeData.validationProblems}.
+ * whenever its data carries {@link FlowNodeData.validationProblems}, and a
+ * top-right "?" marker whenever it carries {@link FlowNodeData.unresolvedActionType}.
  *
  * @param Component the node component to wrap
- * @returns a component that renders the original node plus the validation badge
+ * @returns a component that renders the original node plus its badge and marker
  */
 export function withValidationBadge(Component: ComponentType<NodeProps>): ComponentType<NodeProps> {
     return function WithValidationBadge(props: NodeProps) {
@@ -66,6 +77,7 @@ export function withValidationBadge(Component: ComponentType<NodeProps>): Compon
             <>
                 <Component {...props} />
                 {problems.length > 0 ? <ValidationBadge problems={problems} /> : null}
+                {data.unresolvedActionType ? <UnresolvedActionTypeMarker value={data.unresolvedActionType} /> : null}
             </>
         );
     };

@@ -8,6 +8,8 @@ export type FlowNodeData = { [K in NodeType]: Record<string, unknown> & {
   nodeType: K;
   config: NodeConfigMap[K];
   validationProblems?: ValidationProblem[];
+  /** Action Type value not found in the loaded catalog (editor only). */
+  unresolvedActionType?: string;
   /** Static fork/join role for the authoring hint, if any (editor only). */
   parallelRole?: ParallelRole;
   /** Wire fields retained for host extensions when converting back from the canvas. */

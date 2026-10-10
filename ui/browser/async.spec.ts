@@ -50,3 +50,16 @@ test('async host validation renders latest result, ignores stale responses and c
     await expect(editor.getByText('Current host warning')).toHaveCount(0);
     await expect(editor.getByText('MISSING_START_INPUTS')).toBeVisible();
 });
+
+test('replacing a loaded provider keeps the previous Action Types while the new one loads', async ({ page }) => {
+    await page.goto('/?async');
+    const editor = page.getByTestId('one');
+    await ready(editor);
+    await editor.locator('.react-flow__node[data-id="a"]').click();
+    await editor.getByRole('button', { name: 'Resolve current actions', exact: true }).click();
+    await expect(editor.getByText('Current provider description')).toBeVisible();
+    await editor.getByRole('button', { name: 'Replace provider', exact: true }).click();
+    const filter = editor.getByRole('textbox', { name: 'Type to filter' });
+    await expect(filter).not.toHaveAttribute('placeholder', 'Loading...');
+    await expect(editor.getByText('Current provider description')).toBeVisible();
+});

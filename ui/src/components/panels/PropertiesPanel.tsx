@@ -1,10 +1,12 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState } from 'react';
 import { type Node, type Edge } from '@xyflow/react';
 import { ActionTypeSelect } from './ActionTypeSelect.tsx';
 import { type FlowNodeData } from '../../utils/conversion.ts';
 import type { WorkflowInput, ReceiveEventConfig } from '../../types/workflow.ts';
 import { type EditorSpi } from '../../types/spi.ts';
 import { type ActionTypeDescriptor } from '../../types/spi.ts';
+import { type ActionTypeCatalog, type CatalogStatus } from '../../hooks/actionTypeCatalogState.ts';
+import { isUnresolvedActionType } from '../../utils/unresolvedActionTypes.ts';
 import { type HumanTaskOutput, type OutputWidget, type ActionOutputConfig, type EventOutputMapping } from '../../types/workflow.ts';
 import { type ValidationProblem } from '../../types/validation.ts';
 import { inputValueText } from '../../utils/mapInputs.ts';
@@ -17,6 +19,8 @@ import { JsonCodeEditor } from '../common/JsonCodeEditor.tsx';
 import './PropertiesPanel.css';
 
 interface PropertiesPanelProps {
+  /** The editor's Action Type catalog. */
+  actionTypeCatalog?: ActionTypeCatalog;
   /** Stable logical node identity plus explicit history/import/selection reset token. */
   draftIdentity?: string;
   selectedNode?: Node<FlowNodeData>;
@@ -84,32 +88,6 @@ function NodeProblems({ problems }: { problems: ValidationProblem[] }) {
       </ul>
     </div>
   );
-}
-
-function useActionTypes(spi?: EditorSpi): { actionTypes: ActionTypeDescriptor[]; loading: boolean } {
-  const provider = spi?.actionTypes;
-  const isAsync = typeof provider === 'function';
-
-  const staticTypes = useMemo(
-    () => (Array.isArray(provider) ? provider : []),
-    [provider],
-  );
-
-  const LOADING_SENTINEL: ActionTypeDescriptor[] = useMemo(() => [], []);
-  const [asyncTypes, setAsyncTypes] = useState<ActionTypeDescriptor[]>(LOADING_SENTINEL);
-
-  useEffect(() => {
-    if (!isAsync) return;
-    let cancelled = false;
-    (provider as () => Promise<ActionTypeDescriptor[]>)().then(
-      (result) => { if (!cancelled) setAsyncTypes(result); },
-      () => { if (!cancelled) setAsyncTypes([]); },
-    );
-    return () => { cancelled = true; };
-  }, [provider, isAsync]);
-
-  if (!isAsync) return { actionTypes: staticTypes, loading: false };
-  return { actionTypes: asyncTypes, loading: asyncTypes === LOADING_SENTINEL };
 }
 
 const OUTPUT_WIDGETS: OutputWidget[] = ['text', 'textarea', 'select'];
@@ -258,12 +236,14 @@ function HumanTaskOutputsEditor({ outputs, onChange }: {
 
 /** Coordinates selected entity editing; child forms own their local presentation and draft state. */
 export function PropertiesPanel(props: PropertiesPanelProps) {
-  const { selectedNode, selectedEdge, draftIdentity, nodeProblems = [], spi, sampleContext, width, onResizeStart,
+  const { selectedNode, selectedEdge, draftIdentity, nodeProblems = [], sampleContext, width, onResizeStart,
     readOnly = false } = props;
   const onNodeChange = readOnly ? ignore : props.onNodeChange;
   const onNodeIdChange = readOnly ? ignore : props.onNodeIdChange;
   const onEdgeChange = readOnly ? ignore : props.onEdgeChange;
-  const { actionTypes, loading: actionTypesLoading } = useActionTypes(spi);
+  const catalog = props.actionTypeCatalog ?? { actionTypes: [], status: 'none' as const };
+  const actionTypes = catalog.actionTypes;
+  const actionTypesLoading = catalog.status === 'loading';
 
   // Wrap every panel state in a common shell that carries the (optionally
   // drag-resized) width and the resize handle, so the panel behaves the same
@@ -462,6 +442,8 @@ export function PropertiesPanel(props: PropertiesPanelProps) {
             onNodeChange={onNodeChange}
             actionTypes={actionTypes}
             actionTypesLoading={actionTypesLoading}
+            catalogStatus={catalog.status}
+            openActionType={props.spi?.openActionType}
           />
         )}
         {selectedNode.data.nodeType === 'receive-event' && (
@@ -774,19 +756,31 @@ function ConditionTester({ condition, sampleContext }: {
   );
 }
 
-function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading, draftIdentity, readOnly = false }: {
+function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading, catalogStatus, draftIdentity, readOnly = false, openActionType }: {
   draftIdentity?: string;
+  openActionType?: (request: { value: string; resolved: boolean }) => void;
   readOnly?: boolean;
   node: Node<FlowNodeData>;
   onNodeChange: (id: string, data: Partial<FlowNodeData>) => void;
   actionTypes: ActionTypeDescriptor[];
   actionTypesLoading: boolean;
+  catalogStatus: CatalogStatus;
 }) {
   if (node.data.nodeType !== 'action') return null;
   const config = node.data.config;
-  const currentActionType = config.actionType || '';
+  const rawActionType: unknown = config.actionType;
+  const currentActionType = typeof rawActionType === 'string' ? rawActionType : '';
   const descriptor = actionTypes.find(at => at.value === currentActionType);
+  const unresolved = isUnresolvedActionType(rawActionType, { actionTypes, status: catalogStatus });
   const hasSpi = actionTypes.length > 0 || actionTypesLoading;
+  const requestOpen = () => {
+    if (!openActionType) return;
+    try {
+      openActionType({ value: currentActionType, resolved: !unresolved });
+    } catch (error) {
+      console.error('openActionType threw', error);
+    }
+  };
 
   const onActionTypeSelected = (value: string) => {
     const selected = actionTypes.find(at => at.value === value);
@@ -816,35 +810,54 @@ function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading,
     <>
       <div className="properties-panel__field">
         <label>Action Type</label>
-        {hasSpi ? (
-          <ActionTypeSelect
-            value={currentActionType}
-            actionTypes={actionTypes}
-            loading={actionTypesLoading}
-            disabled={readOnly}
-            onSelect={(value) => {
-              const match = actionTypes.find(at => at.value === value);
-              if (match) {
-                onActionTypeSelected(value);
-              } else {
-                onNodeChange(node.id, {
-                  config: { ...node.data.config, actionType: value },
-                });
-              }
-            }}
-            onClear={() => onActionTypeSelected('')}
-          />
-        ) : (
-          <input
-            type="text"
-            value={currentActionType}
-            onChange={(e) => onNodeChange(node.id, {
-              config: { ...node.data.config, actionType: e.target.value },
-            })}
-          />
-        )}
+        <div className="properties-panel__action-type-row">
+          {hasSpi ? (
+            <ActionTypeSelect
+              value={currentActionType}
+              actionTypes={actionTypes}
+              loading={actionTypesLoading}
+              disabled={readOnly}
+              onSelect={(value) => {
+                const match = actionTypes.find(at => at.value === value);
+                if (match) {
+                  onActionTypeSelected(value);
+                } else {
+                  onNodeChange(node.id, {
+                    config: { ...node.data.config, actionType: value },
+                  });
+                }
+              }}
+              onClear={() => onActionTypeSelected('')}
+            />
+          ) : (
+            <input
+              type="text"
+              value={currentActionType}
+              onChange={(e) => onNodeChange(node.id, {
+                config: { ...node.data.config, actionType: e.target.value },
+              })}
+            />
+          )}
+          {openActionType && currentActionType.trim() !== '' && (
+            // A role="button" element rather than <button>: the read-only panel wraps everything in a
+            // disabled <fieldset>, which would disable a real button, and this one must work read-only.
+            <span role="button" tabIndex={0} className="properties-panel__open-action-type"
+              onClick={() => requestOpen()}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  requestOpen();
+                }
+              }}>
+              {unresolved ? 'Create…' : 'Open'}
+            </span>
+          )}
+        </div>
         {descriptor?.description && (
           <div className="properties-panel__field-hint">{descriptor.description}</div>
+        )}
+        {unresolved && (
+          <div className="properties-panel__field-hint properties-panel__field-hint--unresolved">Not in the catalog yet</div>
         )}
       </div>
 

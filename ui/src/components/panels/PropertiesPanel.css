@@ -323,3 +323,15 @@
   font-size: 12px;
   color: var(--flow-text-muted, #6a6e73);
 }
+
+.properties-panel__field-hint--unresolved {
+  color: var(--flow-status-info, #2b9af3);
+}
+
+.properties-panel__action-type-row { display: flex; gap: 8px; align-items: flex-start; }
+.properties-panel__action-type-row > :first-child { flex: 1; min-width: 0; }
+.properties-panel__open-action-type { padding: 6px 10px; border: 1px solid var(--flow-border, #d2d2d2);
+  border-radius: 4px; background: var(--flow-bg-primary, #fff); color: var(--flow-text, #151515); cursor: pointer;
+  white-space: nowrap; }
+.properties-panel__open-action-type:focus-visible { outline: 2px solid var(--flow-brand, #06c); outline-offset: 2px; }
+.properties-panel__open-action-type:hover { background: var(--flow-bg-hover, #f0f0f0); }

@@ -26,6 +26,8 @@ import { simNodeClass, activeNodeIds, parallelRole } from '../utils/parallelView
 import { validateWorkflow } from '../validation/validateWorkflow.ts';
 import { analyzeParallelRegions } from '../simulation/parallelRegions.ts';
 import { useHostValidation } from '../hooks/useHostValidation.ts';
+import { useActionTypeCatalog } from '../hooks/useActionTypeCatalog.ts';
+import { unresolvedActionTypeIds } from '../utils/unresolvedActionTypes.ts';
 import {
   buildProposalOverlay, formatCounts, proposalCounts, proposalDetails, splitGhostChanges, validationText, type GhostSizes,
 } from '../changeset/proposalOverlay.ts';
@@ -181,6 +183,7 @@ function WorkflowEditorInner({
   );
 
   const hostProblems = useHostValidation(semanticWorkflow, spi?.validate);
+  const actionTypeCatalog = useActionTypeCatalog(spi?.actionTypes);
 
   const validationProblems = useMemo(
     () => [...builtInProblems, ...hostProblems],
@@ -223,21 +226,27 @@ function WorkflowEditorInner({
     problems: () => problemsRef.current,
   }), [readOnly, rawDispatch]);
 
+  const unresolvedIds = useMemo(() => unresolvedActionTypeIds(semanticWorkflow, actionTypeCatalog),
+    [semanticWorkflow, actionTypeCatalog]);
+
   const nodesWithValidation = useMemo(() => {
-    if (!validationProblems?.length && !parallelAnalysis) return nodes;
+    if (!validationProblems?.length && !parallelAnalysis && !unresolvedIds.size) return nodes;
     return nodes.map(node => {
       const problems = validationProblems.filter(p => p.nodeId === node.id);
       const role = parallelRole(node.id, parallelAnalysis);
-      return (problems.length || role) ? {
+      const unresolved = unresolvedIds.has(node.id)
+        ? String((node.data.config as { actionType?: unknown }).actionType) : undefined;
+      return (problems.length || role || unresolved) ? {
         ...node,
         data: {
           ...node.data,
           validationProblems: problems.length ? problems : undefined,
           parallelRole: role,
+          unresolvedActionType: unresolved,
         },
       } : node;
     });
-  }, [nodes, validationProblems, parallelAnalysis]);
+  }, [nodes, validationProblems, parallelAnalysis, unresolvedIds]);
 
   const selectedNodeProblems = useMemo(
     () => (selectedNodeId ? validationProblems.filter(p => p.nodeId === selectedNodeId) : []),
@@ -820,6 +829,7 @@ function WorkflowEditorInner({
           />
         ) : (
           <PropertiesPanel
+            actionTypeCatalog={actionTypeCatalog}
             draftIdentity={`${selectedNodeId ? state.nodeKeys[selectedNodeId] : ''}:${state.draftReset}`}
             selectedNode={selectedNode}
             selectedEdge={selectedEdge}

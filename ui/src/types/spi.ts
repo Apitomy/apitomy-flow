@@ -18,6 +18,11 @@ export interface ActionTypeDescriptor {
   outputs?: ActionTypeField[];
 }
 
+/**
+ * The Action Type catalog: a static list, or a function resolving to one. Pass a new array or function to
+ * change the catalog; the editor reloads it and keeps the previous list visible until a function provider's
+ * result arrives.
+ */
 export type ActionTypeProvider =
   | ActionTypeDescriptor[]
   | (() => Promise<ActionTypeDescriptor[]>);
@@ -42,6 +47,12 @@ export type WorkflowValidator =
 
 export interface EditorSpi {
   actionTypes?: ActionTypeProvider;
+  /**
+   * Opens the host's Action Type editor. Called from the Properties panel's Open/Create… button, which is
+   * shown only when this is provided. `resolved` is false when the value is not in the loaded catalog,
+   * and is true while the catalog is still loading.
+   */
+  openActionType?: (request: { value: string; resolved: boolean }) => void;
   /** Optional host-provided additional validation (see {@link WorkflowValidator}). */
   validate?: WorkflowValidator;
   /**
