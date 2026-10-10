@@ -47,6 +47,11 @@ export type WorkflowValidator =
 
 export interface EditorSpi {
   actionTypes?: ActionTypeProvider;
+  /**
+   * Opens the host's Action Type editor. Called from the Properties panel's Open/Create… button, which is
+   * shown only when this is provided. `resolved` is false when the value is not in the loaded catalog.
+   */
+  openActionType?: (request: { value: string; resolved: boolean }) => void;
   /** Optional host-provided additional validation (see {@link WorkflowValidator}). */
   validate?: WorkflowValidator;
   /**

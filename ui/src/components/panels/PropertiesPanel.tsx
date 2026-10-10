@@ -442,6 +442,7 @@ export function PropertiesPanel(props: PropertiesPanelProps) {
             actionTypes={actionTypes}
             actionTypesLoading={actionTypesLoading}
             catalogStatus={catalog.status}
+            openActionType={props.spi?.openActionType}
           />
         )}
         {selectedNode.data.nodeType === 'receive-event' && (
@@ -754,8 +755,9 @@ function ConditionTester({ condition, sampleContext }: {
   );
 }
 
-function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading, catalogStatus, draftIdentity, readOnly = false }: {
+function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading, catalogStatus, draftIdentity, readOnly = false, openActionType }: {
   draftIdentity?: string;
+  openActionType?: (request: { value: string; resolved: boolean }) => void;
   readOnly?: boolean;
   node: Node<FlowNodeData>;
   onNodeChange: (id: string, data: Partial<FlowNodeData>) => void;
@@ -769,6 +771,14 @@ function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading,
   const descriptor = actionTypes.find(at => at.value === currentActionType);
   const unresolved = catalogStatus === 'ready' && currentActionType.trim() !== '' && !descriptor;
   const hasSpi = actionTypes.length > 0 || actionTypesLoading;
+  const requestOpen = () => {
+    if (!openActionType) return;
+    try {
+      openActionType({ value: currentActionType, resolved: !unresolved });
+    } catch (error) {
+      console.error('openActionType threw', error);
+    }
+  };
 
   const onActionTypeSelected = (value: string) => {
     const selected = actionTypes.find(at => at.value === value);
@@ -798,6 +808,7 @@ function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading,
     <>
       <div className="properties-panel__field">
         <label>Action Type</label>
+        <div className="properties-panel__action-type-row">
         {hasSpi ? (
           <ActionTypeSelect
             value={currentActionType}
@@ -825,6 +836,21 @@ function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading,
             })}
           />
         )}
+          {openActionType && currentActionType.trim() !== '' && (
+            // A role="button" element rather than <button>: the read-only panel wraps everything in a
+            // disabled <fieldset>, which would disable a real button, and this one must work read-only.
+            <span role="button" tabIndex={0} className="properties-panel__open-action-type"
+              onClick={() => requestOpen()}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  requestOpen();
+                }
+              }}>
+              {unresolved ? 'Create…' : 'Open'}
+            </span>
+          )}
+        </div>
         {descriptor?.description && (
           <div className="properties-panel__field-hint">{descriptor.description}</div>
         )}

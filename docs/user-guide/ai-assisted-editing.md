@@ -230,6 +230,30 @@ const spi: EditorSpi = {
 
 ![Problems row menu](images/context-actions/after-problem-menu.png)
 
+## Live Action Type catalog
+
+The editor loads `spi.actionTypes` once for the whole editor. To change the catalog, for example after an
+agent creates an Action Type, pass a new array or provider function. The editor reloads it without a
+remount, and while a provider function loads it keeps the previous list visible.
+
+```tsx
+const [catalog, setCatalog] = useState<ActionTypeDescriptor[]>(initialCatalog);
+const spi = useMemo<EditorSpi>(() => ({
+  actionTypes: catalog,
+  openActionType: ({ value, resolved }) => (resolved ? openEditor(value) : openCreateDialog(value)),
+}), [catalog]);
+// Later, when Axiom reports a new Action Type:
+setCatalog(previous => [...previous, created]);
+```
+
+- **Unresolved references:** once the catalog has loaded, an action node whose Action Type is not in it shows
+  a "?" marker, and the Properties panel says "Not in the catalog yet". Both disappear as soon as the catalog
+  includes the value. Built-in validation does not report unknown Action Types; use `spi.validate` if you
+  want a problem.
+- **Opening your editor:** when `openActionType` is provided, the Properties panel shows **Open** (or
+  **Create…** for an unresolved value) next to the Action Type field. This also applies in read-only
+  editors. To offer the same from the canvas, add a host item with `contextActions`.
+
 ## Events
 
 - `onChange(workflow, { contentRevision, origin })` — `origin` is `'user'`, `'host'` or `agent:<name>`.
