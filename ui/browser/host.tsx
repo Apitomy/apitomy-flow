@@ -17,7 +17,7 @@ function EditorHost({ id }: { id: string }) {
     const [provider, setProvider] = useState(0);
     const [validationCount, setValidationCount] = useState(0);
     const [catalog, setCatalog] = useState<ActionTypeDescriptor[]>([{ value: 'http', label: 'HTTP' }]);
-    const [openRequests, setOpenRequests] = useState<unknown[]>([]);
+    const [openRequests, setOpenRequests] = useState<Parameters<NonNullable<EditorSpi['openActionType']>>[0][]>([]);
     const [pending] = useState(() => ({
         actions: [] as { generation: number; resolve: (value: ActionTypeDescriptor[]) => void; reject: () => void }[],
         validations: [] as { workflow: Workflow; resolve: (value: ValidationProblem[]) => void; reject: () => void }[],
@@ -53,7 +53,7 @@ function EditorHost({ id }: { id: string }) {
             ...(params.has('catalog') ? {
                 actionTypes: catalog,
                 ...(params.has('noOpen') ? {} : {
-                    openActionType: (request: unknown) => setOpenRequests(previous => [...previous, request]),
+                    openActionType: (request) => setOpenRequests(previous => [...previous, request]),
                 }),
             } : {}),
         } : undefined), [asyncSpi, contextActions, catalog]);

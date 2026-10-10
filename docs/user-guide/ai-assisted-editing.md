@@ -234,7 +234,8 @@ const spi: EditorSpi = {
 
 The editor loads `spi.actionTypes` once for the whole editor. To change the catalog, for example after an
 agent creates an Action Type, pass a new array or provider function. The editor reloads it without a
-remount, and while a provider function loads it keeps the previous list visible.
+remount, and while a provider function loads it keeps the previous list visible. A catalog that loaded empty
+shows a free-form Action Type field and marks every referenced Action Type as unresolved.
 
 ```tsx
 const [catalog, setCatalog] = useState<ActionTypeDescriptor[]>(initialCatalog);

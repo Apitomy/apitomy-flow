@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { unresolvedActionTypeIds } from './unresolvedActionTypes.ts';
+import { isUnresolvedActionType, unresolvedActionTypeIds } from './unresolvedActionTypes.ts';
 import type { Workflow } from '../types/workflow.ts';
 
 const workflow: Workflow = { id: 'w', name: 'W', edges: [], nodes: [
@@ -24,5 +24,26 @@ describe('unresolvedActionTypeIds', () => {
 
     it('flags every referenced type against an empty ready catalog', () => {
         expect(unresolvedActionTypeIds(workflow, { actionTypes: [], status: 'ready' })).toEqual(new Set(['known', 'unknown']));
+    });
+});
+
+describe('isUnresolvedActionType', () => {
+    const ready = { actionTypes: catalog, status: 'ready' as const };
+
+    it('flags a non-blank string missing from a ready catalog', () => {
+        expect(isUnresolvedActionType('slack.notify', ready)).toBe(true);
+        expect(isUnresolvedActionType('http', ready)).toBe(false);
+        expect(isUnresolvedActionType('  ', ready)).toBe(false);
+    });
+
+    it('never flags or throws on non-string values', () => {
+        for (const value of [5, null, undefined, {}, ['x'], true]) {
+            expect(isUnresolvedActionType(value, ready)).toBe(false);
+        }
+    });
+
+    it('flags nothing unless the catalog is ready', () => {
+        expect(isUnresolvedActionType('slack.notify', { actionTypes: [], status: 'loading' })).toBe(false);
+        expect(isUnresolvedActionType('slack.notify', { actionTypes: [], status: 'none' })).toBe(false);
     });
 });

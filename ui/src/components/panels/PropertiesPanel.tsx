@@ -6,6 +6,7 @@ import type { WorkflowInput, ReceiveEventConfig } from '../../types/workflow.ts'
 import { type EditorSpi } from '../../types/spi.ts';
 import { type ActionTypeDescriptor } from '../../types/spi.ts';
 import { type ActionTypeCatalog, type CatalogStatus } from '../../hooks/actionTypeCatalogState.ts';
+import { isUnresolvedActionType } from '../../utils/unresolvedActionTypes.ts';
 import { type HumanTaskOutput, type OutputWidget, type ActionOutputConfig, type EventOutputMapping } from '../../types/workflow.ts';
 import { type ValidationProblem } from '../../types/validation.ts';
 import { inputValueText } from '../../utils/mapInputs.ts';
@@ -767,9 +768,10 @@ function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading,
 }) {
   if (node.data.nodeType !== 'action') return null;
   const config = node.data.config;
-  const currentActionType = config.actionType || '';
+  const rawActionType: unknown = config.actionType;
+  const currentActionType = typeof rawActionType === 'string' ? rawActionType : '';
   const descriptor = actionTypes.find(at => at.value === currentActionType);
-  const unresolved = catalogStatus === 'ready' && currentActionType.trim() !== '' && !descriptor;
+  const unresolved = isUnresolvedActionType(rawActionType, { actionTypes, status: catalogStatus });
   const hasSpi = actionTypes.length > 0 || actionTypesLoading;
   const requestOpen = () => {
     if (!openActionType) return;
@@ -809,33 +811,33 @@ function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading,
       <div className="properties-panel__field">
         <label>Action Type</label>
         <div className="properties-panel__action-type-row">
-        {hasSpi ? (
-          <ActionTypeSelect
-            value={currentActionType}
-            actionTypes={actionTypes}
-            loading={actionTypesLoading}
-            disabled={readOnly}
-            onSelect={(value) => {
-              const match = actionTypes.find(at => at.value === value);
-              if (match) {
-                onActionTypeSelected(value);
-              } else {
-                onNodeChange(node.id, {
-                  config: { ...node.data.config, actionType: value },
-                });
-              }
-            }}
-            onClear={() => onActionTypeSelected('')}
-          />
-        ) : (
-          <input
-            type="text"
-            value={currentActionType}
-            onChange={(e) => onNodeChange(node.id, {
-              config: { ...node.data.config, actionType: e.target.value },
-            })}
-          />
-        )}
+          {hasSpi ? (
+            <ActionTypeSelect
+              value={currentActionType}
+              actionTypes={actionTypes}
+              loading={actionTypesLoading}
+              disabled={readOnly}
+              onSelect={(value) => {
+                const match = actionTypes.find(at => at.value === value);
+                if (match) {
+                  onActionTypeSelected(value);
+                } else {
+                  onNodeChange(node.id, {
+                    config: { ...node.data.config, actionType: value },
+                  });
+                }
+              }}
+              onClear={() => onActionTypeSelected('')}
+            />
+          ) : (
+            <input
+              type="text"
+              value={currentActionType}
+              onChange={(e) => onNodeChange(node.id, {
+                config: { ...node.data.config, actionType: e.target.value },
+              })}
+            />
+          )}
           {openActionType && currentActionType.trim() !== '' && (
             // A role="button" element rather than <button>: the read-only panel wraps everything in a
             // disabled <fieldset>, which would disable a real button, and this one must work read-only.

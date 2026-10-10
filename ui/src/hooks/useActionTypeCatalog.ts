@@ -4,13 +4,14 @@ import { catalogReducer, initialCatalogState, type ActionTypeCatalog } from './a
 
 /**
  * Loads the Action Type catalog for the whole editor. Passing a new provider (array or function) reloads it;
- * a reloading function provider keeps the previous list visible until its result arrives.
+ * a static array is `ready` on the first render, and a reloading function provider keeps the previous list visible until its result arrives.
  *
  * @param provider `spi.actionTypes`
  * @returns the current catalog (a stable object while its contents are unchanged)
  */
 export function useActionTypeCatalog(provider: ActionTypeProvider | undefined): ActionTypeCatalog {
-    const [state, dispatch] = useReducer(catalogReducer, initialCatalogState);
+    const [state, dispatch] = useReducer(catalogReducer, provider,
+        p => catalogReducer(initialCatalogState, { type: 'provider', generation: 0, provider: p }));
     const generation = useRef(0);
     useEffect(() => {
         generation.current += 1;

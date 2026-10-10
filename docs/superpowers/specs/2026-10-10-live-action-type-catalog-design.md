@@ -11,7 +11,8 @@ needs to pick those up without a remount, show references to Action Types that a
 and let the host open its own Action Type editor.
 
 Today the catalog is loaded only inside `PropertiesPanel` (`useActionTypes`) and used for the Action Type
-picker. Swapping the provider already reloads the catalog, but the panel shows a "loading" state in between.
+picker. Swapping the provider already reloads the catalog (keeping the previous list while it loads),
+but only the panel sees it.
 Built-in validation does not check catalog membership.
 
 ## Decisions
