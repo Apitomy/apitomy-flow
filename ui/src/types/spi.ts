@@ -18,6 +18,11 @@ export interface ActionTypeDescriptor {
   outputs?: ActionTypeField[];
 }
 
+/**
+ * The Action Type catalog: a static list, or a function resolving to one. Pass a new array or function to
+ * change the catalog; the editor reloads it and keeps the previous list visible until a function provider's
+ * result arrives.
+ */
 export type ActionTypeProvider =
   | ActionTypeDescriptor[]
   | (() => Promise<ActionTypeDescriptor[]>);

@@ -1,10 +1,11 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState } from 'react';
 import { type Node, type Edge } from '@xyflow/react';
 import { ActionTypeSelect } from './ActionTypeSelect.tsx';
 import { type FlowNodeData } from '../../utils/conversion.ts';
 import type { WorkflowInput, ReceiveEventConfig } from '../../types/workflow.ts';
 import { type EditorSpi } from '../../types/spi.ts';
 import { type ActionTypeDescriptor } from '../../types/spi.ts';
+import { type ActionTypeCatalog } from '../../hooks/actionTypeCatalogState.ts';
 import { type HumanTaskOutput, type OutputWidget, type ActionOutputConfig, type EventOutputMapping } from '../../types/workflow.ts';
 import { type ValidationProblem } from '../../types/validation.ts';
 import { inputValueText } from '../../utils/mapInputs.ts';
@@ -17,6 +18,8 @@ import { JsonCodeEditor } from '../common/JsonCodeEditor.tsx';
 import './PropertiesPanel.css';
 
 interface PropertiesPanelProps {
+  /** The editor's Action Type catalog. */
+  actionTypeCatalog?: ActionTypeCatalog;
   /** Stable logical node identity plus explicit history/import/selection reset token. */
   draftIdentity?: string;
   selectedNode?: Node<FlowNodeData>;
@@ -84,32 +87,6 @@ function NodeProblems({ problems }: { problems: ValidationProblem[] }) {
       </ul>
     </div>
   );
-}
-
-function useActionTypes(spi?: EditorSpi): { actionTypes: ActionTypeDescriptor[]; loading: boolean } {
-  const provider = spi?.actionTypes;
-  const isAsync = typeof provider === 'function';
-
-  const staticTypes = useMemo(
-    () => (Array.isArray(provider) ? provider : []),
-    [provider],
-  );
-
-  const LOADING_SENTINEL: ActionTypeDescriptor[] = useMemo(() => [], []);
-  const [asyncTypes, setAsyncTypes] = useState<ActionTypeDescriptor[]>(LOADING_SENTINEL);
-
-  useEffect(() => {
-    if (!isAsync) return;
-    let cancelled = false;
-    (provider as () => Promise<ActionTypeDescriptor[]>)().then(
-      (result) => { if (!cancelled) setAsyncTypes(result); },
-      () => { if (!cancelled) setAsyncTypes([]); },
-    );
-    return () => { cancelled = true; };
-  }, [provider, isAsync]);
-
-  if (!isAsync) return { actionTypes: staticTypes, loading: false };
-  return { actionTypes: asyncTypes, loading: asyncTypes === LOADING_SENTINEL };
 }
 
 const OUTPUT_WIDGETS: OutputWidget[] = ['text', 'textarea', 'select'];
@@ -258,12 +235,14 @@ function HumanTaskOutputsEditor({ outputs, onChange }: {
 
 /** Coordinates selected entity editing; child forms own their local presentation and draft state. */
 export function PropertiesPanel(props: PropertiesPanelProps) {
-  const { selectedNode, selectedEdge, draftIdentity, nodeProblems = [], spi, sampleContext, width, onResizeStart,
+  const { selectedNode, selectedEdge, draftIdentity, nodeProblems = [], sampleContext, width, onResizeStart,
     readOnly = false } = props;
   const onNodeChange = readOnly ? ignore : props.onNodeChange;
   const onNodeIdChange = readOnly ? ignore : props.onNodeIdChange;
   const onEdgeChange = readOnly ? ignore : props.onEdgeChange;
-  const { actionTypes, loading: actionTypesLoading } = useActionTypes(spi);
+  const catalog = props.actionTypeCatalog ?? { actionTypes: [], status: 'none' as const };
+  const actionTypes = catalog.actionTypes;
+  const actionTypesLoading = catalog.status === 'loading';
 
   // Wrap every panel state in a common shell that carries the (optionally
   // drag-resized) width and the resize handle, so the panel behaves the same

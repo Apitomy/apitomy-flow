@@ -26,6 +26,7 @@ import { simNodeClass, activeNodeIds, parallelRole } from '../utils/parallelView
 import { validateWorkflow } from '../validation/validateWorkflow.ts';
 import { analyzeParallelRegions } from '../simulation/parallelRegions.ts';
 import { useHostValidation } from '../hooks/useHostValidation.ts';
+import { useActionTypeCatalog } from '../hooks/useActionTypeCatalog.ts';
 import {
   buildProposalOverlay, formatCounts, proposalCounts, proposalDetails, splitGhostChanges, validationText, type GhostSizes,
 } from '../changeset/proposalOverlay.ts';
@@ -181,6 +182,7 @@ function WorkflowEditorInner({
   );
 
   const hostProblems = useHostValidation(semanticWorkflow, spi?.validate);
+  const actionTypeCatalog = useActionTypeCatalog(spi?.actionTypes);
 
   const validationProblems = useMemo(
     () => [...builtInProblems, ...hostProblems],
@@ -820,6 +822,7 @@ function WorkflowEditorInner({
           />
         ) : (
           <PropertiesPanel
+            actionTypeCatalog={actionTypeCatalog}
             draftIdentity={`${selectedNodeId ? state.nodeKeys[selectedNodeId] : ''}:${state.draftReset}`}
             selectedNode={selectedNode}
             selectedEdge={selectedEdge}
