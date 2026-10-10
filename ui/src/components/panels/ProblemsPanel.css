@@ -57,3 +57,22 @@
   font-family: monospace;
   color: var(--flow-text-subtle, #6a6e73);
 }
+.problems-panel__menu {
+  margin-left: auto;
+  padding: 0 6px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  font-size: 16px;
+  line-height: 1;
+  color: inherit;
+  cursor: pointer;
+}
+.problems-panel__menu:hover:not(:disabled),
+.problems-panel__menu:focus-visible {
+  background: var(--flow-bg-hover, #f0f0f0);
+}
+.problems-panel__menu:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

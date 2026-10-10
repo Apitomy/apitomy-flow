@@ -100,3 +100,31 @@ test('with nothing to show, no menu opens', async ({ page }) => {
     await editor.locator('.react-flow__pane').click({ button: 'right', position: { x: 30, y: 30 } });
     await expect(menu(editor)).toHaveCount(0);
 });
+
+test('problem rows open host actions by right-click and from their actions button', async ({ page }) => {
+    await page.goto('/?context');
+    const editor = page.getByTestId('one');
+    await ready(editor);
+    const row = editor.locator('.problems-panel__item').filter({ hasText: 'MISSING_START_INPUTS' });
+    await row.click({ button: 'right' });
+    await expect(items(editor)).toHaveText(['Ask AI about problem', 'Not available']);
+    await page.keyboard.press('Escape');
+    await expect(menu(editor)).toHaveCount(0);
+    const button = row.getByRole('button', { name: 'Actions for MISSING_START_INPUTS' });
+    await button.click();
+    await items(editor).filter({ hasText: 'Ask AI about problem' }).click();
+    const [entry] = await log(editor);
+    expect(entry.target).toMatchObject({ kind: 'problem', problem: { code: 'MISSING_START_INPUTS', severity: 'warning' } });
+    await expect(button).toBeFocused();
+});
+
+test('the problem actions button is absent without contextActions and disabled when the host has nothing', async ({ page }) => {
+    await page.goto('/');
+    let editor = page.getByTestId('one');
+    await ready(editor);
+    await expect(editor.locator('.problems-panel__menu')).toHaveCount(0);
+    await page.goto('/?context&contextEmpty');
+    editor = page.getByTestId('one');
+    await ready(editor);
+    await expect(editor.getByRole('button', { name: 'Actions for MISSING_START_INPUTS' })).toBeDisabled();
+});

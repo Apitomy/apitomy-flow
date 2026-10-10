@@ -327,6 +327,27 @@ function WorkflowEditorInner({
     return true;
   }, [simActive, state, validationProblems, readOnly, interactivityEnabled, builtInHandlers, spi]);
 
+  const onProblemMenu = useCallback((problem: ValidationProblem, screenPosition: { x: number; y: number },
+    opener: HTMLElement): boolean => {
+    if (menuOpenRef.current) return true;
+    return openMenu({ kind: 'problem', problem }, screenPosition, opener);
+  }, [openMenu]);
+
+  // Probes the host (silently) to decide whether a row's actions button is enabled; cached per render input.
+  const problemMenuEnabled = useMemo(() => {
+    const contextActions = spi?.contextActions;
+    if (!contextActions) return undefined;
+    const cache = new Map<ValidationProblem, boolean>();
+    return (problem: ValidationProblem): boolean => {
+      if (simActive) return false;
+      if (!cache.has(problem)) {
+        const context = buildFlowContext(state, { kind: 'problem', problem }, validationProblems, readOnly, { x: 0, y: 0 });
+        cache.set(problem, resolveMenuItems([], contextActions, context, () => {}).length > 0);
+      }
+      return cache.get(problem)!;
+    };
+  }, [spi, simActive, state, validationProblems, readOnly]);
+
   const onNodeContextMenu = useCallback((event: React.MouseEvent, node: Node<FlowNodeData>) => {
     if (menuOpenRef.current) { event.preventDefault(); return; }
     const opener = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
@@ -792,7 +813,7 @@ function WorkflowEditorInner({
           />
         )}
       </div>
-      <ProblemsPanel problems={validationProblems} onProblemClick={onProblemClick} />
+      <ProblemsPanel problems={validationProblems} onProblemClick={onProblemClick} onProblemMenu={onProblemMenu} problemMenuEnabled={problemMenuEnabled} />
     </div>
   );
 }

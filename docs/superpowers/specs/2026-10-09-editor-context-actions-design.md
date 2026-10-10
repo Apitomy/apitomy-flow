@@ -104,8 +104,10 @@ Target selection:
 | Multi-selection | Right-click on a selected element | Delete (all selected) |
 | Problems panel row | Right-click; a "⋯" button on the row | None |
 
-The "⋯" button on a Problems panel row is rendered only when `contextActions` is configured. When the host
-returns no items for that row, the button is disabled.
+The "⋯" button on a Problems panel row is rendered only when `contextActions` is configured. To decide
+whether it is enabled, Flow calls `contextActions` with that row's `problem` context, using
+`screenPosition` `{ x: 0, y: 0 }`. Errors during this probe are not logged; they are logged when the menu
+actually opens. The button is disabled when the host returns no items, and during simulation.
 
 **Rules:**
 
@@ -115,7 +117,8 @@ returns no items for that row, the button is disabled.
   host items are still shown.
 - **Nothing to show:** if the merged list is empty, Flow does not open a menu and does not prevent the
   browser's default context menu.
-- **Fresh items:** `contextActions` is called on every opening; Flow does not cache its result.
+- **Fresh items:** `contextActions` is called on every opening; Flow does not cache its result. It may also
+  be called to probe Problems row buttons (see above).
 
 **Errors:**
 
