@@ -158,9 +158,19 @@ if (result.status === 'rejected' && result.error.code === 'stale') askAgentToRet
 - **Applied highlight.** Elements added or modified by the most recently applied change set (via `apply`
   or Accept) stay highlighted until the next user content edit, `clearHighlights()`, or the next applied
   change set. Disable it with `highlightApplied={false}`.
+- **Layout of applied changes.** `appliedChangeLayout` controls how change sets are laid out:
+  - `'place'` (default): only new nodes are positioned, next to their neighbours, and existing nodes never
+    move.
+  - `'tidy'`: whenever a change set adds, removes or re-points nodes or edges, the whole graph is
+    auto-laid-out, like the toolbar's **Tidy up**. The tidied layout is what the proposal preview shows, and
+    Accept or `apply` commits the change and the tidy as one undo step. Renames and config changes never move
+    nodes.
+
+  Layout is not content, so either setting leaves `contentRevision` unchanged. Expose it as a user preference
+  if your users differ in how much they want an agent to rearrange their graph.
 
 ```tsx
-<WorkflowEditor ref={editorRef} workflow={seed} highlightApplied={false} />
+<WorkflowEditor ref={editorRef} workflow={seed} highlightApplied={false} appliedChangeLayout="tidy" />
 ```
 
 A staged proposal that adds a Wait node before End: the new node and edges are dashed ghosts, and the
@@ -286,8 +296,8 @@ const result = readOnlyRef.current!.apply(changeSet);
 ## Limitations
 
 - **Placement of added nodes.** Added nodes without a position are placed next to their neighbours
-  without moving existing nodes. This can produce edges that look like loop-backs; use **Tidy up** to
-  re-layout.
+  without moving existing nodes. This can produce edges that look like loop-backs; use **Tidy up**, or
+  `appliedChangeLayout="tidy"`, to re-layout.
 - **Stale overlays.** A stale proposal's overlay is diffed against the current document, so while it is
   shown greyed out the user's own later edits also appear as changes.
 - **Snapshot problems.** The `problems` in `getSnapshot()` may lag by one render after a handle dispatch

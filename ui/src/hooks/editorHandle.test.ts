@@ -10,7 +10,7 @@ const workflow = (): Workflow => ({ id: 'w', name: 'W', nodes: [
     { id: 'e', type: 'end', name: 'E', config: {}, position: { x: 300, y: 0 } },
 ], edges: [{ id: 'se', source: 's', target: 'e', priority: 0, isDefault: false }] });
 
-function harness(readOnly = false) {
+function harness(readOnly = false, layout: 'place' | 'tidy' = 'place') {
     let state: EditorState = createEditorState(workflow());
     const handle = createEditorHandle({
         state: () => state,
@@ -20,6 +20,7 @@ function harness(readOnly = false) {
         },
         readOnly: () => readOnly,
         problems: () => [],
+        layout: () => layout,
     });
     return { handle, state: () => state };
 }
@@ -89,5 +90,26 @@ describe('createEditorHandle', () => {
         snapshot.workflow.nodes.length = 0;
         expect(state().document.nodes).toHaveLength(2);
         expect(snapshot.selection).toEqual({ nodeIds: [], edgeIds: [] });
+    });
+});
+
+describe('applied change layout', () => {
+    const addEnd = (baseRevision: string): ChangeSet => ({ id: 'add', baseRevision, author: 'agent:t', summary: 'Add',
+        ops: [{ op: 'addNode', node: { id: 'x', type: 'end', name: 'X', config: {} } },
+            { op: 'addEdge', edge: { id: 'sx', source: 's', target: 'x', priority: 0, isDefault: false } }] });
+    const position = (document: { nodes: { id: string; position?: unknown }[] }, id: string) =>
+        document.nodes.find(node => node.id === id)?.position;
+
+    it("previews and applies tidied layouts when the host chooses 'tidy'", () => {
+        const placed = harness(false, 'place');
+        const tidied = harness(false, 'tidy');
+        placed.handle.propose(addEnd(placed.handle.getSnapshot().contentRevision));
+        tidied.handle.propose(addEnd(tidied.handle.getSnapshot().contentRevision));
+        expect(position(tidied.state().proposal!.preview, 's')).not.toEqual(position(placed.state().proposal!.preview, 's'));
+        expect(position(placed.state().proposal!.preview, 's')).toEqual({ x: 0, y: 0 });
+
+        const applied = harness(false, 'tidy');
+        applied.handle.apply(addEnd(applied.handle.getSnapshot().contentRevision));
+        expect(position(applied.state().document, 's')).not.toEqual({ x: 0, y: 0 });
     });
 });

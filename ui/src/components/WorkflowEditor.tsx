@@ -59,6 +59,7 @@ import {
 } from '../simulation/simulate.ts';
 import './theme.css';
 import './WorkflowEditor.css';
+import type { AppliedChangeLayout } from '../changeset/appliedLayout.ts';
 import type { ChangeMeta, ProposalOutcome } from '../changeset/types.ts';
 
 export type FlowTheme = 'light' | 'dark';
@@ -128,11 +129,19 @@ export interface WorkflowEditorProps {
   onSelectionChange?: (selection: EditorSelection) => void;
   /** Keep elements changed by the last applied change set highlighted. Defaults to true. */
   highlightApplied?: boolean;
+  /**
+   * How change sets from `propose`/`apply` are laid out. `'place'` (default) positions only new nodes, next to
+   * their neighbours, and never moves existing ones. `'tidy'` auto-lays-out the whole graph whenever a change
+   * set adds, removes or re-points nodes or edges; the tidy is shown in the proposal preview and is part of the
+   * same undo step. Hosts can expose this as a user preference.
+   */
+  appliedChangeLayout?: AppliedChangeLayout;
 }
 
 function WorkflowEditorInner({
   workflow, onChange, readOnly = false, onValidationChange, theme = 'light', spi, ref, onProposalResolved, onSelectionChange,
   highlightApplied = true,
+  appliedChangeLayout = 'place',
 }: WorkflowEditorProps) {
   const { state, dispatch: rawDispatch } = useEditorState(workflow, readOnly ? ignoreChange : onChange ?? ignoreChange,
     { onProposalResolved, onSelectionChange });
@@ -224,7 +233,8 @@ function WorkflowEditorInner({
     },
     readOnly: () => readOnly,
     problems: () => problemsRef.current,
-  }), [readOnly, rawDispatch]);
+    layout: () => appliedChangeLayout,
+  }), [readOnly, rawDispatch, appliedChangeLayout]);
 
   const unresolvedIds = useMemo(() => unresolvedActionTypeIds(semanticWorkflow, actionTypeCatalog),
     [semanticWorkflow, actionTypeCatalog]);
