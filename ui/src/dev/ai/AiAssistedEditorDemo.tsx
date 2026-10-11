@@ -38,6 +38,7 @@ export function AiAssistedEditorDemo({ theme }: AiAssistedEditorDemoProps) {
   const [session, setSession] = useState(0);
   const [mode, setMode] = useState<Mode>('suggest');
   const [slow, setSlow] = useState(false);
+  const [tidy, setTidy] = useState(true);
   const [catalog, setCatalog] = useState<ActionTypeDescriptor[]>(demoCatalog);
   const [chat, setChat] = useState<ChatEntry[]>([{ id: 0, role: 'assistant', text:
     'Hi! Right-click a step, the canvas or a problem to ask me for help, or pick a quick prompt below. ' +
@@ -136,6 +137,7 @@ export function AiAssistedEditorDemo({ theme }: AiAssistedEditorDemoProps) {
     <div className="ai-demo">
       <div className="ai-demo__editor">
         <WorkflowEditor key={session} ref={editorRef} workflow={demoWorkflow} theme={theme} spi={spi} onChange={onChange}
+          appliedChangeLayout={tidy ? 'tidy' : 'place'}
           onProposalResolved={(id, outcome) => say('event', `Proposal ${id} ${outcome}.`)} />
       </div>
       <aside className="ai-demo__assistant" aria-label="AI assistant">
@@ -145,6 +147,7 @@ export function AiAssistedEditorDemo({ theme }: AiAssistedEditorDemoProps) {
             <ToggleGroupItem text="Suggest" buttonId="ai-mode-suggest" isSelected={mode === 'suggest'} onChange={() => setMode('suggest')} />
             <ToggleGroupItem text="Do it" buttonId="ai-mode-apply" isSelected={mode === 'apply'} onChange={() => setMode('apply')} />
           </ToggleGroup>
+          <Switch id="ai-tidy" label="Tidy after AI changes" isChecked={tidy} onChange={(_, checked) => setTidy(checked)} />
           <Switch id="ai-slow" label="Simulate slow agent (3s)" isChecked={slow} onChange={(_, checked) => setSlow(checked)} />
         </header>
         <ol ref={chatRef} className="ai-demo__chat" aria-live="polite">

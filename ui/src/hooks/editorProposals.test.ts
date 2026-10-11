@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createEditorState, editorReducer, type EditorState } from './editorState.ts';
 import { applyChangeSetChecked } from '../changeset/applyChangeSet.ts';
+import { layoutAppliedChange } from '../changeset/appliedLayout.ts';
 import type { ChangeSet } from '../changeset/types.ts';
 import type { Workflow } from '../types/workflow.ts';
 
@@ -144,5 +145,41 @@ describe('proposals', () => {
         const applied = editorReducer(staged, { type: 'applyChangeSet', changeSet: other });
         expect(applied.proposal?.stale).toBe(true);
         expect(outcomes(applied)).toEqual(['cs-1:stale']);
+    });
+});
+
+describe('applied change layout', () => {
+    const positions = (state: EditorState) => Object.fromEntries(state.document.nodes.map(node => [node.id, node.position]));
+
+    it('accepting commits exactly the previewed layout, content and tidy in one undo step', () => {
+        const initial = createEditorState(workflow());
+        const changeSet = addWait(initial);
+        const checked = applyChangeSetChecked(initial.document, changeSet, initial.contentRevision);
+        if (!checked.ok) throw new Error(checked.error.reason);
+        const preview = layoutAppliedChange(checked.workflow, changeSet, 'tidy');
+        const staged = editorReducer(initial, { type: 'propose', changeSet, preview });
+        const accepted = editorReducer(staged, { type: 'acceptProposal' });
+        expect(positions(accepted)).toEqual(Object.fromEntries(preview.nodes.map(node => [node.id, node.position])));
+        expect(accepted.past).toHaveLength(initial.past.length + 1);
+        const undone = editorReducer(accepted, { type: 'undo' });
+        expect(positions(undone)).toEqual(positions(initial));
+    });
+
+    it("apply with layout 'tidy' re-lays out structural changes as one undo step", () => {
+        const initial = createEditorState(workflow());
+        const placed = editorReducer(initial, { type: 'applyChangeSet', changeSet: addWait(initial) });
+        const tidied = editorReducer(initial, { type: 'applyChangeSet', changeSet: addWait(initial), layout: 'tidy' });
+        expect(positions(tidied)).not.toEqual(positions(placed));
+        expect(positions(tidied).s).not.toEqual(positions(initial).s);
+        expect(tidied.contentRevision).toBe(placed.contentRevision);
+        expect(tidied.past).toHaveLength(initial.past.length + 1);
+    });
+
+    it("apply with layout 'tidy' leaves the layout alone for a rename", () => {
+        const initial = createEditorState(workflow());
+        const rename: ChangeSet = { id: 'r', baseRevision: initial.contentRevision, author: 'agent:test', summary: 'r',
+            ops: [{ op: 'updateNode', id: 'a', patch: { name: 'Renamed' } }] };
+        expect(positions(editorReducer(initial, { type: 'applyChangeSet', changeSet: rename, layout: 'tidy' })))
+            .toEqual(positions(initial));
     });
 });

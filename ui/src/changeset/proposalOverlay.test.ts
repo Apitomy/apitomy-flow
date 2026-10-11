@@ -104,3 +104,13 @@ describe('splitGhostChanges', () => {
         expect(result.rest).toEqual([changes[1], changes[2], changes[3]]);
     });
 });
+
+describe('proposal preview positions', () => {
+    it('draws existing nodes where the preview puts them (for example after a tidy)', () => {
+        const moved: StagedProposal = { ...proposal(), preview: { ...preview, nodes: preview.nodes.map(node =>
+            node.id === 's' ? { ...node, position: { x: 999, y: 7 } } : node) } };
+        const overlay = buildProposalOverlay(rfNodes(), rfEdges(), current, moved, null);
+        expect(overlay.nodes.find(node => node.id === 's')?.position).toEqual({ x: 999, y: 7 });
+        expect(overlay.nodes.find(node => node.id === 'x')?.position).toEqual({ x: 400, y: 0 });
+    });
+});

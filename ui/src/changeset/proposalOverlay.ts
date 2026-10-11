@@ -58,12 +58,18 @@ export function buildProposalOverlay(nodes: Node<FlowNodeData>[], edges: Edge[],
     const stale = proposal.stale ? ' flow-proposal--stale' : '';
     const marker = (kind: ChangeKind | undefined) =>
         kind === 'modified' || kind === 'removed' ? `flow-proposal flow-proposal--${kind}${stale}` : undefined;
+    const previewPositions = new Map(proposal.preview.nodes.flatMap(node => (node.position ? [[node.id, node.position] as const] : [])));
     const ghost = { draggable: false, deletable: false, connectable: false, selectable: false, focusable: false };
     return {
         nodes: [
             ...nodes.map(node => {
                 const cls = marker(status.nodes[node.id]);
-                return cls ? { ...node, className: withClass(node.className, cls) } : node;
+                // Draw kept nodes where the preview puts them, so a tidied proposal previews its final layout.
+                const target = previewPositions.get(node.id);
+                const moved = target && (target.x !== node.position.x || target.y !== node.position.y);
+                if (!cls && !moved) return node;
+                return { ...node, ...(cls ? { className: withClass(node.className, cls) } : {}),
+                    ...(moved ? { position: { ...target } } : {}) };
             }),
             ...toReactFlowNodes(proposal.preview.nodes.filter(node => status.nodes[node.id] === 'added'))
                 .map(node => ({ ...node, ...ghost, className: `flow-proposal flow-proposal--added${stale}` })),

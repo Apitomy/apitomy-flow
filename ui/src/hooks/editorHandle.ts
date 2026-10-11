@@ -1,4 +1,5 @@
 import { applyChangeSetChecked } from '../changeset/applyChangeSet.ts';
+import { layoutAppliedChange, type AppliedChangeLayout } from '../changeset/appliedLayout.ts';
 import type { ChangeSet, ChangeSetError, Origin } from '../changeset/types.ts';
 import type { ValidationProblem } from '../types/validation.ts';
 import type { Workflow } from '../types/workflow.ts';
@@ -47,6 +48,8 @@ export interface HandleAccess {
     dispatch(command: EditorCommand): void;
     readOnly(): boolean;
     problems(): ValidationProblem[];
+    /** Layout policy for change sets; defaults to `'place'`. */
+    layout?(): AppliedChangeLayout;
 }
 
 type CheckedChangeSet =
@@ -83,7 +86,8 @@ export function createEditorHandle(access: HandleAccess): WorkflowEditorHandle {
         propose(changeSet) {
             const checked = cloneAndCheck(access.state(), changeSet);
             if (!checked.ok) return { status: 'rejected', error: checked.error };
-            access.dispatch({ type: 'propose', changeSet: checked.changeSet, preview: checked.workflow });
+            access.dispatch({ type: 'propose', changeSet: checked.changeSet,
+                preview: layoutAppliedChange(checked.workflow, checked.changeSet, access.layout?.() ?? 'place') });
             return { status: 'staged' };
         },
         apply(changeSet) {
@@ -92,7 +96,7 @@ export function createEditorHandle(access: HandleAccess): WorkflowEditorHandle {
             }
             const checked = cloneAndCheck(access.state(), changeSet);
             if (!checked.ok) return { status: 'rejected', error: checked.error };
-            access.dispatch({ type: 'applyChangeSet', changeSet: checked.changeSet });
+            access.dispatch({ type: 'applyChangeSet', changeSet: checked.changeSet, layout: access.layout?.() ?? 'place' });
             return { status: 'applied' };
         },
         withdraw(id) {

@@ -46,6 +46,7 @@ export type {
     ChangeSet, ChangeOp, ChangeSetError, ChangeSetErrorCode, ChangeSetResult, ProposalOutcome,
 } from './changeset/types.ts';
 export { applyChangeSet, applyChangeSetChecked } from './changeset/applyChangeSet.ts';
+export type { AppliedChangeLayout } from './changeset/appliedLayout.ts';
 export type {
     WorkflowEditorHandle, EditorSnapshot, ProposeResult, ApplyResult,
 } from './hooks/editorHandle.ts';

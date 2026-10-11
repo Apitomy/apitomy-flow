@@ -5,6 +5,7 @@ import { layoutForImport, layoutWorkflow } from '../layout/layoutWorkflow.ts';
 import { jsonEqual } from '../utils/jsonEqual.ts';
 import { computeContentRevision } from '../changeset/contentRevision.ts';
 import { applyChangeSetChecked } from '../changeset/applyChangeSet.ts';
+import { layoutAppliedChange, type AppliedChangeLayout } from '../changeset/appliedLayout.ts';
 import { changeStatus, highlightOf } from '../changeset/changeStatus.ts';
 import type { ChangeSet, Highlight, Origin, ProposalEvent, ProposalOutcome, StagedProposal } from '../changeset/types.ts';
 
@@ -50,7 +51,7 @@ export interface EditorState extends Omit<Snapshot, 'selectedNodeIds' | 'selecte
 export type EditorCommand =
     | { type: 'propose'; changeSet: ChangeSet; preview: Workflow }
     | { type: 'withdraw'; id: string }
-    | { type: 'applyChangeSet'; changeSet: ChangeSet }
+    | { type: 'applyChangeSet'; changeSet: ChangeSet; layout?: AppliedChangeLayout }
     | { type: 'acceptProposal' }
     | { type: 'rejectProposal' }
     | { type: 'clearHighlights' }
@@ -293,10 +294,15 @@ function markStale(state: EditorState): EditorState {
     return { ...emit(state, proposal.changeSet.id, 'stale'), proposal: { ...proposal, stale: true } };
 }
 
-function applyChangeSetCommand(state: EditorState, changeSet: ChangeSet): EditorState {
+/**
+ * Commits a change set as one undo step. `staged` is the proposal preview to commit as-is (so the accepted
+ * layout is exactly the reviewed one); otherwise the change set is applied and laid out per `layout`.
+ */
+function applyChangeSetCommand(state: EditorState, changeSet: ChangeSet, layout: AppliedChangeLayout = 'place',
+    staged?: Workflow): EditorState {
     const result = applyChangeSetChecked(state.document, changeSet, state.contentRevision);
     if (!result.ok) return state;
-    const committed = commit(state, result.workflow);
+    const committed = commit(state, staged ?? layoutAppliedChange(result.workflow, changeSet, layout));
     let next: EditorState = { ...committed, origin: changeSet.author, group: undefined,
         highlight: highlightOf(changeStatus(state.document, committed.document)) };
     if (state.proposal?.changeSet.id === changeSet.id) {
@@ -327,9 +333,10 @@ export function editorReducer(state: EditorState, command: EditorCommand): Edito
             return { ...(proposal.stale ? state : emit(state, proposal.changeSet.id, 'rejected')), proposal: null };
         }
         case 'acceptProposal':
-            return state.proposal && !state.proposal.stale ? applyChangeSetCommand(state, state.proposal.changeSet) : state;
+            return state.proposal && !state.proposal.stale
+                ? applyChangeSetCommand(state, state.proposal.changeSet, 'place', state.proposal.preview) : state;
         case 'applyChangeSet':
-            return applyChangeSetCommand(state, command.changeSet);
+            return applyChangeSetCommand(state, command.changeSet, command.layout);
         case 'clearHighlights':
             return state.highlight ? { ...state, highlight: null } : state;
     }
