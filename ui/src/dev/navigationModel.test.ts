@@ -12,11 +12,12 @@ describe('demo navigation model', () => {
       { key: 'editor', label: 'Editor Demo' },
       { key: 'viewer', label: 'Viewer Demo' },
       { key: 'diff', label: 'Diff viewer' },
+      { key: 'ai', label: 'AI Assisted Editor' },
     ]);
   });
 
   it('contains only valid nav keys', () => {
-    const validKeys = new Set<DemoNavKey>(['editor', 'viewer', 'diff']);
+    const validKeys = new Set<DemoNavKey>(['editor', 'viewer', 'diff', 'ai']);
     for (const item of demoNavItems) {
       expect(validKeys.has(item.key)).toBe(true);
     }

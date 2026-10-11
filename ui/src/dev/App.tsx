@@ -7,6 +7,7 @@ import {
   MastheadBrand,
   MastheadContent,
   MastheadMain,
+  MastheadToggle,
   Nav,
   NavItem,
   NavList,
@@ -14,6 +15,7 @@ import {
   PageSection,
   PageSidebar,
   PageSidebarBody,
+  PageToggleButton,
   Switch,
   Toolbar,
   ToolbarContent,
@@ -22,7 +24,7 @@ import {
 } from '@patternfly/react-core';
 import '@patternfly/patternfly/patternfly.css';
 import '@xyflow/react/dist/style.css';
-import { FileAltIcon, SearchIcon, ExternalLinkAltIcon } from '@patternfly/react-icons';
+import { BarsIcon, FileAltIcon, SearchIcon, ExternalLinkAltIcon } from '@patternfly/react-icons';
 import { WorkflowEditor } from '../components/WorkflowEditor.tsx';
 import { WorkflowDiffViewer } from '../components/WorkflowDiffViewer.tsx';
 import { WorkflowViewer, type WorkflowViewerNodeMenuItem } from '../components/WorkflowViewer.tsx';
@@ -38,134 +40,14 @@ import { getContentSectionConfig } from './layoutModel.ts';
 import { syncPatternFlyRootTheme } from './themeRootClass.ts';
 import { type Workflow } from '../types/workflow.ts';
 import { type FlowTheme } from '../components/WorkflowEditor.tsx';
-import { type ActionTypeDescriptor, type EditorSpi } from '../types/spi.ts';
-import { type ValidationProblem } from '../types/validation.ts';
+import { type EditorSpi } from '../types/spi.ts';
+import { demoCatalog, createHostValidator } from './demoCatalog.ts';
+import { AiAssistedEditorDemo } from './ai/AiAssistedEditorDemo.tsx';
 import './App.css';
 
-// Demo host catalog. 'plan-mitigation' is deliberately missing so the CVE Triage scenarios show an
-// unresolved Action Type.
-const catalog: ActionTypeDescriptor[] = [
-  {
-    value: 'send-email',
-    label: 'Send Email',
-    description: 'Send an email notification via the configured SMTP gateway',
-    inputs: [
-      { name: 'to', type: 'string', required: true, description: 'Recipient email address' },
-      { name: 'subject', type: 'string', required: true },
-      { name: 'body', type: 'string', required: true },
-      { name: 'cc', type: 'string', required: false },
-    ],
-    outputs: [
-      { name: 'messageId', type: 'string', required: true },
-      { name: 'timestamp', type: 'string', required: true },
-    ],
-  },
-  {
-    value: 'http-request',
-    label: 'HTTP Request',
-    description: 'Make an outbound HTTP request to an external service',
-    inputs: [
-      { name: 'url', type: 'string', required: true },
-      { name: 'method', type: 'string', required: true, description: 'GET, POST, PUT, DELETE' },
-      { name: 'headers', type: 'object', required: false },
-      { name: 'body', type: 'object', required: false },
-    ],
-    outputs: [
-      { name: 'statusCode', type: 'number', required: true },
-      { name: 'responseBody', type: 'object', required: true },
-      { name: 'responseHeaders', type: 'object', required: true },
-    ],
-  },
-  {
-    value: 'lookup-cve',
-    label: 'Lookup CVE',
-    description: 'Query the NVD database for CVE details and severity scores',
-    inputs: [
-      { name: 'cveId', type: 'string', required: true, description: 'CVE identifier (e.g. CVE-2024-1234)' },
-    ],
-    outputs: [
-      { name: 'severity', type: 'string', required: true },
-      { name: 'cvssScore', type: 'number', required: true },
-      { name: 'description', type: 'string', required: true },
-      { name: 'affectedProducts', type: 'object', required: true },
-    ],
-  },
-  {
-    value: 'create-jira-ticket',
-    label: 'Create Jira Ticket',
-    description: 'Create a new issue in the configured Jira project',
-    inputs: [
-      { name: 'project', type: 'string', required: true },
-      { name: 'issueType', type: 'string', required: true },
-      { name: 'summary', type: 'string', required: true },
-      { name: 'description', type: 'string', required: false },
-      { name: 'priority', type: 'string', required: false },
-    ],
-    outputs: [
-      { name: 'issueKey', type: 'string', required: true },
-      { name: 'issueUrl', type: 'string', required: true },
-    ],
-  },
-  {
-    value: 'analyze-cve',
-    label: 'Analyze CVE',
-    description: 'Analyze a CVE to determine its severity and affected versions',
-    inputs: [
-      { name: 'CVE ID', type: 'string', required: true, description: 'CVE identifier (e.g. CVE-2024-1234)' },
-    ],
-    outputs: [
-      { name: 'severity', type: 'string', required: true },
-      { name: 'affectedVersions', type: 'string', required: false },
-    ],
-  },
-  {
-    value: 'close-tracker',
-    label: 'Close Tracker',
-    description: 'Close the vulnerability tracking issue with the triage notes',
-    inputs: [
-      { name: 'CVE ID', type: 'string', required: true },
-      { name: 'Triage Notes', type: 'string', required: false },
-    ],
-    outputs: [
-      { name: 'closedAt', type: 'string', required: true },
-    ],
-  },
-];
-
 const spi: EditorSpi = {
-  actionTypes: catalog,
-  validate: async (wf): Promise<ValidationProblem[]> => {
-    const problems: ValidationProblem[] = [];
-    const known = new Set(catalog.map(descriptor => descriptor.value));
-
-    // Synchronous host rule: action type must be in the host's catalog.
-    for (const node of wf.nodes) {
-      if (node.type === 'action') {
-        const actionType = node.config.actionType;
-        if (typeof actionType === 'string' && actionType.trim() !== '' && !known.has(actionType)) {
-          problems.push({
-            severity: 'error',
-            code: 'HOST_UNKNOWN_ACTION_TYPE',
-            message: `Action type "${actionType}" is not in the host catalog`,
-            nodeId: node.id,
-          });
-        }
-      }
-    }
-
-    // Simulated backend latency to demonstrate the debounced/async path.
-    await new Promise((resolve) => setTimeout(resolve, 400));
-
-    if (wf.name && wf.name.length > 40) {
-      problems.push({
-        severity: 'warning',
-        code: 'HOST_NAME_TOO_LONG',
-        message: 'Workflow name exceeds the host limit of 40 characters',
-      });
-    }
-
-    return problems;
-  },
+  actionTypes: demoCatalog,
+  validate: createHostValidator(demoCatalog),
 };
 
 function App() {
@@ -178,6 +60,7 @@ function App() {
   const [editorWorkflow, setEditorWorkflow] = useState<Workflow>(defaultScenario.workflow);
   const [theme, setTheme] = useState<FlowTheme>('light');
   const [editorReadOnly, setEditorReadOnly] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   useEffect(() => {
     syncPatternFlyRootTheme(theme);
@@ -251,13 +134,15 @@ function App() {
   }
 
   function onNavSelect(_event: React.FormEvent<HTMLInputElement>, result: { itemId: number | string }): void {
-    if (result.itemId === 'editor' || result.itemId === 'viewer' || result.itemId === 'diff') {
-      setActiveView(result.itemId);
+    if (demoNavItems.some((item) => item.key === result.itemId)) {
+      setActiveView(result.itemId as DemoNavKey);
+      // The AI assistant needs the width; the masthead toggle brings the navigation back.
+      if (result.itemId === 'ai') setSidebarOpen(false);
     }
   }
 
   const sidebar = (
-    <PageSidebar isSidebarOpen>
+    <PageSidebar isSidebarOpen={sidebarOpen}>
       <PageSidebarBody>
         <Nav onSelect={onNavSelect} aria-label="Demo navigation">
           <NavList>
@@ -282,6 +167,12 @@ function App() {
   const masthead = (
     <Masthead>
       <MastheadMain>
+        <MastheadToggle>
+          <PageToggleButton isHamburgerButton isSidebarOpen={sidebarOpen}
+            onSidebarToggle={() => setSidebarOpen((open) => !open)} aria-label="Toggle demo navigation">
+            <BarsIcon />
+          </PageToggleButton>
+        </MastheadToggle>
         <MastheadBrand>
           Apitomy Flow Demo
           <a
@@ -323,7 +214,7 @@ function App() {
       masthead={masthead}
       sidebar={sidebar}
     >
-      <PageSection className="dev-app__toolbar-section">
+      {activeView !== 'ai' && <PageSection className="dev-app__toolbar-section">
         <Toolbar className="dev-app__toolbar" inset={{ default: 'insetMd' }}>
           <ToolbarContent>
             <ToolbarGroup>
@@ -355,7 +246,7 @@ function App() {
             </ToolbarGroup>
           </ToolbarContent>
         </Toolbar>
-      </PageSection>
+      </PageSection>}
       <PageSection
         isFilled={contentSectionConfig.isFilled}
         hasBodyWrapper={contentSectionConfig.hasBodyWrapper}
@@ -380,6 +271,7 @@ function App() {
             nodeContextMenuItems={nodeContextMenuItems}
           />
         )}
+        {activeView === 'ai' && <AiAssistedEditorDemo theme={theme} />}
         {activeView === 'diff' && (
           <WorkflowDiffViewer
             baseWorkflow={selectedDiffScenario.baseWorkflow}
