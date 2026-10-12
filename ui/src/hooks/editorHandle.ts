@@ -22,9 +22,9 @@ export type ApplyResult = { status: 'applied' } | { status: 'rejected'; error: C
 
 /** Imperative API exposed through the `ref` prop of `WorkflowEditor`. No method throws. */
 export interface WorkflowEditorHandle {
-    /** Stages a change set for review, replacing (and withdrawing) any staged proposal. */
+    /** Stages a change set for review, replacing (and withdrawing) any staged proposal. Exits simulation first. */
     propose(changeSet: ChangeSet): ProposeResult;
-    /** Applies a change set immediately as one undoable step tagged with its author. */
+    /** Applies a change set immediately as one undoable step tagged with its author. Exits simulation first. */
     apply(changeSet: ChangeSet): ApplyResult;
     /** Removes the staged proposal if its id matches. */
     withdraw(id: string): void;

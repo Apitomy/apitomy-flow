@@ -294,6 +294,11 @@ function markStale(state: EditorState): EditorState {
     return { ...emit(state, proposal.changeSet.id, 'stale'), proposal: { ...proposal, stale: true } };
 }
 
+/** Exits simulation mode, if active, so the next change applies to an editable document. */
+function leaveSimulation(state: EditorState): EditorState {
+    return state.simulating ? reduceCommand(state, { type: 'mode', simulating: false }) : state;
+}
+
 /**
  * Commits a change set as one undo step. `staged` is the proposal preview to commit as-is (so the accepted
  * layout is exactly the reviewed one); otherwise the change set is applied and laid out per `layout`.
@@ -302,6 +307,8 @@ function applyChangeSetCommand(state: EditorState, changeSet: ChangeSet, layout:
     staged?: Workflow): EditorState {
     const result = applyChangeSetChecked(state.document, changeSet, state.contentRevision);
     if (!result.ok) return state;
+    // Change sets never land under a running simulation: leave it first, like `replace` (#192).
+    state = leaveSimulation(state);
     const committed = commit(state, staged ?? layoutAppliedChange(result.workflow, changeSet, layout));
     let next: EditorState = { ...committed, origin: changeSet.author, group: undefined,
         highlight: highlightOf(changeStatus(state.document, committed.document)) };
@@ -318,8 +325,9 @@ export function editorReducer(state: EditorState, command: EditorCommand): Edito
     switch (command.type) {
         case 'propose': {
             if (command.changeSet.baseRevision !== state.contentRevision) return state;
-            const next = state.proposal && !state.proposal.stale
-                ? emit(state, state.proposal.changeSet.id, 'withdrawn') : state;
+            const current = leaveSimulation(state);
+            const next = current.proposal && !current.proposal.stale
+                ? emit(current, current.proposal.changeSet.id, 'withdrawn') : current;
             return { ...next, proposal: { changeSet: command.changeSet, preview: command.preview, stale: false } };
         }
         case 'withdraw': {
