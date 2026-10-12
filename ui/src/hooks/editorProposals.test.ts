@@ -183,3 +183,37 @@ describe('applied change layout', () => {
             .toEqual(positions(initial));
     });
 });
+
+describe('change sets while simulating (#192)', () => {
+    const simulating = () => editorReducer(createEditorState(workflow()), { type: 'mode', simulating: true });
+
+    it('apply exits simulation, then applies the change set', () => {
+        const state = simulating();
+        const applied = editorReducer(state, { type: 'applyChangeSet', changeSet: addWait(state) });
+        expect(applied.simulating).toBe(false);
+        expect(applied.document.nodes.map(node => node.id)).toContain('w');
+        expect(applied.past).toHaveLength(state.past.length + 1);
+    });
+
+    it('propose exits simulation, then stages the proposal', () => {
+        const staged = propose(simulating(), addWait(simulating()));
+        expect(staged.simulating).toBe(false);
+        expect(staged.proposal?.stale).toBe(false);
+    });
+
+    it('accepting a staged proposal while simulating exits simulation first', () => {
+        const initial = createEditorState(workflow());
+        const staged = editorReducer(propose(initial, addWait(initial)), { type: 'mode', simulating: true });
+        const accepted = editorReducer(staged, { type: 'acceptProposal' });
+        expect(accepted.simulating).toBe(false);
+        expect(accepted.document.nodes.map(node => node.id)).toContain('w');
+        expect(outcomes(accepted)).toEqual(['cs-1:accepted']);
+    });
+
+    it('keeps simulating when the change set is stale', () => {
+        const state = simulating();
+        const stale = { ...addWait(state), baseRevision: 'sha256:old' };
+        expect(editorReducer(state, { type: 'applyChangeSet', changeSet: stale })).toBe(state);
+        expect(editorReducer(state, { type: 'propose', changeSet: stale, preview: state.document })).toBe(state);
+    });
+});

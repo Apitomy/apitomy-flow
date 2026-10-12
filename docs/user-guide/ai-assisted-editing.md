@@ -126,15 +126,19 @@ Inputs must be structured-cloneable plain JSON data; a change set that cannot be
 
 | Method | Result |
 | --- | --- |
-| `propose(cs)` | `{ status: 'staged' }` or `{ status: 'rejected', error }`. On a read-only editor it returns `'staged'` but shows no review bar. |
-| `apply(cs)` | `{ status: 'applied' }` or `{ status: 'rejected', error }` |
+| `propose(cs)` | `{ status: 'staged' }` or `{ status: 'rejected', error }`. Exits simulation first. On a read-only editor it returns `'staged'` but shows no review bar. |
+| `apply(cs)` | `{ status: 'applied' }` or `{ status: 'rejected', error }`. Exits simulation first. |
 | `withdraw(id)` | Removes the staged proposal if its id matches. |
-| `replace(workflow, origin?)` | Replaces the whole document as one undo step. `origin` defaults to `'host'`. |
+| `replace(workflow, origin?)` | Replaces the whole document as one undo step. Exits simulation first. `origin` defaults to `'host'`. |
 | `clearHighlights()` | Removes the applied-change highlight. |
 | `getSnapshot()` | `{ workflow, contentRevision, selection, problems }` (a detached copy). |
 
 `apply` produces exactly one undo step tagged with `origin = cs.author`. The `workflow` prop remains
 seed-only; use `replace` to push a new document from the host.
+
+A change never lands under a running simulation. If the user is simulating when `propose`, `apply` or
+`replace` is called (or when they **Accept** a staged proposal), the editor leaves simulation first and the
+run is discarded. A rejected change set (for example a `stale` one) leaves the simulation running.
 
 ```ts
 const handle = editorRef.current!;

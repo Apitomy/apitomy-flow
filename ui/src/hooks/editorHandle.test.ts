@@ -22,7 +22,7 @@ function harness(readOnly = false, layout: 'place' | 'tidy' = 'place') {
         problems: () => [],
         layout: () => layout,
     });
-    return { handle, state: () => state };
+    return { handle, state: () => state, dispatch: (command: EditorCommand) => { state = editorReducer(state, command); } };
 }
 
 const rename = (baseRevision: string, id = 'cs'): ChangeSet =>
@@ -111,5 +111,22 @@ describe('applied change layout', () => {
         const applied = harness(false, 'tidy');
         applied.handle.apply(addEnd(applied.handle.getSnapshot().contentRevision));
         expect(position(applied.state().document, 's')).not.toEqual({ x: 0, y: 0 });
+    });
+});
+
+describe('handle while simulating (#192)', () => {
+    it.each(['apply', 'propose'] as const)('%s leaves simulation mode before changing the document', method => {
+        const { handle, state, dispatch } = harness();
+        dispatch({ type: 'mode', simulating: true });
+        expect(state().simulating).toBe(true);
+        expect(handle[method](rename(handle.getSnapshot().contentRevision)).status).not.toBe('rejected');
+        expect(state().simulating).toBe(false);
+    });
+
+    it('keeps simulating when the change set is rejected', () => {
+        const { handle, state, dispatch } = harness();
+        dispatch({ type: 'mode', simulating: true });
+        expect(handle.apply(rename('sha256:old')).status).toBe('rejected');
+        expect(state().simulating).toBe(true);
     });
 });

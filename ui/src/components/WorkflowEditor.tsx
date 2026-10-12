@@ -586,6 +586,8 @@ function WorkflowEditorInner({
     rawDispatch({ type: 'mode', simulating: false });
     if (simState) setSimState(null);
   }
+  // Simulation can also end outside the toggle (a host `apply`, `propose` or `replace`); drop the finished run.
+  if (!simActive && simState) setSimState(null);
 
   const focusNode = useCallback((nodeId: string) => {
     dispatch({ type: 'select', nodeId });
