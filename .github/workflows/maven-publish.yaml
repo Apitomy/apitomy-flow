@@ -56,6 +56,16 @@ jobs:
           java-version: '21'
           cache: maven
 
+      # Pre-fetch the Maven distribution used by the wrapper, retrying transient download failures
+      # (e.g. Maven Central hiccups) with exponential backoff: 5s, 10s, 20s, 40s between attempts.
+      - name: Download Maven (with retry)
+        uses: Apitomy/apitomy-github-actions/retry@6b92fae0fbb5ebed2ad8380470a7e780d4ea1d3a # v1.0.0
+        with:
+          command: ./mvnw -B --version
+          working-directory: engine
+          max-attempts: 5
+          initial-delay: 5
+
 
       - name: Log Metadata
         run: |
