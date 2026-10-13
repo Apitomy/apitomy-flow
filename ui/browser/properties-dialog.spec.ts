@@ -112,3 +112,17 @@ test("an edge's label badge opens its properties like the edge itself", async ({
     await badge.click({ button: 'right' });
     await expect(editor.getByRole('menuitem')).toHaveText(['Properties', 'Delete']);
 });
+
+for (const [mode, query] of [['panel', '/'], ['dialog', '/?dialog']] as const) {
+    test(`clicking a problem highlights its node as the only selection (${mode} mode)`, async ({ page }) => {
+        await page.goto(query);
+        const editor = page.getByTestId('one');
+        await ready(editor);
+        await node(editor, 'a').click();
+        await expect(node(editor, 'a')).toHaveClass(/selected/);
+        await editor.locator('.problems-panel__item').filter({ hasText: 'MISSING_START_INPUTS' }).click();
+        await expect(node(editor, 's')).toHaveClass(/selected/);
+        await expect(node(editor, 'a')).not.toHaveClass(/selected/);
+    });
+}
+

@@ -180,8 +180,8 @@ Open the dialog for a node or edge by:
 - choosing **Properties**, the first item in its context menu (also reachable from the keyboard with
   Shift+F10 or the ContextMenu key on a focused node or edge).
 
-Clicking a row in the **Problems** panel behaves as in panel mode: it selects the problem's node or edge and
-centers the node, without opening the dialog.
+Clicking a row in the **Problems** panel behaves as in panel mode: it makes the problem's node or edge the
+(highlighted) selection and centers the node, without opening the dialog.
 
 The dialog contains the same fields as the panel and edits are **live**: each change is applied
 immediately, with the same undo steps as the panel, and the canvas updates behind the dialog. Close it with
@@ -202,7 +202,7 @@ Each affected node also shows a small corner badge in the top-right — red for 
 warnings — carrying the highest-severity problem for that node, with the message available on hover.
 
 **Problems panel:** A collapsible panel groups problems by severity, errors first. Click a problem to
-select and center its affected node or edge.
+select (and highlight) its affected node or edge and center the node.
 
 ### Fork/Join Hint
 

@@ -41,6 +41,7 @@ import { ProblemsPanel } from './panels/ProblemsPanel.tsx';
 import { SimulationPanel } from './panels/SimulationPanel.tsx';
 import { ContextMenu } from './ContextMenu.tsx';
 import { PropertiesDialog } from './PropertiesDialog.tsx';
+import { selectOnlyChanges } from '../utils/selectOnly.ts';
 import { buildFlowContext, menuTarget, type MenuSubject } from '../contextActions/flowContext.ts';
 import { builtInItems, resolveMenuItems, type BuiltInHandlers, type MenuEntry } from '../contextActions/menuItems.ts';
 import { useEditorState } from '../hooks/useEditorState.ts';
@@ -603,16 +604,22 @@ function WorkflowEditorInner({
   }, [panelWidth]);
 
   const onProblemClick = useCallback((problem: ValidationProblem) => {
+    if (!problem.nodeId && !problem.edgeId) return;
+    const target = problem.nodeId ? { nodeId: problem.nodeId } : { edgeId: problem.edgeId! };
+    // Make the impacted element the visible (highlighted) selection as well as the editor's selection.
+    const { nodeChanges, edgeChanges } = selectOnlyChanges(nodes, edges, target);
+    if (nodeChanges.length) dispatch({ type: 'nodesChange', changes: nodeChanges });
+    if (edgeChanges.length) dispatch({ type: 'edgesChange', changes: edgeChanges });
     if (problem.nodeId) {
       dispatch({ type: 'select', nodeId: problem.nodeId });
       const node = nodes.find(n => n.id === problem.nodeId);
       if (node) {
         fitView({ nodes: [node], duration: 300 });
       }
-    } else if (problem.edgeId) {
+    } else {
       dispatch({ type: 'select', edgeId: problem.edgeId });
     }
-  }, [nodes, fitView, dispatch]);
+  }, [nodes, edges, fitView, dispatch]);
 
   // --- Simulation ---------------------------------------------------------
   // Simulation is not offered when read-only; leave it if the host switches to read-only mid-run.
