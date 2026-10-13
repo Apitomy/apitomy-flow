@@ -618,6 +618,12 @@ function WorkflowEditorInner({
       }
     } else {
       dispatch({ type: 'select', edgeId: problem.edgeId });
+      // Center on the edge by fitting both of its endpoints into view.
+      const edge = edges.find(e => e.id === problem.edgeId);
+      const ends = edge ? nodes.filter(n => n.id === edge.source || n.id === edge.target) : [];
+      if (ends.length) {
+        fitView({ nodes: ends, duration: 300 });
+      }
     }
   }, [nodes, edges, fitView, dispatch]);
 
