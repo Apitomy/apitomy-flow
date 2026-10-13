@@ -74,12 +74,16 @@ test('read-only editors open the dialog with disabled fields', async ({ page }) 
     await expect(page.getByRole('dialog').locator('fieldset[disabled]')).toHaveCount(1);
 });
 
-test('clicking a problem opens the dialog for its node', async ({ page }) => {
+test('clicking a problem selects and centers its node without opening the dialog, as in panel mode', async ({ page }) => {
     await page.goto('/?dialog');
     const editor = page.getByTestId('one');
     await ready(editor);
+    const viewport = editor.locator('.react-flow__viewport');
+    const before = await viewport.getAttribute('style');
     await editor.locator('.problems-panel__item').filter({ hasText: 'MISSING_START_INPUTS' }).click();
-    await expect(page.getByRole('dialog', { name: 'Start: Start' })).toBeVisible();
+    await expect.poll(() => viewport.getAttribute('style')).not.toBe(before);
+    await page.waitForTimeout(400);
+    await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
 test('simulating restores the side panel for the simulation, and the dialog does not open', async ({ page }) => {
@@ -107,4 +111,47 @@ test("an edge's label badge opens its properties like the edge itself", async ({
     await page.keyboard.press('Escape');
     await badge.click({ button: 'right' });
     await expect(editor.getByRole('menuitem')).toHaveText(['Properties', 'Delete']);
+});
+
+for (const [mode, query] of [['panel', '/'], ['dialog', '/?dialog']] as const) {
+    test(`clicking a problem highlights its node as the only selection (${mode} mode)`, async ({ page }) => {
+        await page.goto(query);
+        const editor = page.getByTestId('one');
+        await ready(editor);
+        await node(editor, 'a').click();
+        await expect(node(editor, 'a')).toHaveClass(/selected/);
+        await editor.locator('.problems-panel__item').filter({ hasText: 'MISSING_START_INPUTS' }).click();
+        await expect(node(editor, 's')).toHaveClass(/selected/);
+        await expect(node(editor, 'a')).not.toHaveClass(/selected/);
+    });
+}
+
+
+test('clicking an edge problem centers the view on the edge', async ({ page }) => {
+    await page.goto('/');
+    const editor = page.getByTestId('one');
+    await ready(editor);
+    // Create an edge problem: an invalid condition on the edge from Review (h) to End (e).
+    await editor.getByRole('group', { name: 'Edge from h to e', exact: true }).click();
+    await editor.locator('.properties-panel textarea').first().fill('context.(');
+    await editor.locator('.properties-panel textarea').first().press('Tab');
+    const edgeRow = editor.locator('.problems-panel__item').filter({ hasText: 'not valid EL' });
+    await expect(edgeRow).toBeVisible();
+    // Move the view to the far-away Start node first.
+    await editor.locator('.problems-panel__item').filter({ hasText: 'MISSING_START_INPUTS' }).click();
+    await page.waitForTimeout(500);
+    const viewport = editor.locator('.react-flow__viewport');
+    const before = await viewport.getAttribute('style');
+    await edgeRow.click();
+    await expect.poll(() => viewport.getAttribute('style')).not.toBe(before);
+    await page.waitForTimeout(500);
+    const canvas = (await editor.locator('.react-flow').boundingBox())!;
+    for (const id of ['h', 'e']) {
+        const box = (await editor.locator(`.react-flow__node[data-id="${id}"]`).boundingBox())!;
+        expect(box.x).toBeGreaterThanOrEqual(canvas.x);
+        expect(box.x + box.width).toBeLessThanOrEqual(canvas.x + canvas.width);
+        expect(box.y).toBeGreaterThanOrEqual(canvas.y);
+        expect(box.y + box.height).toBeLessThanOrEqual(canvas.y + canvas.height);
+    }
+    await expect(editor.locator('.react-flow__edge[data-id="he"]')).toHaveClass(/selected/);
 });

@@ -41,6 +41,7 @@ import { ProblemsPanel } from './panels/ProblemsPanel.tsx';
 import { SimulationPanel } from './panels/SimulationPanel.tsx';
 import { ContextMenu } from './ContextMenu.tsx';
 import { PropertiesDialog } from './PropertiesDialog.tsx';
+import { selectOnlyChanges } from '../utils/selectOnly.ts';
 import { buildFlowContext, menuTarget, type MenuSubject } from '../contextActions/flowContext.ts';
 import { builtInItems, resolveMenuItems, type BuiltInHandlers, type MenuEntry } from '../contextActions/menuItems.ts';
 import { useEditorState } from '../hooks/useEditorState.ts';
@@ -140,8 +141,8 @@ export interface WorkflowEditorProps {
   /**
    * Where node and edge properties are edited. `'panel'` (default) shows them in the right-hand side panel.
    * `'dialog'` removes the side panel (except while simulating) and edits properties in a modal dialog,
-   * opened by double-clicking a node or edge, by its context menu's Properties item, or from the Problems
-   * panel. Edits in the dialog are live, exactly as in the panel.
+   * opened by double-clicking a node or edge or by its context menu's Properties item. Edits in the dialog
+   * are live, exactly as in the panel.
    */
   propertiesDisplay?: 'panel' | 'dialog';
 }
@@ -603,20 +604,28 @@ function WorkflowEditorInner({
   }, [panelWidth]);
 
   const onProblemClick = useCallback((problem: ValidationProblem) => {
-    if (dialogMode && !simActive && (problem.nodeId || problem.edgeId)) {
-      openProperties(problem.nodeId ? { kind: 'node', nodeId: problem.nodeId } : { kind: 'edge', edgeId: problem.edgeId! });
-      return;
-    }
+    if (!problem.nodeId && !problem.edgeId) return;
+    const target = problem.nodeId ? { nodeId: problem.nodeId } : { edgeId: problem.edgeId! };
+    // Make the impacted element the visible (highlighted) selection as well as the editor's selection.
+    const { nodeChanges, edgeChanges } = selectOnlyChanges(nodes, edges, target);
+    if (nodeChanges.length) dispatch({ type: 'nodesChange', changes: nodeChanges });
+    if (edgeChanges.length) dispatch({ type: 'edgesChange', changes: edgeChanges });
     if (problem.nodeId) {
       dispatch({ type: 'select', nodeId: problem.nodeId });
       const node = nodes.find(n => n.id === problem.nodeId);
       if (node) {
         fitView({ nodes: [node], duration: 300 });
       }
-    } else if (problem.edgeId) {
+    } else {
       dispatch({ type: 'select', edgeId: problem.edgeId });
+      // Center on the edge by fitting both of its endpoints into view.
+      const edge = edges.find(e => e.id === problem.edgeId);
+      const ends = edge ? nodes.filter(n => n.id === edge.source || n.id === edge.target) : [];
+      if (ends.length) {
+        fitView({ nodes: ends, duration: 300 });
+      }
     }
-  }, [nodes, fitView, dispatch, dialogMode, simActive, openProperties]);
+  }, [nodes, edges, fitView, dispatch]);
 
   // --- Simulation ---------------------------------------------------------
   // Simulation is not offered when read-only; leave it if the host switches to read-only mid-run.
