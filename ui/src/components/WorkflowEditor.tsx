@@ -104,6 +104,18 @@ function generateSampleContext(workflow: Workflow): string {
 /** A stable no-op change listener used when the host supplies none (or the editor is read-only). */
 const ignoreChange = (): void => {};
 
+/** Editor features a host can switch off. Omitted keys stay enabled; switched-off controls are hidden. */
+export interface EditorFeatures {
+  /** Import button (load a workflow from a JSON file). */
+  import?: boolean;
+  /** Export button (save the workflow as a JSON file). */
+  export?: boolean;
+  /** Image button (export the canvas as a PNG image). */
+  image?: boolean;
+  /** Simulate switch and the simulation panel. Switching it off during a run ends the simulation. */
+  simulate?: boolean;
+}
+
 export interface WorkflowEditorProps {
   workflow: Workflow;
   /**
@@ -145,6 +157,11 @@ export interface WorkflowEditorProps {
    * are live, exactly as in the panel.
    */
   propertiesDisplay?: 'panel' | 'dialog';
+  /**
+   * Switches individual editor features off, for example `{ import: false, simulate: false }`. Every feature
+   * is enabled unless set to `false`. Read-only mode still hides Import and Simulate regardless.
+   */
+  features?: EditorFeatures;
 }
 
 function WorkflowEditorInner({
@@ -152,6 +169,7 @@ function WorkflowEditorInner({
   highlightApplied = true,
   appliedChangeLayout = 'place',
   propertiesDisplay = 'panel',
+  features,
 }: WorkflowEditorProps) {
   const { state, dispatch: rawDispatch } = useEditorState(workflow, readOnly ? ignoreChange : onChange ?? ignoreChange,
     { onProposalResolved, onSelectionChange });
@@ -628,9 +646,13 @@ function WorkflowEditorInner({
   }, [nodes, edges, fitView, dispatch]);
 
   // --- Simulation ---------------------------------------------------------
-  // Simulation is not offered when read-only; leave it if the host switches to read-only mid-run.
-  // Adjusted during render (not in an effect) so no frame shows a simulation in read-only mode.
-  if (readOnly && simActive) {
+  // Simulation is not offered when read-only or when the host switches the feature off; leave it if either
+  // happens mid-run. Adjusted during render (not in an effect) so no frame shows a simulation it hides.
+  const canImport = features?.import !== false;
+  const canExport = features?.export !== false;
+  const canExportImage = features?.image !== false;
+  const canSimulate = features?.simulate !== false;
+  if ((readOnly || !canSimulate) && simActive) {
     rawDispatch({ type: 'mode', simulating: false });
     if (simState) setSimState(null);
   }
@@ -825,16 +847,16 @@ function WorkflowEditorInner({
                 <button title="Tidy up (auto-layout)" disabled={!interactivityEnabled} onClick={handleTidyUp}>
                   Tidy up
                 </button>
-                <button title="Import workflow from a JSON file" disabled={simActive} onClick={handleImportClick}>
+                {canImport && <button title="Import workflow from a JSON file" disabled={simActive} onClick={handleImportClick}>
                   <UploadIcon /> Import
-                </button>
+                </button>}
                 </>}
-                <button title="Export workflow to a JSON file" onClick={handleExportJson}>
+                {canExport && <button title="Export workflow to a JSON file" onClick={handleExportJson}>
                   <DownloadIcon /> Export
-                </button>
-                <button title="Export the canvas as a PNG image" onClick={handleExportImage}>
+                </button>}
+                {canExportImage && <button title="Export the canvas as a PNG image" onClick={handleExportImage}>
                   <ImageIcon /> Image
-                </button>
+                </button>}
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -842,7 +864,7 @@ function WorkflowEditorInner({
                   style={{ display: 'none' }}
                   onChange={onImportFileChange}
                 />
-                {!readOnly && <Switch
+                {!readOnly && canSimulate && <Switch
                   id={simulateSwitchId}
                   className="workflow-editor__sim-switch"
                   label="Simulate"
