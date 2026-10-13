@@ -99,3 +99,33 @@ describe('runMenuEntry', () => {
         expect(onSelect).not.toHaveBeenCalled();
     });
 });
+
+describe('Properties built-in (dialog mode)', () => {
+    const ids = (items: { id: string }[]) => items.map(item => item.id);
+    const withProperties = () => ({ ...handlers(), openProperties: vi.fn() });
+
+    it('comes first for nodes and edges and opens the target', () => {
+        const h = withProperties();
+        const nodeItems = builtInItems({ kind: 'node', nodeId: 'a' }, h);
+        expect(ids(nodeItems)).toEqual(['properties', 'clone', 'delete']);
+        expect(nodeItems[0].label).toBe('Properties');
+        nodeItems[0].onSelect();
+        const edgeItems = builtInItems({ kind: 'edge', edgeId: 'x' }, h);
+        expect(ids(edgeItems)).toEqual(['properties', 'delete']);
+        edgeItems[0].onSelect();
+        expect(h.openProperties.mock.calls).toEqual([[{ kind: 'node', nodeId: 'a' }], [{ kind: 'edge', edgeId: 'x' }]]);
+    });
+
+    it('stays available when editing is not, and is not offered for selections, canvas or problems', () => {
+        const h = withProperties();
+        expect(ids(builtInItems({ kind: 'node', nodeId: 'a' }, h, false))).toEqual(['properties']);
+        expect(ids(builtInItems({ kind: 'edge', edgeId: 'x' }, h, false))).toEqual(['properties']);
+        expect(ids(builtInItems({ kind: 'selection', nodeIds: ['a', 'b'], edgeIds: [] }, h))).toEqual(['delete']);
+        expect(builtInItems({ kind: 'canvas', flowPosition: { x: 0, y: 0 } }, h)).toEqual([]);
+    });
+
+    it('is absent without an openProperties handler (panel mode), and editing items obey the flag', () => {
+        expect(ids(builtInItems({ kind: 'node', nodeId: 'a' }, handlers()))).toEqual(['clone', 'delete']);
+        expect(builtInItems({ kind: 'node', nodeId: 'a' }, handlers(), false)).toEqual([]);
+    });
+});

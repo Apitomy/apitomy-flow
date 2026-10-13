@@ -29,6 +29,7 @@ function MyWorkflowEditor({ initialWorkflow }: { initialWorkflow: Workflow }) {
 | `theme` | `FlowTheme` | No | `'light'` or `'dark'` (default: `'light'`). Controls the color scheme of the editor and React Flow canvas |
 | `onValidationChange` | `(problems: ValidationProblem[]) => void` | No | Called when validation results change (e.g. to disable a Save button when errors exist). Receives the merged built-in and host problems |
 | `spi` | `EditorSpi` | No | Host extension object. Supplies action-type descriptors (`actionTypes`) and/or a custom `validate` function. See [Host Extension (SPI)](#host-extension-spi) |
+| `propertiesDisplay` | `'panel' \| 'dialog'` | No | Where node and edge properties are edited (default: `'panel'`). See [Properties dialog](#properties-dialog) |
 
 ## Features
 
@@ -163,6 +164,31 @@ A panel on the right side shows configuration fields for the selected node or ed
 - Edge ID (read-only)
 
 Click the canvas background to deselect and hide the properties panel.
+
+#### Properties dialog
+
+Set `propertiesDisplay="dialog"` to edit properties in a modal dialog instead of the side panel. The canvas
+then uses the full width; the side panel only returns while simulating, to show the simulation.
+
+```tsx
+<WorkflowEditor workflow={workflow} onChange={save} propertiesDisplay="dialog" />
+```
+
+Open the dialog for a node or edge by:
+
+- **double-clicking** it;
+- choosing **Properties**, the first item in its context menu (also reachable from the keyboard with
+  Shift+F10 or the ContextMenu key on a focused node or edge);
+- clicking a row in the **Problems** panel, which opens the dialog for that problem's node or edge.
+
+The dialog contains the same fields as the panel and edits are **live**: each change is applied
+immediately, with the same undo steps as the panel, and the canvas updates behind the dialog. Close it with
+**Close**, the × button or Escape. In a read-only editor the dialog shows the fields disabled, and
+**Properties** remains in the context menu even though Clone and Delete are hidden. The dialog closes by
+itself if its node or edge disappears (for example after Undo) or when simulation starts; it stays open
+while you edit the node's ID.
+
+![Node properties in a dialog](images/properties-dialog/2-node-dialog.png)
 
 ### Live Validation
 

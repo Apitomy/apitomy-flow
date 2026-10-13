@@ -60,6 +60,7 @@ function App() {
   const [editorWorkflow, setEditorWorkflow] = useState<Workflow>(defaultScenario.workflow);
   const [theme, setTheme] = useState<FlowTheme>('light');
   const [editorReadOnly, setEditorReadOnly] = useState(false);
+  const [propertiesInDialog, setPropertiesInDialog] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   useEffect(() => {
@@ -243,6 +244,17 @@ function App() {
                   />
                 </ToolbarItem>
               )}
+              {activeView === 'editor' && (
+                <ToolbarItem className="dev-app__read-only-toggle">
+                  <Switch
+                    id="properties-dialog-toggle"
+                    label="Properties in dialog"
+                    aria-label="Edit node and edge properties in a dialog"
+                    isChecked={propertiesInDialog}
+                    onChange={(_, checked) => setPropertiesInDialog(checked)}
+                  />
+                </ToolbarItem>
+              )}
             </ToolbarGroup>
           </ToolbarContent>
         </Toolbar>
@@ -261,6 +273,7 @@ function App() {
             readOnly={editorReadOnly}
             theme={theme}
             spi={spi}
+            propertiesDisplay={propertiesInDialog ? 'dialog' : 'panel'}
           />
         )}
         {activeView === 'viewer' && (
