@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import {
   FormSelect,
   FormSelectOption,
+  MenuToggle,
   Masthead,
   MastheadBrand,
   MastheadContent,
@@ -16,6 +17,9 @@ import {
   PageSidebar,
   PageSidebarBody,
   PageToggleButton,
+  Select,
+  SelectList,
+  SelectOption,
   Switch,
   Toolbar,
   ToolbarContent,
@@ -39,7 +43,7 @@ import {
 import { getContentSectionConfig } from './layoutModel.ts';
 import { syncPatternFlyRootTheme } from './themeRootClass.ts';
 import { type Workflow } from '../types/workflow.ts';
-import { type FlowTheme } from '../components/WorkflowEditor.tsx';
+import { type EditorFeatures, type FlowTheme } from '../components/WorkflowEditor.tsx';
 import { type EditorSpi } from '../types/spi.ts';
 import { demoCatalog, createHostValidator } from './demoCatalog.ts';
 import { AiAssistedEditorDemo } from './ai/AiAssistedEditorDemo.tsx';
@@ -61,6 +65,8 @@ function App() {
   const [theme, setTheme] = useState<FlowTheme>('light');
   const [editorReadOnly, setEditorReadOnly] = useState(false);
   const [propertiesInDialog, setPropertiesInDialog] = useState(false);
+  const [features, setFeatures] = useState<Required<EditorFeatures>>({ import: true, export: true, image: true, simulate: true });
+  const [featuresOpen, setFeaturesOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   useEffect(() => {
@@ -255,6 +261,32 @@ function App() {
                   />
                 </ToolbarItem>
               )}
+              {activeView === 'editor' && (
+                <ToolbarItem>
+                  <Select
+                    role="menu"
+                    isOpen={featuresOpen}
+                    onOpenChange={setFeaturesOpen}
+                    onSelect={(_, value) => {
+                      const key = value as keyof EditorFeatures;
+                      setFeatures((current) => ({ ...current, [key]: !current[key] }));
+                    }}
+                    toggle={(toggleRef) => (
+                      <MenuToggle ref={toggleRef} onClick={() => setFeaturesOpen((open) => !open)} isExpanded={featuresOpen}>
+                        Features ({Object.values(features).filter(Boolean).length} of 4)
+                      </MenuToggle>
+                    )}
+                  >
+                    <SelectList aria-label="Editor features">
+                      {(['import', 'export', 'image', 'simulate'] as const).map((key) => (
+                        <SelectOption key={key} value={key} hasCheckbox isSelected={features[key]}>
+                          {key.charAt(0).toUpperCase() + key.slice(1)}
+                        </SelectOption>
+                      ))}
+                    </SelectList>
+                  </Select>
+                </ToolbarItem>
+              )}
             </ToolbarGroup>
           </ToolbarContent>
         </Toolbar>
@@ -274,6 +306,7 @@ function App() {
             theme={theme}
             spi={spi}
             propertiesDisplay={propertiesInDialog ? 'dialog' : 'panel'}
+            features={features}
           />
         )}
         {activeView === 'viewer' && (

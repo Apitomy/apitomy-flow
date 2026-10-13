@@ -12,6 +12,8 @@ const params = new URLSearchParams(location.search);
 
 function EditorHost({ id }: { id: string }) {
     const [document, setDocument] = useState(() => workflow(!params.has('positionless')));
+    // `?features=import,simulate` lists features to switch off.
+    const [disabledFeatures, setDisabledFeatures] = useState(() => (params.get('features') ?? '').split(',').filter(Boolean));
     const [changes, setChanges] = useState<Workflow[]>([]);
     const [mount, setMount] = useState(0);
     const [provider, setProvider] = useState(0);
@@ -95,6 +97,8 @@ function EditorHost({ id }: { id: string }) {
             <button onClick={() => pending.validations.at(-1)?.reject()}>Reject validation</button>
             {params.has('catalog') && <button onClick={() => setCatalog(previous => [...previous, { value: 'noop', label: 'No-op' }])}>
                 Add noop to catalog</button>}
+            {params.has('features') && <button onClick={() => setDisabledFeatures(previous => [...previous, 'simulate'])}>
+                Turn off simulate</button>}
             {params.has('ai') && <>
                 <button onClick={() => record(editorRef.current!.propose(insertWait('cs-1')))}>Propose change</button>
                 <button onClick={() => record(editorRef.current!.apply(insertWait('cs-2')))}>Apply change</button>
@@ -104,6 +108,7 @@ function EditorHost({ id }: { id: string }) {
             </>}
         </nav>
         <div className="surface"><WorkflowEditor key={mount} workflow={document} spi={spi} ref={editorRef} readOnly={params.has('readonly')} propertiesDisplay={params.has('dialog') ? 'dialog' : 'panel'}
+            features={params.has('features') ? Object.fromEntries(disabledFeatures.map(name => [name, false])) : undefined}
             onProposalResolved={(id, outcome) => setResolutions(previous => [...previous, `${id}:${outcome}`])} onChange={next => {
             setChanges(previous => [...previous, structuredClone(next)]);
             if (params.has('echo')) setDocument(next);

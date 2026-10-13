@@ -30,6 +30,7 @@ function MyWorkflowEditor({ initialWorkflow }: { initialWorkflow: Workflow }) {
 | `onValidationChange` | `(problems: ValidationProblem[]) => void` | No | Called when validation results change (e.g. to disable a Save button when errors exist). Receives the merged built-in and host problems |
 | `spi` | `EditorSpi` | No | Host extension object. Supplies action-type descriptors (`actionTypes`) and/or a custom `validate` function. See [Host Extension (SPI)](#host-extension-spi) |
 | `propertiesDisplay` | `'panel' \| 'dialog'` | No | Where node and edge properties are edited (default: `'panel'`). See [Properties dialog](#properties-dialog) |
+| `features` | `EditorFeatures` | No | Switches individual toolbar features off, e.g. `{ import: false, simulate: false }`. See [Optional features](#optional-features) |
 
 ## Features
 
@@ -91,6 +92,26 @@ When read-only:
 
 Pan, zoom, selection, fit view, validation display, the Problems panel, and JSON/image export remain
 available. Omitting `readOnly` leaves the editor fully editable.
+
+### Optional features
+
+Hosts can switch off individual toolbar features with the `features` prop. Every feature is enabled unless
+set to `false`, and a switched-off feature's control is hidden.
+
+| Key | Controls |
+|-----|----------|
+| `import` | The **Import** button (load a workflow from a JSON file) |
+| `export` | The **Export** button (save the workflow as a JSON file) |
+| `image` | The **Image** button (export the canvas as a PNG image) |
+| `simulate` | The **Simulate** switch and the simulation panel |
+
+```tsx
+<WorkflowEditor workflow={workflow} onChange={save} features={{ import: false, simulate: false }} />
+```
+
+Read-only mode still hides Import and Simulate regardless of `features`. Switching `simulate` off while a
+simulation is running ends it. The features only affect the toolbar: a host can still replace the document
+through the editor handle (`replace`) with `import` switched off.
 
 ### Node Palette
 
