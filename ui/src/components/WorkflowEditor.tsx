@@ -140,8 +140,8 @@ export interface WorkflowEditorProps {
   /**
    * Where node and edge properties are edited. `'panel'` (default) shows them in the right-hand side panel.
    * `'dialog'` removes the side panel (except while simulating) and edits properties in a modal dialog,
-   * opened by double-clicking a node or edge, by its context menu's Properties item, or from the Problems
-   * panel. Edits in the dialog are live, exactly as in the panel.
+   * opened by double-clicking a node or edge or by its context menu's Properties item. Edits in the dialog
+   * are live, exactly as in the panel.
    */
   propertiesDisplay?: 'panel' | 'dialog';
 }
@@ -603,10 +603,6 @@ function WorkflowEditorInner({
   }, [panelWidth]);
 
   const onProblemClick = useCallback((problem: ValidationProblem) => {
-    if (dialogMode && !simActive && (problem.nodeId || problem.edgeId)) {
-      openProperties(problem.nodeId ? { kind: 'node', nodeId: problem.nodeId } : { kind: 'edge', edgeId: problem.edgeId! });
-      return;
-    }
     if (problem.nodeId) {
       dispatch({ type: 'select', nodeId: problem.nodeId });
       const node = nodes.find(n => n.id === problem.nodeId);
@@ -616,7 +612,7 @@ function WorkflowEditorInner({
     } else if (problem.edgeId) {
       dispatch({ type: 'select', edgeId: problem.edgeId });
     }
-  }, [nodes, fitView, dispatch, dialogMode, simActive, openProperties]);
+  }, [nodes, fitView, dispatch]);
 
   // --- Simulation ---------------------------------------------------------
   // Simulation is not offered when read-only; leave it if the host switches to read-only mid-run.

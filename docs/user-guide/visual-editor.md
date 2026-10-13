@@ -178,8 +178,10 @@ Open the dialog for a node or edge by:
 
 - **double-clicking** it;
 - choosing **Properties**, the first item in its context menu (also reachable from the keyboard with
-  Shift+F10 or the ContextMenu key on a focused node or edge);
-- clicking a row in the **Problems** panel, which opens the dialog for that problem's node or edge.
+  Shift+F10 or the ContextMenu key on a focused node or edge).
+
+Clicking a row in the **Problems** panel behaves as in panel mode: it selects the problem's node or edge and
+centers the node, without opening the dialog.
 
 The dialog contains the same fields as the panel and edits are **live**: each change is applied
 immediately, with the same undo steps as the panel, and the canvas updates behind the dialog. Close it with

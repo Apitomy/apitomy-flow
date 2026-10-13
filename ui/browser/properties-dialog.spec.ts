@@ -74,12 +74,16 @@ test('read-only editors open the dialog with disabled fields', async ({ page }) 
     await expect(page.getByRole('dialog').locator('fieldset[disabled]')).toHaveCount(1);
 });
 
-test('clicking a problem opens the dialog for its node', async ({ page }) => {
+test('clicking a problem selects and centers its node without opening the dialog, as in panel mode', async ({ page }) => {
     await page.goto('/?dialog');
     const editor = page.getByTestId('one');
     await ready(editor);
+    const viewport = editor.locator('.react-flow__viewport');
+    const before = await viewport.getAttribute('style');
     await editor.locator('.problems-panel__item').filter({ hasText: 'MISSING_START_INPUTS' }).click();
-    await expect(page.getByRole('dialog', { name: 'Start: Start' })).toBeVisible();
+    await expect.poll(() => viewport.getAttribute('style')).not.toBe(before);
+    await page.waitForTimeout(400);
+    await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
 test('simulating restores the side panel for the simulation, and the dialog does not open', async ({ page }) => {
