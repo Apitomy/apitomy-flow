@@ -18,6 +18,24 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
+      # Pre-fetch the Maven distribution used by the wrapper, retrying transient download failures
+      # (e.g. Maven Central hiccups) with exponential backoff: 5s, 10s, 20s, 40s between attempts.
+      - name: Download Maven (with retry)
+        working-directory: engine
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if ./mvnw -B --version; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 5 ]; then
+              delay=$((5 * 2 ** (attempt - 1)))
+              echo "::warning::Maven download failed (attempt $attempt/5); retrying in ${delay}s"
+              sleep "$delay"
+            fi
+          done
+          echo "::error::Maven download failed after 5 attempts"
+          exit 1
+
       - name: Build and test
         run: ./mvnw -B clean install
         working-directory: engine
