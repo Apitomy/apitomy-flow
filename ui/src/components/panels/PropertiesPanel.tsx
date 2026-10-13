@@ -41,6 +41,8 @@ interface PropertiesPanelProps {
    * change callbacks are never invoked. Defaults to false.
    */
   readOnly?: boolean;
+  /** Renders without side-panel chrome (border, fixed width, resize handle, header) for use inside a dialog. */
+  embedded?: boolean;
 }
 
 const ignore = (): void => {};
@@ -237,7 +239,7 @@ function HumanTaskOutputsEditor({ outputs, onChange }: {
 /** Coordinates selected entity editing; child forms own their local presentation and draft state. */
 export function PropertiesPanel(props: PropertiesPanelProps) {
   const { selectedNode, selectedEdge, draftIdentity, nodeProblems = [], sampleContext, width, onResizeStart,
-    readOnly = false } = props;
+    readOnly = false, embedded = false } = props;
   const onNodeChange = readOnly ? ignore : props.onNodeChange;
   const onNodeIdChange = readOnly ? ignore : props.onNodeIdChange;
   const onEdgeChange = readOnly ? ignore : props.onEdgeChange;
@@ -249,8 +251,9 @@ export function PropertiesPanel(props: PropertiesPanelProps) {
   // drag-resized) width and the resize handle, so the panel behaves the same
   // whether a node, an edge, or nothing is selected.
   const wrap = (children: React.ReactNode) => (
-    <div className="properties-panel" style={width != null ? { width } : undefined}>
-      {onResizeStart && (
+    <div className={`properties-panel${embedded ? ' properties-panel--embedded' : ''}`}
+      style={width != null && !embedded ? { width } : undefined}>
+      {onResizeStart && !embedded && (
         <div className="properties-panel__resize-handle" onMouseDown={onResizeStart} />
       )}
       {readOnly ? (

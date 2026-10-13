@@ -16,6 +16,8 @@ export interface BuiltInItem {
 export interface BuiltInHandlers {
     clone: (nodeId: string) => void;
     deleteElements: (nodeIds: string[], edgeIds: string[]) => void;
+    /** Opens the properties dialog; provided only when the editor shows properties in a dialog. */
+    openProperties?: (target: { kind: 'node'; nodeId: string } | { kind: 'edge'; edgeId: string }) => void;
 }
 
 /** One rendered menu row. `run` performs the action; ids are unique within a menu. */
@@ -25,24 +27,34 @@ export type MenuEntry =
     | { type: 'divider'; id: 'divider' };
 
 /**
- * Lists the built-in items for a target.
+ * Lists the built-in items for a target: Properties (dialog mode only, even when editing is unavailable),
+ * then Clone/Delete for nodes, Delete for edges and selections, nothing for the canvas or problems.
  *
  * @param target the menu target
  * @param handlers editor operations
- * @returns Clone/Delete for nodes, Delete for edges and selections, nothing otherwise
+ * @param editable whether editing items (Clone, Delete) are available
+ * @returns the built-in items, in menu order
  */
-export function builtInItems(target: FlowTarget, handlers: BuiltInHandlers): BuiltInItem[] {
+export function builtInItems(target: FlowTarget, handlers: BuiltInHandlers, editable = true): BuiltInItem[] {
+    const open = handlers.openProperties;
     switch (target.kind) {
         case 'node':
             return [
-                { id: 'clone', label: 'Clone', onSelect: () => handlers.clone(target.nodeId) },
-                { id: 'delete', label: 'Delete', danger: true, onSelect: () => handlers.deleteElements([target.nodeId], []) },
+                ...(open ? [{ id: 'properties', label: 'Properties', onSelect: () => open({ kind: 'node', nodeId: target.nodeId }) }] : []),
+                ...(editable ? [
+                    { id: 'clone', label: 'Clone', onSelect: () => handlers.clone(target.nodeId) },
+                    { id: 'delete', label: 'Delete', danger: true, onSelect: () => handlers.deleteElements([target.nodeId], []) },
+                ] : []),
             ];
         case 'edge':
-            return [{ id: 'delete', label: 'Delete', danger: true, onSelect: () => handlers.deleteElements([], [target.edgeId]) }];
+            return [
+                ...(open ? [{ id: 'properties', label: 'Properties', onSelect: () => open({ kind: 'edge', edgeId: target.edgeId }) }] : []),
+                ...(editable ? [{ id: 'delete', label: 'Delete', danger: true,
+                    onSelect: () => handlers.deleteElements([], [target.edgeId]) }] : []),
+            ];
         case 'selection':
-            return [{ id: 'delete', label: 'Delete', danger: true,
-                onSelect: () => handlers.deleteElements(target.nodeIds, target.edgeIds) }];
+            return editable ? [{ id: 'delete', label: 'Delete', danger: true,
+                onSelect: () => handlers.deleteElements(target.nodeIds, target.edgeIds) }] : [];
         default:
             return [];
     }

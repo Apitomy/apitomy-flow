@@ -40,6 +40,7 @@ import { PropertiesPanel } from './panels/PropertiesPanel.tsx';
 import { ProblemsPanel } from './panels/ProblemsPanel.tsx';
 import { SimulationPanel } from './panels/SimulationPanel.tsx';
 import { ContextMenu } from './ContextMenu.tsx';
+import { PropertiesDialog } from './PropertiesDialog.tsx';
 import { buildFlowContext, menuTarget, type MenuSubject } from '../contextActions/flowContext.ts';
 import { builtInItems, resolveMenuItems, type BuiltInHandlers, type MenuEntry } from '../contextActions/menuItems.ts';
 import { useEditorState } from '../hooks/useEditorState.ts';
@@ -136,12 +137,20 @@ export interface WorkflowEditorProps {
    * same undo step. Hosts can expose this as a user preference.
    */
   appliedChangeLayout?: AppliedChangeLayout;
+  /**
+   * Where node and edge properties are edited. `'panel'` (default) shows them in the right-hand side panel.
+   * `'dialog'` removes the side panel (except while simulating) and edits properties in a modal dialog,
+   * opened by double-clicking a node or edge, by its context menu's Properties item, or from the Problems
+   * panel. Edits in the dialog are live, exactly as in the panel.
+   */
+  propertiesDisplay?: 'panel' | 'dialog';
 }
 
 function WorkflowEditorInner({
   workflow, onChange, readOnly = false, onValidationChange, theme = 'light', spi, ref, onProposalResolved, onSelectionChange,
   highlightApplied = true,
   appliedChangeLayout = 'place',
+  propertiesDisplay = 'panel',
 }: WorkflowEditorProps) {
   const { state, dispatch: rawDispatch } = useEditorState(workflow, readOnly ? ignoreChange : onChange ?? ignoreChange,
     { onProposalResolved, onSelectionChange });
@@ -325,6 +334,23 @@ function WorkflowEditorInner({
     latestStateRef.current = state;
   }, [state]);
 
+  // --- Properties dialog (propertiesDisplay === 'dialog') -------------------
+  // Nodes are tracked by their stable key so the dialog stays open while the user edits the node's ID.
+  const dialogMode = propertiesDisplay === 'dialog';
+  const [dialogTarget, setDialogTarget] = useState<{ kind: 'node'; key: string } | { kind: 'edge'; edgeId: string } | null>(null);
+  const openProperties = useCallback((target: { kind: 'node'; nodeId: string } | { kind: 'edge'; edgeId: string }) => {
+    const current = latestStateRef.current;
+    if (target.kind === 'node') {
+      const key = current.nodeKeys[target.nodeId];
+      if (!key) return;
+      dispatch({ type: 'select', nodeId: target.nodeId });
+      setDialogTarget({ kind: 'node', key });
+    } else if (current.document.edges.some(edge => edge.id === target.edgeId)) {
+      dispatch({ type: 'select', edgeId: target.edgeId });
+      setDialogTarget({ kind: 'edge', edgeId: target.edgeId });
+    }
+  }, [dispatch]);
+
   const builtInHandlers = useMemo<BuiltInHandlers>(() => ({
     clone: nodeId => {
       const node = latestStateRef.current.document.nodes.find(candidate => candidate.id === nodeId);
@@ -332,7 +358,8 @@ function WorkflowEditorInner({
     },
     deleteElements: (nodeIds, edgeIds) => deleteWithEditorFocus(latestStateRef.current,
       { type: 'delete', nodeIds, edgeIds }, editorRootRef.current, dispatch),
-  }), [dispatch]);
+    ...(dialogMode ? { openProperties } : {}),
+  }), [dispatch, dialogMode, openProperties]);
 
   /** Opens a context menu for a subject; returns false (and opens nothing) when there is nothing to show. */
   const openMenu = useCallback((subject: MenuSubject, screenPosition: { x: number; y: number },
@@ -340,7 +367,7 @@ function WorkflowEditorInner({
     if (simActive) return false;
     const target = menuTarget(subject, selectionOf(state));
     const context = buildFlowContext(state, target, validationProblems, readOnly, screenPosition);
-    const entries = resolveMenuItems(interactivityEnabled ? builtInItems(target, builtInHandlers) : [],
+    const entries = resolveMenuItems(builtInItems(target, builtInHandlers, interactivityEnabled),
       spi?.contextActions, context);
     if (!entries.length) return false;
     const box = editorRootRef.current?.getBoundingClientRect();
@@ -396,6 +423,14 @@ function WorkflowEditorInner({
       event.preventDefault();
     }
   }, [openMenu]);
+
+  const onNodeDoubleClick = useCallback((_event: React.MouseEvent, node: Node) => {
+    if (dialogMode && !simActive) openProperties({ kind: 'node', nodeId: node.id });
+  }, [dialogMode, simActive, openProperties]);
+
+  const onEdgeDoubleClick = useCallback((_event: React.MouseEvent, edge: Edge) => {
+    if (dialogMode && !simActive) openProperties({ kind: 'edge', edgeId: edge.id });
+  }, [dialogMode, simActive, openProperties]);
 
   const onEdgeContextMenu = useCallback((event: React.MouseEvent, edge: Edge) => {
     if (menuOpenRef.current) { event.preventDefault(); return; }
@@ -568,6 +603,10 @@ function WorkflowEditorInner({
   }, [panelWidth]);
 
   const onProblemClick = useCallback((problem: ValidationProblem) => {
+    if (dialogMode && !simActive && (problem.nodeId || problem.edgeId)) {
+      openProperties(problem.nodeId ? { kind: 'node', nodeId: problem.nodeId } : { kind: 'edge', edgeId: problem.edgeId! });
+      return;
+    }
     if (problem.nodeId) {
       dispatch({ type: 'select', nodeId: problem.nodeId });
       const node = nodes.find(n => n.id === problem.nodeId);
@@ -577,7 +616,7 @@ function WorkflowEditorInner({
     } else if (problem.edgeId) {
       dispatch({ type: 'select', edgeId: problem.edgeId });
     }
-  }, [nodes, fitView, dispatch]);
+  }, [nodes, fitView, dispatch, dialogMode, simActive, openProperties]);
 
   // --- Simulation ---------------------------------------------------------
   // Simulation is not offered when read-only; leave it if the host switches to read-only mid-run.
@@ -588,6 +627,18 @@ function WorkflowEditorInner({
   }
   // Simulation can also end outside the toggle (a host `apply`, `propose` or `replace`); drop the finished run.
   if (!simActive && simState) setSimState(null);
+
+  // The properties dialog follows its element (by stable key for nodes, so ID edits keep it open) and closes
+  // when the element disappears (undo, deletion, an applied change set) or simulation starts.
+  const dialogNodeId = dialogTarget?.kind === 'node'
+    ? Object.keys(state.nodeKeys).find(id => state.nodeKeys[id] === dialogTarget.key) : undefined;
+  const dialogNode = dialogNodeId ? nodes.find(node => node.id === dialogNodeId) : undefined;
+  const dialogEdge = dialogTarget?.kind === 'edge' ? edges.find(edge => edge.id === dialogTarget.edgeId) : undefined;
+  if (dialogTarget && (!dialogMode || simActive || (!dialogNode && !dialogEdge))) setDialogTarget(null);
+  const nodeName = (id: string) => nodes.find(node => node.id === id)?.data.name ?? id;
+  const dialogTitle = dialogNode
+    ? `${dialogNode.data.nodeType.split('-').map(part => part.charAt(0).toUpperCase() + part.slice(1)).join(' ')}: ${dialogNode.data.name}`
+    : dialogEdge ? `Edge from ${nodeName(dialogEdge.source)} to ${nodeName(dialogEdge.target)}` : '';
 
   const focusNode = useCallback((nodeId: string) => {
     dispatch({ type: 'select', nodeId });
@@ -725,6 +776,8 @@ function WorkflowEditorInner({
             onEdgeClick={onCanvasEdgeClick}
             onPaneClick={onPaneClick}
             onNodeContextMenu={onNodeContextMenu}
+            onNodeDoubleClick={onNodeDoubleClick}
+            onEdgeDoubleClick={onEdgeDoubleClick}
             onEdgeContextMenu={onEdgeContextMenu}
             onPaneContextMenu={onPaneContextMenu}
             onSelectionContextMenu={onSelectionContextMenu}
@@ -839,7 +892,7 @@ function WorkflowEditorInner({
             width={panelWidth}
             onResizeStart={onResizeStart}
           />
-        ) : (
+        ) : !dialogMode && (
           <PropertiesPanel
             actionTypeCatalog={actionTypeCatalog}
             draftIdentity={`${selectedNodeId ? state.nodeKeys[selectedNodeId] : ''}:${state.draftReset}`}
@@ -857,6 +910,25 @@ function WorkflowEditorInner({
           />
         )}
       </div>
+      {(dialogNode || dialogEdge) && (
+        <PropertiesDialog title={dialogTitle} theme={theme}
+          onClose={() => { setDialogTarget(null); editorRootRef.current?.focus({ preventScroll: true }); }}>
+          <PropertiesPanel
+            embedded
+            actionTypeCatalog={actionTypeCatalog}
+            draftIdentity={`${dialogNode ? state.nodeKeys[dialogNode.id] : dialogEdge?.id ?? ''}:${state.draftReset}`}
+            selectedNode={dialogNode}
+            selectedEdge={dialogNode ? undefined : dialogEdge}
+            nodeProblems={dialogNode ? validationProblems.filter(problem => problem.nodeId === dialogNode.id) : []}
+            onNodeChange={onNodeDataChange}
+            onNodeIdChange={onNodeIdChange}
+            onEdgeChange={onEdgeDataChange}
+            spi={spi}
+            readOnly={readOnly}
+            sampleContext={sampleContext}
+          />
+        </PropertiesDialog>
+      )}
       <ProblemsPanel problems={validationProblems} onProblemClick={onProblemClick} onProblemMenu={onProblemMenu} problemMenuEnabled={problemMenuEnabled} />
     </div>
   );

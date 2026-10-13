@@ -1,0 +1,15 @@
+.flow-properties-dialog__body {
+  color: var(--flow-text, #151515);
+}
+
+/* The properties editor embedded in the dialog: no side-panel chrome, and the dialog title replaces the header. */
+.properties-panel.properties-panel--embedded {
+  width: auto;
+  border-left: none;
+  padding: 0;
+  overflow: visible;
+  background: transparent;
+}
+.properties-panel--embedded .properties-panel__header {
+  display: none;
+}

@@ -103,7 +103,7 @@ function EditorHost({ id }: { id: string }) {
                 <button onClick={() => editorRef.current!.withdraw('cs-1')}>Withdraw change</button>
             </>}
         </nav>
-        <div className="surface"><WorkflowEditor key={mount} workflow={document} spi={spi} ref={editorRef} readOnly={params.has('readonly')}
+        <div className="surface"><WorkflowEditor key={mount} workflow={document} spi={spi} ref={editorRef} readOnly={params.has('readonly')} propertiesDisplay={params.has('dialog') ? 'dialog' : 'panel'}
             onProposalResolved={(id, outcome) => setResolutions(previous => [...previous, `${id}:${outcome}`])} onChange={next => {
             setChanges(previous => [...previous, structuredClone(next)]);
             if (params.has('echo')) setDocument(next);
