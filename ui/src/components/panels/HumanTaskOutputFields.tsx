@@ -26,9 +26,14 @@ export function OptionsEditor({ options, onChange }: {
     );
 }
 
-/** Type-aware human-task default form; invalid object text stays editable as a string draft. */
+/** The declaration fields {@link DefaultValueEditor} reads (human-task outputs and start inputs). */
+export type DefaultValueDeclaration = Pick<HumanTaskOutput, 'type' | 'defaultValue' | 'options'> & {
+    widget?: string | null;
+};
+
+/** Type-aware default value form; invalid object text stays editable as a string draft. */
 export function DefaultValueEditor({ output, onChange }: {
-    output: HumanTaskOutput;
+    output: DefaultValueDeclaration;
     onChange: (value: JsonValue | undefined) => void;
 }) {
     const type = output.type ?? 'string';

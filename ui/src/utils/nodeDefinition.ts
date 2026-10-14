@@ -66,11 +66,17 @@ function startInputsSection(config: StartConfig): DefinitionSection | null {
   if (!Array.isArray(inputs) || inputs.length === 0) return null;
   return {
     label: 'Inputs',
-    fields: inputs.map(input => ({
-      label: input.name,
-      badge: `${input.type ?? 'string'}${input.required ? '' : '?'}`,
-      value: input.description ?? undefined,
-    })),
+    fields: inputs.map(input => {
+      const parts = [
+        input.description || undefined,
+        input.defaultValue !== undefined ? `default: ${JSON.stringify(input.defaultValue)}` : undefined,
+      ].filter((p): p is string => p !== undefined);
+      return {
+        label: input.name,
+        badge: `${input.type ?? 'string'}${input.required ? '' : '?'}`,
+        value: parts.length > 0 ? parts.join(' — ') : undefined,
+      };
+    }),
   };
 }
 

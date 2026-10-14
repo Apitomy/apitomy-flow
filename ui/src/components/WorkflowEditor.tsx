@@ -66,8 +66,12 @@ import type { ChangeMeta, ProposalOutcome } from '../changeset/types.ts';
 
 export type FlowTheme = 'light' | 'dark';
 
-/** A plausible sample value for a declared start-node input, based on its type (and name hints). */
-function sampleValueForInput(input: { name: string; type?: string | null }): unknown {
+/**
+ * A plausible sample value for a declared start-node input: its authored default when present,
+ * otherwise a value based on its type (and name hints).
+ */
+function sampleValueForInput(input: { name: string; type?: string | null; defaultValue?: unknown }): unknown {
+  if (input.defaultValue !== undefined) return input.defaultValue;
   switch (input.type) {
     case 'number': return 0;
     case 'boolean': return true;

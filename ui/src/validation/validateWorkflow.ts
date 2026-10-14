@@ -398,6 +398,14 @@ function validateSemantics(workflow: Workflow, problems: ValidationProblem[]) {
             }
             inputNames.add(name);
           }
+          if (input.defaultValue !== undefined && input.defaultValue !== null) {
+            const type = typeof input.type === 'string' && input.type.trim() !== '' ? input.type : 'string';
+            if (!valueMatchesType(input.defaultValue, type)) {
+              const label = nameVal ? String(nameVal) : '(unnamed)';
+              problems.push(problem('warning', 'DEFAULT_VALUE_TYPE_MISMATCH',
+                `Input "${label}" default value does not match declared type "${type}"`, startNode.id));
+            }
+          }
         }
       }
     }

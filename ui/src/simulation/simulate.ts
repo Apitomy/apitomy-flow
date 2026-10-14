@@ -106,18 +106,40 @@ export function startSimulation(workflow: Workflow, context: Record<string, unkn
             transitions: 0,
         };
     }
+    const initial = applyStartInputDefaults(startNode, context);
     return {
         status: 'running',
         activeBranches: [{ branchId: 'root', nodeId: startNode.id }],
         currentNodeId: startNode.id,
         parkedBranchIds: [],
         joinArrivals: {},
-        context: { ...context },
+        context: initial,
         visitedNodeIds: [startNode.id],
-        history: [{ ...enterEntry(startNode, undefined, context), branchId: 'root' }],
+        history: [{ ...enterEntry(startNode, undefined, initial), branchId: 'root' }],
         edgeEvaluations: {},
         transitions: 0,
     };
+}
+
+/**
+ * Returns a copy of the start context where every declared start input that is absent from the
+ * supplied context (the key is not present at all) takes its authored `defaultValue`. Explicitly
+ * supplied values, including `null`, are never overridden; inputs without a default stay absent.
+ *
+ * @param startNode the workflow's start node
+ * @param context the caller-supplied start context
+ * @return a new context object with defaults applied
+ */
+export function applyStartInputDefaults(startNode: WorkflowNode, context: Record<string, unknown>): Record<string, unknown> {
+    const result: Record<string, unknown> = { ...context };
+    const declared = startNode.type === 'start' && Array.isArray(startNode.config.inputs) ? startNode.config.inputs : [];
+    for (const input of declared) {
+        if (typeof input?.name === 'string' && input.defaultValue !== undefined
+            && !Object.prototype.hasOwnProperty.call(result, input.name)) {
+            result[input.name] = structuredClone(input.defaultValue);
+        }
+    }
+    return result;
 }
 
 /**
