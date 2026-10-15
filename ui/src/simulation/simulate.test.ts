@@ -94,6 +94,29 @@ describe('startSimulation', () => {
         expect(state.context).toEqual({ foo: 'bar' });
     });
 
+    it('applies start input defaults for inputs missing from the supplied context', () => {
+        const wf = workflow([
+            node('start', 'start', { inputs: [
+                { name: 'region', type: 'string', defaultValue: 'us-east' },
+                { name: 'limit', type: 'number', defaultValue: 10 },
+                { name: 'flag', type: 'boolean', defaultValue: false },
+                { name: 'nothing', type: 'string' },
+            ] }),
+            node('end', 'end'),
+        ], [edge('e1', 'start', 'end')]);
+        const state = startSimulation(wf, { limit: 3 });
+        expect(state.context).toEqual({ region: 'us-east', limit: 3, flag: false });
+        expect(state.history[0].input).toEqual({ region: 'us-east', limit: 3, flag: false });
+    });
+
+    it('does not override an explicitly supplied null value with a default', () => {
+        const wf = workflow([
+            node('start', 'start', { inputs: [{ name: 'region', defaultValue: 'us-east' }] }),
+            node('end', 'end'),
+        ], [edge('e1', 'start', 'end')]);
+        expect(startSimulation(wf, { region: null }).context).toEqual({ region: null });
+    });
+
     it('fails immediately when there is no start node', () => {
         const wf = workflow([node('end', 'end')], []);
         const state = startSimulation(wf, {});

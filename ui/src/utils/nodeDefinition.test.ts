@@ -94,6 +94,24 @@ describe('getNodeDefinition', () => {
     ]);
   });
 
+  it('shows start input default values alongside the description', () => {
+    const def = getNodeDefinition(node({
+      type: 'start',
+      config: {
+        inputs: [
+          { name: 'region', type: 'string', description: 'Target region', defaultValue: 'us-east' },
+          { name: 'limit', type: 'number', defaultValue: 10 },
+          { name: 'opts', type: 'object', defaultValue: { a: 1 } },
+        ],
+      },
+    }));
+    expect(def.sections.find(s => s.label === 'Inputs')!.fields).toEqual([
+      { label: 'region', badge: 'string?', value: 'Target region — default: "us-east"' },
+      { label: 'limit', badge: 'number?', value: 'default: 10' },
+      { label: 'opts', badge: 'object?', value: 'default: {"a":1}' },
+    ]);
+  });
+
   it('builds an Outputs section from a human-task node\'s config.outputs array', () => {
     const def = getNodeDefinition(node({
       type: 'human-task',

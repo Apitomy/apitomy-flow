@@ -581,6 +581,35 @@ describe('validateWorkflow', () => {
     });
   });
 
+  describe('start input default value', () => {
+    function startWith(inputs: unknown[]): Workflow {
+      return workflow([node('start', 'start', { inputs }), node('end', 'end')], [edge('e1', 'start', 'end')]);
+    }
+
+    it('DEFAULT_VALUE_TYPE_MISMATCH when a start input default does not match its type', () => {
+      const problems = validateWorkflow(startWith([{ name: 'n', type: 'number', defaultValue: 'abc' }]));
+      const p = problems.find(x => x.code === 'DEFAULT_VALUE_TYPE_MISMATCH');
+      expect(p?.message).toBe('Input "n" default value does not match declared type "number"');
+      expect(p?.nodeId).toBe('start');
+    });
+
+    it('treats an untyped start input as string', () => {
+      expect(hasProblem(validateWorkflow(startWith([{ name: 's', defaultValue: 5 }])),
+        'DEFAULT_VALUE_TYPE_MISMATCH')).toBe(true);
+    });
+
+    it('no DEFAULT_VALUE_TYPE_MISMATCH when start input defaults match their types', () => {
+      const w = startWith([
+        { name: 'a', type: 'string', defaultValue: 'x' },
+        { name: 'b', type: 'number', defaultValue: 0 },
+        { name: 'c', type: 'boolean', defaultValue: false },
+        { name: 'd', type: 'object', defaultValue: { k: 1 } },
+        { name: 'e', type: 'string', defaultValue: null },
+      ]);
+      expect(hasProblem(validateWorkflow(w), 'DEFAULT_VALUE_TYPE_MISMATCH')).toBe(false);
+    });
+  });
+
   describe('duplicate output name', () => {
     it('DUPLICATE_OUTPUT_NAME on action node', () => {
       const w = workflow(

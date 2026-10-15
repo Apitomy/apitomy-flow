@@ -357,6 +357,19 @@ export function PropertiesPanel(props: PropertiesPanelProps) {
                     />
                     Required
                   </label>
+                  <div className="properties-panel__output-field">
+                    <label>Default value</label>
+                    <DefaultValueEditor
+                      output={input}
+                      onChange={(defaultValue) => {
+                        const inputs = [...startInputs];
+                        inputs[i] = { ...inputs[i], defaultValue };
+                        onNodeChange(selectedNode.id, {
+                          config: { ...selectedNode.data.config, inputs },
+                        });
+                      }}
+                    />
+                  </div>
                 </div>
               ))}
               <button
