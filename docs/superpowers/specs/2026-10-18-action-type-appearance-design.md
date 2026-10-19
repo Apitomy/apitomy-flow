@@ -73,9 +73,13 @@ export interface ActionAppearance { icon?: ReactNode; color?: string }
 export function actionAppearanceFor(actionType: unknown, catalog: ActionTypeCatalog): ActionAppearance | undefined;
 
 /** Map of node id to appearance for every action node with a styled descriptor. */
-export function actionAppearanceByNodeId(workflow: Workflow | WorkflowNode[], catalog: ActionTypeCatalog):
+export function actionAppearanceByNodeId(nodes: WorkflowNode[], catalog: ActionTypeCatalog):
     Map<string, ActionAppearance>;
 ```
+
+The lookup uses whatever descriptors the catalog currently holds and ignores `status`. On a first async
+load the list is empty, so nodes use the default look. During a reload the previous list is kept, so nodes
+don't flash.
 
 It returns `undefined` when the descriptor is missing or has neither `icon` nor `color`. A blank or
 non-string `color` is ignored.
@@ -87,7 +91,7 @@ the catalog and attach them to React Flow node data.
 
 - `FlowNodeData` (`ui/src/utils/conversion.ts`) gains `actionAppearance?: ActionAppearance`.
 - **Editor** (`WorkflowEditor.tsx`, the `nodesWithValidation` memo around line 274): adds
-  `actionAppearance` from `actionAppearanceByNodeId(semanticWorkflow, actionTypeCatalog)`. Nodes without an
+  `actionAppearance` from `actionAppearanceByNodeId(semanticWorkflow.nodes, actionTypeCatalog)`. Nodes without an
   appearance keep their current object identity, as they do today.
 - **Viewer** (`WorkflowViewer.tsx`): calls `useActionTypeCatalog(actionTypes)` (the existing hook, so
   async providers, reloads and failures behave exactly as in the Editor) and adds `actionAppearance` in its
