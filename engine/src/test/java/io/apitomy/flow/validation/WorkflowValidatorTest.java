@@ -617,6 +617,66 @@ class WorkflowValidatorTest {
         assertFalse(hasCode(validate(w), "SINGLE_CONDITIONAL_EDGE"));
     }
 
+    // --- Redundant default edge ---
+
+    @Test
+    void redundantDefaultEdge() {
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), endNode("end")),
+            List.of(new WorkflowEdge("e1", "start", "end", null, 0, true, null)));
+        List<ValidationProblem> found = validate(w).stream()
+            .filter(p -> p.code().equals("REDUNDANT_DEFAULT_EDGE")).toList();
+        assertEquals(1, found.size());
+        assertEquals("e1", found.getFirst().edgeId());
+        assertEquals(ValidationSeverity.WARNING, found.getFirst().severity());
+        assertEquals("Default edge is the node's only outgoing edge; a default is only needed as the fallback "
+            + "for conditional edges.", found.getFirst().message());
+    }
+
+    @Test
+    void conditionalDefaultEdgeIsNotRedundant() {
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), endNode("end")),
+            List.of(new WorkflowEdge("e1", "start", "end", "context.x == 1", 0, true, null)));
+        List<ValidationProblem> problems = validate(w);
+        assertFalse(hasCode(problems, "REDUNDANT_DEFAULT_EDGE"));
+        assertTrue(hasCode(problems, "DEFAULT_EDGE_WITH_CONDITION"));
+    }
+
+    @Test
+    void fallbackDefaultEdgeIsNotRedundant() {
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), endNode("a"), endNode("b")),
+            List.of(edge("e1", "start", "a", "context.x == 1", 0),
+                new WorkflowEdge("e2", "start", "b", null, 0, true, null)));
+        assertFalse(hasCode(validate(w), "REDUNDANT_DEFAULT_EDGE"));
+    }
+
+    @Test
+    void timeoutEdgesDoNotCountAsOutgoingEdges() {
+        WorkflowNode recv = new WorkflowNode("r", NodeType.RECEIVE_EVENT, "R",
+            Map.of("eventType", "payment", "timeout", "PT1H"), new Position(0, 0));
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), recv, endNode("done"), endNode("expired")),
+            List.of(edge("e1", "start", "r"),
+                new WorkflowEdge("e2", "r", "done", null, 0, true, null),
+                new WorkflowEdge("t", "r", "expired", null, 0, false, null, true)));
+        List<String> flagged = validate(w).stream()
+            .filter(p -> p.code().equals("REDUNDANT_DEFAULT_EDGE")).map(ValidationProblem::edgeId).toList();
+        assertEquals(List.of("e2"), flagged);
+    }
+
+    @Test
+    void timeoutEdgeIsNeverFlaggedAsRedundantDefault() {
+        WorkflowNode recv = new WorkflowNode("r", NodeType.RECEIVE_EVENT, "R",
+            Map.of("eventType", "payment", "timeout", "PT1H"), new Position(0, 0));
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), recv, endNode("done"), endNode("expired")),
+            List.of(edge("e1", "start", "r"), edge("e2", "r", "done"),
+                new WorkflowEdge("t", "r", "expired", null, 0, true, null, true)));
+        assertFalse(hasCode(validate(w), "REDUNDANT_DEFAULT_EDGE"));
+    }
+
     // --- Invalid event type value ---
 
     @Test

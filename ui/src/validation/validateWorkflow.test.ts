@@ -513,6 +513,65 @@ describe('validateWorkflow', () => {
     });
   });
 
+  describe('redundant default edge', () => {
+    const recv = () => node('r', 'receive-event', { eventType: 'payment', timeout: 'PT1H' });
+
+    it('REDUNDANT_DEFAULT_EDGE on the edge when the only outgoing edge is an unconditional default', () => {
+      const w = workflow(
+        [node('start', 'start'), node('end', 'end')],
+        [edge('e1', 'start', 'end', { isDefault: true })],
+      );
+      const found = validateWorkflow(w).filter(p => p.code === 'REDUNDANT_DEFAULT_EDGE');
+      expect(found).toHaveLength(1);
+      expect(found[0].severity).toBe('warning');
+      expect(found[0].edgeId).toBe('e1');
+      expect(found[0].message).toBe(
+        "Default edge is the node's only outgoing edge; a default is only needed as the fallback for conditional edges.");
+    });
+
+    it('no REDUNDANT_DEFAULT_EDGE when the only default edge has a condition', () => {
+      const w = workflow(
+        [node('start', 'start'), node('end', 'end')],
+        [edge('e1', 'start', 'end', { isDefault: true, condition: 'context.x == 1' })],
+      );
+      const problems = validateWorkflow(w);
+      expect(hasProblem(problems, 'REDUNDANT_DEFAULT_EDGE')).toBe(false);
+      expect(hasProblem(problems, 'DEFAULT_EDGE_WITH_CONDITION')).toBe(true);
+    });
+
+    it('no REDUNDANT_DEFAULT_EDGE when the default is a fallback for other edges', () => {
+      const w = workflow(
+        [node('start', 'start'), node('a', 'end'), node('b', 'end')],
+        [edge('e1', 'start', 'a', { condition: 'context.x == 1' }), edge('e2', 'start', 'b', { isDefault: true })],
+      );
+      expect(hasProblem(validateWorkflow(w), 'REDUNDANT_DEFAULT_EDGE')).toBe(false);
+    });
+
+    it('no REDUNDANT_DEFAULT_EDGE for a single non-default edge', () => {
+      const w = workflow([node('start', 'start'), node('end', 'end')], [edge('e1', 'start', 'end')]);
+      expect(hasProblem(validateWorkflow(w), 'REDUNDANT_DEFAULT_EDGE')).toBe(false);
+    });
+
+    it('timeout edges do not count as outgoing edges', () => {
+      const w = workflow(
+        [node('start', 'start'), recv(), node('done', 'end'), node('expired', 'end')],
+        [edge('e1', 'start', 'r'), edge('e2', 'r', 'done', { isDefault: true }),
+          edge('t', 'r', 'expired', { isTimeout: true })],
+      );
+      const found = validateWorkflow(w).filter(p => p.code === 'REDUNDANT_DEFAULT_EDGE');
+      expect(found.map(p => p.edgeId)).toEqual(['e2']);
+    });
+
+    it('never flags a timeout edge', () => {
+      const w = workflow(
+        [node('start', 'start'), recv(), node('done', 'end'), node('expired', 'end')],
+        [edge('e1', 'start', 'r'), edge('e2', 'r', 'done'),
+          edge('t', 'r', 'expired', { isTimeout: true, isDefault: true })],
+      );
+      expect(hasProblem(validateWorkflow(w), 'REDUNDANT_DEFAULT_EDGE')).toBe(false);
+    });
+  });
+
   describe('invalid event type value', () => {
     it('INVALID_EVENT_TYPE_VALUE when eventType is a number', () => {
       const w = workflow(

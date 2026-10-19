@@ -223,7 +223,9 @@ Each affected node also shows a small corner badge in the top-right — red for 
 warnings — carrying the highest-severity problem for that node, with the message available on hover.
 
 **Problems panel:** A collapsible panel groups problems by severity, errors first. Click a problem to
-select (and highlight) its affected node or edge and center the view on it.
+select (and highlight) its affected node or edge and center the view on it. Some problems offer a
+built-in quick fix from the row's context menu or "⋯" button: for example, `REDUNDANT_DEFAULT_EDGE` offers
+**Remove default flag**, which clears the edge's default flag in one undoable step.
 
 ### Fork/Join Hint
 
