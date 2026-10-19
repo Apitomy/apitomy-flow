@@ -27,6 +27,7 @@ function MyWorkflowViewer() {
 | `instance` | `WorkflowInstance` | Yes | The runtime state to visualize |
 | `theme` | `FlowTheme` | No | `'light'` or `'dark'` (default: `'light'`). Controls the color scheme of the viewer and React Flow canvas |
 | `nodeContextMenuItems` | `WorkflowViewerNodeMenuItem[] \| ((nodeId: string) => WorkflowViewerNodeMenuItem[])` | No | Host-contributed actions for a node's right-click menu. See [Node Context Menu](#node-context-menu) |
+| `actionTypes` | `ActionTypeProvider` | No | Action Type catalog used for Action node icons and colors. Pass the same value as the editor's `spi.actionTypes`. See [Action Type Icons and Colors](#action-type-icons-and-colors) |
 
 ## Features
 
@@ -141,6 +142,23 @@ interface WorkflowViewerNodeMenuItem {
   onSelect: (nodeId: string) => void;      // invoked with the right-clicked node's id
 }
 ```
+
+### Action Type Icons and Colors
+
+When `actionTypes` is set, Action nodes use the `icon` and `color` of their Action Type descriptor, exactly
+as in the editor. Share one catalog between the two components:
+
+```tsx
+const actionTypes: ActionTypeDescriptor[] = [
+  { value: 'email.send', label: 'Send email', icon: <EnvelopeIcon />, color: '#c9190b' },
+  { value: 'slack.post', label: 'Post to Slack', icon: <SlackIcon /> },
+];
+
+<WorkflowEditor spi={{ actionTypes }} ... />
+<WorkflowViewer actionTypes={actionTypes} ... />
+```
+
+A function provider is loaded the same way as in the editor; nodes use the default look until it resolves.
 
 ## Styling
 
