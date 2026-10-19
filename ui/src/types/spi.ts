@@ -16,6 +16,13 @@ export interface ActionTypeDescriptor {
   description?: string;
   inputs?: ActionTypeField[];
   outputs?: ActionTypeField[];
+  /** Icon shown on Action nodes of this type (and in the type picker), replacing the default play icon. */
+  icon?: ReactNode;
+  /**
+   * Accent color for Action nodes of this type: any CSS color, including `var(...)`. It sets the node's
+   * border and icon color; background and text stay theme-controlled.
+   */
+  color?: string;
 }
 
 /**
