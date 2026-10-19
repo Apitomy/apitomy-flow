@@ -27,6 +27,26 @@ describe('builtInItems', () => {
         expect(builtInItems({ kind: 'canvas', flowPosition: { x: 0, y: 0 } }, h)).toEqual([]);
         expect(builtInItems({ kind: 'problem', problem: { severity: 'error', code: 'X', message: 'm' } }, h)).toEqual([]);
     });
+
+    it('offers "Remove default flag" for a REDUNDANT_DEFAULT_EDGE problem', () => {
+        const removeDefaultFlag = vi.fn();
+        const problem = { severity: 'warning' as const, code: 'REDUNDANT_DEFAULT_EDGE', message: 'm', edgeId: 'e1' };
+        const items = builtInItems({ kind: 'problem', problem }, { ...handlers(), removeDefaultFlag });
+        expect(items.map(item => [item.id, item.label])).toEqual([['remove-default-flag', 'Remove default flag']]);
+        items[0].onSelect();
+        expect(removeDefaultFlag).toHaveBeenCalledWith('e1');
+    });
+
+    it('offers no quick fix when editing is unavailable, the handler or edge is missing, or for other codes', () => {
+        const removeDefaultFlag = vi.fn();
+        const problem = { severity: 'warning' as const, code: 'REDUNDANT_DEFAULT_EDGE', message: 'm', edgeId: 'e1' };
+        expect(builtInItems({ kind: 'problem', problem }, { ...handlers(), removeDefaultFlag }, false)).toEqual([]);
+        expect(builtInItems({ kind: 'problem', problem }, handlers())).toEqual([]);
+        expect(builtInItems({ kind: 'problem', problem: { ...problem, edgeId: undefined } },
+            { ...handlers(), removeDefaultFlag })).toEqual([]);
+        expect(builtInItems({ kind: 'problem', problem: { ...problem, code: 'NO_DEFAULT_EDGE' } },
+            { ...handlers(), removeDefaultFlag })).toEqual([]);
+    });
 });
 
 describe('resolveMenuItems', () => {

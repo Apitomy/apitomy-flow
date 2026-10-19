@@ -18,6 +18,8 @@ export interface BuiltInHandlers {
     deleteElements: (nodeIds: string[], edgeIds: string[]) => void;
     /** Opens the properties dialog; provided only when the editor shows properties in a dialog. */
     openProperties?: (target: { kind: 'node'; nodeId: string } | { kind: 'edge'; edgeId: string }) => void;
+    /** Clears an edge's default flag; enables the REDUNDANT_DEFAULT_EDGE quick fix. */
+    removeDefaultFlag?: (edgeId: string) => void;
 }
 
 /** One rendered menu row. `run` performs the action; ids are unique within a menu. */
@@ -28,7 +30,8 @@ export type MenuEntry =
 
 /**
  * Lists the built-in items for a target: Properties (dialog mode only, even when editing is unavailable),
- * then Clone/Delete for nodes, Delete for edges and selections, nothing for the canvas or problems.
+ * then Clone/Delete for nodes, Delete for edges and selections, nothing for the canvas, and quick fixes for
+ * problems that have one (REDUNDANT_DEFAULT_EDGE: "Remove default flag").
  *
  * @param target the menu target
  * @param handlers editor operations
@@ -55,6 +58,12 @@ export function builtInItems(target: FlowTarget, handlers: BuiltInHandlers, edit
         case 'selection':
             return editable ? [{ id: 'delete', label: 'Delete', danger: true,
                 onSelect: () => handlers.deleteElements(target.nodeIds, target.edgeIds) }] : [];
+        case 'problem': {
+            const { code, edgeId } = target.problem;
+            const remove = handlers.removeDefaultFlag;
+            return editable && remove && code === 'REDUNDANT_DEFAULT_EDGE' && edgeId
+                ? [{ id: 'remove-default-flag', label: 'Remove default flag', onSelect: () => remove(edgeId) }] : [];
+        }
         default:
             return [];
     }

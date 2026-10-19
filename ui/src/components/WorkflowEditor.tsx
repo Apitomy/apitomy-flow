@@ -17,7 +17,7 @@ import { Switch } from '@patternfly/react-core';
 import { UndoIcon, RedoIcon, LockIcon, LockOpenIcon, UploadIcon, DownloadIcon, ImageIcon } from '@patternfly/react-icons';
 import { type Workflow } from '../types/workflow.ts';
 import { type ValidationProblem } from '../types/validation.ts';
-import { type EditorSpi, type FlowContext } from '../types/spi.ts';
+import { type EditorSpi, type FlowContext, type FlowTarget } from '../types/spi.ts';
 import { type FlowNodeData } from '../utils/conversion.ts';
 import { generateNodeId, generateEdgeId } from '../utils/id.ts';
 import { parseWorkflow, downloadWorkflowJson, workflowFileName } from '../utils/workflowIo.ts';
@@ -386,6 +386,7 @@ function WorkflowEditorInner({
     },
     deleteElements: (nodeIds, edgeIds) => deleteWithEditorFocus(latestStateRef.current,
       { type: 'delete', nodeIds, edgeIds }, editorRootRef.current, dispatch),
+    removeDefaultFlag: edgeId => dispatch({ type: 'edgeData', id: edgeId, data: { isDefault: false } }),
     ...(dialogMode ? { openProperties } : {}),
   }), [dispatch, dialogMode, openProperties]);
 
@@ -423,7 +424,9 @@ function WorkflowEditorInner({
   const problemDocument = state.document;
   const problemRevision = state.contentRevision;
   const problemMenuEnabled = useMemo(() => {
-    if (!contextActions) return undefined;
+    // Without host actions only built-in quick fixes can enable a row; they are cheap, so skip the cache.
+    if (!contextActions) return (problem: ValidationProblem): boolean => !simActive
+      && builtInItems({ kind: 'problem', problem }, builtInHandlers, interactivityEnabled).length > 0;
     const cache = new Map<ValidationProblem, boolean>();
     let base: Omit<FlowContext, 'target'> | undefined;
     return (problem: ValidationProblem): boolean => {
@@ -437,12 +440,15 @@ function WorkflowEditorInner({
           readOnly,
           screenPosition: { x: 0, y: 0 },
         };
-        const context: FlowContext = { ...base, target: { kind: 'problem', problem: structuredClone(problem) } };
-        cache.set(problem, resolveMenuItems([], contextActions, context, () => {}).length > 0);
+        const target: FlowTarget = { kind: 'problem', problem: structuredClone(problem) };
+        const context: FlowContext = { ...base, target };
+        cache.set(problem, resolveMenuItems(builtInItems(target, builtInHandlers, interactivityEnabled),
+          contextActions, context, () => {}).length > 0);
       }
       return cache.get(problem)!;
     };
-  }, [contextActions, simActive, problemDocument, problemRevision, validationProblems, readOnly]);
+  }, [contextActions, simActive, problemDocument, problemRevision, validationProblems, readOnly, builtInHandlers,
+    interactivityEnabled]);
 
   const onNodeContextMenu = useCallback((event: React.MouseEvent, node: Node<FlowNodeData>) => {
     if (menuOpenRef.current) { event.preventDefault(); return; }
@@ -969,7 +975,8 @@ function WorkflowEditorInner({
           />
         </PropertiesDialog>
       )}
-      <ProblemsPanel problems={validationProblems} onProblemClick={onProblemClick} onProblemMenu={onProblemMenu} problemMenuEnabled={problemMenuEnabled} />
+      <ProblemsPanel problems={validationProblems} onProblemClick={onProblemClick} onProblemMenu={onProblemMenu} problemMenuEnabled={problemMenuEnabled}
+        showDisabledProblemMenus={!!contextActions} />
     </div>
   );
 }

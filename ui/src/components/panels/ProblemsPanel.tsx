@@ -9,9 +9,12 @@ interface ProblemsPanelProps {
   onProblemMenu?: (problem: ValidationProblem, screenPosition: { x: number; y: number }, opener: HTMLElement) => boolean;
   /** When provided, every row gets an actions button, enabled when this returns true. */
   problemMenuEnabled?: (problem: ValidationProblem) => boolean;
+  /** Whether rows whose menu is disabled still show a (disabled) actions button; defaults to true. */
+  showDisabledProblemMenus?: boolean;
 }
 
-export function ProblemsPanel({ problems, onProblemClick, onProblemMenu, problemMenuEnabled }: ProblemsPanelProps) {
+export function ProblemsPanel({ problems, onProblemClick, onProblemMenu, problemMenuEnabled,
+  showDisabledProblemMenus = true }: ProblemsPanelProps) {
   const [collapsed, setCollapsed] = useState(false);
   const errors = problems.filter(p => p.severity === 'error');
   const warnings = problems.filter(p => p.severity === 'warning');
@@ -39,7 +42,7 @@ export function ProblemsPanel({ problems, onProblemClick, onProblemMenu, problem
               </span>
               <span className="problems-panel__code">{p.code}</span>
               <span>{p.message}</span>
-              {problemMenuEnabled && (
+              {problemMenuEnabled && (showDisabledProblemMenus || problemMenuEnabled(p)) && (
                 <button type="button" className="problems-panel__menu" aria-label={`Actions for ${p.code}`}
                   aria-haspopup="menu" disabled={!problemMenuEnabled(p)}
                   onClick={event => {
