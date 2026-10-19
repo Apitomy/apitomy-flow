@@ -20,6 +20,18 @@ export type ProposeResult = { status: 'staged' } | { status: 'rejected'; error: 
 /** Result of {@link WorkflowEditorHandle.apply}. */
 export type ApplyResult = { status: 'applied' } | { status: 'rejected'; error: ChangeSetError };
 
+/** The element {@link WorkflowEditorHandle.select} targets. */
+export interface SelectTarget {
+    nodeId?: string;
+    edgeId?: string;
+}
+
+/** Options for {@link WorkflowEditorHandle.select}. */
+export interface SelectOptions {
+    /** Pans and zooms the canvas onto the selected element, like clicking a Problems row. Defaults to `false`. */
+    center?: boolean;
+}
+
 /** Imperative API exposed through the `ref` prop of `WorkflowEditor`. No method throws. */
 export interface WorkflowEditorHandle {
     /** Stages a change set for review, replacing (and withdrawing) any staged proposal. Exits simulation first. */
@@ -40,6 +52,22 @@ export interface WorkflowEditorHandle {
      * must be structured-cloneable, which holds for any workflow supplied as plain JSON data.
      */
     getSnapshot(): EditorSnapshot;
+    /**
+     * Selects a node or edge, highlighting it on the canvas and optionally centering it, the same way clicking a
+     * Problems row does. Works in read-only editors and during simulation.
+     *
+     * - `null` clears the selection.
+     * - An id that is not in the workflow is dropped, as with any selection; if nothing valid remains the
+     *   selection is cleared (never an error) and the canvas does not move.
+     * - Given both ids, both are recorded as the editor selection (as the internal `select` command does);
+     *   the node is the one highlighted and centered on the canvas.
+     * - `center` defaults to `false` so a host can change the selection without moving the user's viewport;
+     *   pass `{ center: true }` to bring the element into view. An edge is centered by fitting both endpoints.
+     *
+     * @param target the node and/or edge to select, or `null` to clear
+     * @param options centering behaviour
+     */
+    select(target: SelectTarget | null, options?: SelectOptions): void;
 }
 
 /** Live accessors the handle needs; the component supplies React-backed ones, tests supply plain ones. */
@@ -50,6 +78,11 @@ export interface HandleAccess {
     problems(): ValidationProblem[];
     /** Layout policy for change sets; defaults to `'place'`. */
     layout?(): AppliedChangeLayout;
+    /**
+     * Mirrors an editor selection onto the canvas (selection flags) and, when `center` is set, moves the
+     * viewport onto it. `target` is the effective single element (`null` when nothing is selected).
+     */
+    reveal?(target: { nodeId: string } | { edgeId: string } | null, center: boolean): void;
 }
 
 type CheckedChangeSet =
@@ -113,6 +146,13 @@ export function createEditorHandle(access: HandleAccess): WorkflowEditorHandle {
             const state = access.state();
             return { workflow: structuredClone(state.document), contentRevision: state.contentRevision,
                 selection: selectionOf(state), problems: structuredClone(access.problems()) };
+        },
+        select(target, options) {
+            access.dispatch({ type: 'select', nodeId: target?.nodeId, edgeId: target?.edgeId });
+            const { selectedNodeId, selectedEdgeId } = access.state();
+            const effective = selectedNodeId ? { nodeId: selectedNodeId }
+                : selectedEdgeId ? { edgeId: selectedEdgeId } : null;
+            access.reveal?.(effective, effective ? options?.center === true : false);
         },
     };
 }

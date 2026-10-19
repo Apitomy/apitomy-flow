@@ -251,6 +251,7 @@ function WorkflowEditorInner({
   // consecutive handle calls (propose → apply) observe each other before React re-renders.
   const stateRef = useRef(state);
   const problemsRef = useRef(validationProblems);
+  const revealRef = useRef<((target: { nodeId: string } | { edgeId: string } | null, center: boolean) => void) | null>(null);
   useLayoutEffect(() => {
     stateRef.current = state;
     problemsRef.current = validationProblems;
@@ -267,6 +268,7 @@ function WorkflowEditorInner({
     readOnly: () => readOnly,
     problems: () => problemsRef.current,
     layout: () => appliedChangeLayout,
+    reveal: (target, center) => revealRef.current?.(target, center),
   }), [readOnly, rawDispatch, appliedChangeLayout]);
 
   const unresolvedIds = useMemo(() => unresolvedActionTypeIds(semanticWorkflow, actionTypeCatalog),
@@ -636,29 +638,34 @@ function WorkflowEditorInner({
     document.addEventListener('mouseup', onMouseUp);
   }, [panelWidth]);
 
+  // Makes one element the visible (highlighted) canvas selection and optionally centers it. Shared by the
+  // Problems panel and the handle's `select`; reads the latest canvas so handle calls never see a stale copy.
+  const revealOnCanvas = useCallback((target: { nodeId: string } | { edgeId: string } | null, center: boolean) => {
+    const { nodes: canvasNodes, edges: canvasEdges } = stateRef.current;
+    const { nodeChanges, edgeChanges } = selectOnlyChanges(canvasNodes, canvasEdges, target ?? { nodeId: '' });
+    if (nodeChanges.length) dispatch({ type: 'nodesChange', changes: nodeChanges });
+    if (edgeChanges.length) dispatch({ type: 'edgesChange', changes: edgeChanges });
+    if (!target || !center) return;
+    if ('nodeId' in target) {
+      const node = canvasNodes.find(n => n.id === target.nodeId);
+      if (node) fitView({ nodes: [node], duration: 300 });
+    } else {
+      // Center on the edge by fitting both of its endpoints into view.
+      const edge = canvasEdges.find(e => e.id === target.edgeId);
+      const ends = edge ? canvasNodes.filter(n => n.id === edge.source || n.id === edge.target) : [];
+      if (ends.length) fitView({ nodes: ends, duration: 300 });
+    }
+  }, [fitView, dispatch]);
+  useLayoutEffect(() => {
+    revealRef.current = revealOnCanvas;
+  }, [revealOnCanvas]);
+
   const onProblemClick = useCallback((problem: ValidationProblem) => {
     if (!problem.nodeId && !problem.edgeId) return;
     const target = problem.nodeId ? { nodeId: problem.nodeId } : { edgeId: problem.edgeId! };
-    // Make the impacted element the visible (highlighted) selection as well as the editor's selection.
-    const { nodeChanges, edgeChanges } = selectOnlyChanges(nodes, edges, target);
-    if (nodeChanges.length) dispatch({ type: 'nodesChange', changes: nodeChanges });
-    if (edgeChanges.length) dispatch({ type: 'edgesChange', changes: edgeChanges });
-    if (problem.nodeId) {
-      dispatch({ type: 'select', nodeId: problem.nodeId });
-      const node = nodes.find(n => n.id === problem.nodeId);
-      if (node) {
-        fitView({ nodes: [node], duration: 300 });
-      }
-    } else {
-      dispatch({ type: 'select', edgeId: problem.edgeId });
-      // Center on the edge by fitting both of its endpoints into view.
-      const edge = edges.find(e => e.id === problem.edgeId);
-      const ends = edge ? nodes.filter(n => n.id === edge.source || n.id === edge.target) : [];
-      if (ends.length) {
-        fitView({ nodes: ends, duration: 300 });
-      }
-    }
-  }, [nodes, edges, fitView, dispatch]);
+    dispatch({ type: 'select', ...target });
+    revealOnCanvas(target, true);
+  }, [revealOnCanvas, dispatch]);
 
   // --- Simulation ---------------------------------------------------------
   // Simulation is not offered when read-only or when the host switches the feature off; leave it if either
