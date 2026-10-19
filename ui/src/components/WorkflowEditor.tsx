@@ -28,6 +28,7 @@ import { analyzeParallelRegions } from '../simulation/parallelRegions.ts';
 import { useHostValidation } from '../hooks/useHostValidation.ts';
 import { useActionTypeCatalog } from '../hooks/useActionTypeCatalog.ts';
 import { unresolvedActionTypeIds } from '../utils/unresolvedActionTypes.ts';
+import { actionAppearanceByNodeId } from '../utils/actionAppearance.ts';
 import {
   buildProposalOverlay, formatCounts, proposalCounts, proposalDetails, splitGhostChanges, validationText, type GhostSizes,
 } from '../changeset/proposalOverlay.ts';
@@ -270,25 +271,29 @@ function WorkflowEditorInner({
 
   const unresolvedIds = useMemo(() => unresolvedActionTypeIds(semanticWorkflow, actionTypeCatalog),
     [semanticWorkflow, actionTypeCatalog]);
+  const appearances = useMemo(() => actionAppearanceByNodeId(semanticWorkflow.nodes, actionTypeCatalog),
+    [semanticWorkflow, actionTypeCatalog]);
 
   const nodesWithValidation = useMemo(() => {
-    if (!validationProblems?.length && !parallelAnalysis && !unresolvedIds.size) return nodes;
+    if (!validationProblems?.length && !parallelAnalysis && !unresolvedIds.size && !appearances.size) return nodes;
     return nodes.map(node => {
       const problems = validationProblems.filter(p => p.nodeId === node.id);
       const role = parallelRole(node.id, parallelAnalysis);
       const unresolved = unresolvedIds.has(node.id)
         ? String((node.data.config as { actionType?: unknown }).actionType) : undefined;
-      return (problems.length || role || unresolved) ? {
+      const appearance = appearances.get(node.id);
+      return (problems.length || role || unresolved || appearance) ? {
         ...node,
         data: {
           ...node.data,
           validationProblems: problems.length ? problems : undefined,
           parallelRole: role,
           unresolvedActionType: unresolved,
+          actionAppearance: appearance,
         },
       } : node;
     });
-  }, [nodes, validationProblems, parallelAnalysis, unresolvedIds]);
+  }, [nodes, validationProblems, parallelAnalysis, unresolvedIds, appearances]);
 
   const selectedNodeProblems = useMemo(
     () => (selectedNodeId ? validationProblems.filter(p => p.nodeId === selectedNodeId) : []),

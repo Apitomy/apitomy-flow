@@ -2,6 +2,7 @@ import {type Edge, MarkerType, type Node} from '@xyflow/react';
 import {type Workflow, type WorkflowEdge, type WorkflowNode, type NodeConfigMap, type NodeType} from '../types/workflow.ts';
 import {type ValidationProblem} from '../types/validation.ts';
 import {type ParallelRole} from './parallelView.ts';
+import {type ActionAppearance} from './actionAppearance.ts';
 
 export type FlowNodeData = { [K in NodeType]: Record<string, unknown> & {
   name: string;
@@ -10,6 +11,8 @@ export type FlowNodeData = { [K in NodeType]: Record<string, unknown> & {
   validationProblems?: ValidationProblem[];
   /** Action Type value not found in the loaded catalog (editor only). */
   unresolvedActionType?: string;
+  /** Host-chosen icon/color for an Action node, from its Action Type descriptor. */
+  actionAppearance?: ActionAppearance;
   /** Static fork/join role for the authoring hint, if any (editor only). */
   parallelRole?: ParallelRole;
   /** Wire fields retained for host extensions when converting back from the canvas. */

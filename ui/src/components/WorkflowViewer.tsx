@@ -3,6 +3,9 @@ import { ReactFlow, Background, Controls, ReactFlowProvider, type Node } from '@
 import { AngleDoubleRightIcon, AngleDoubleLeftIcon } from '@patternfly/react-icons';
 import { type HistoryEntry, type InstanceStatus } from '../types/instance.ts';
 import { type Workflow } from '../types/workflow.ts';
+import { type ActionTypeProvider } from '../types/spi.ts';
+import { useActionTypeCatalog } from '../hooks/useActionTypeCatalog.ts';
+import { actionAppearanceByNodeId } from '../utils/actionAppearance.ts';
 import { type WorkflowInstance } from '../types/instance.ts';
 import { toReactFlowNodes, toReactFlowEdges } from '../utils/conversion.ts';
 import { nodeVisits, nodeVisitsByBranch, type NodeBranchVisits } from '../utils/nodeHistory.ts';
@@ -50,9 +53,14 @@ export interface WorkflowViewerProps {
   nodeContextMenuItems?:
     | WorkflowViewerNodeMenuItem[]
     | ((nodeId: string) => WorkflowViewerNodeMenuItem[]);
+  /**
+   * The Action Type catalog, used for Action node icons and colors. Pass the same value as the editor's
+   * `spi.actionTypes` so both components render action types identically.
+   */
+  actionTypes?: ActionTypeProvider;
 }
 
-function WorkflowViewerInner({ workflow, instance, theme = 'light', nodeContextMenuItems }: WorkflowViewerProps) {
+function WorkflowViewerInner({ workflow, instance, theme = 'light', nodeContextMenuItems, actionTypes }: WorkflowViewerProps) {
   const visitedNodeIds = useMemo(
     () => new Set(instance.history.map(h => h.nodeId)),
     [instance.history],
@@ -103,6 +111,10 @@ function WorkflowViewerInner({ workflow, instance, theme = 'light', nodeContextM
   const [contextMenu, setContextMenu] = useState<{ nodeId: string; x: number; y: number } | null>(null);
   const isResizing = useRef(false);
 
+  const actionTypeCatalog = useActionTypeCatalog(actionTypes);
+  const appearances = useMemo(() => actionAppearanceByNodeId(laidOutNodes, actionTypeCatalog),
+    [laidOutNodes, actionTypeCatalog]);
+
   const nodes = useMemo(() => {
     return toReactFlowNodes(laidOutNodes).map(node => {
       const isCurrent = activeIds.has(node.id);
@@ -121,13 +133,13 @@ function WorkflowViewerInner({ workflow, instance, theme = 'light', nodeContextM
       }
       return {
         ...node,
-        data: { ...node.data, isCurrent: isCurrent && !isTerminal },
+        data: { ...node.data, isCurrent: isCurrent && !isTerminal, actionAppearance: appearances.get(node.id) },
         className,
         selected: isNodeSelected(node.id, selectedNodeId),
         draggable: false,
       };
     });
-  }, [laidOutNodes, activeIds, instance.status, isTerminal, visitedNodeIds, selectedNodeId]);
+  }, [laidOutNodes, activeIds, instance.status, isTerminal, visitedNodeIds, selectedNodeId, appearances]);
 
   const edges = useMemo(() => {
     return toReactFlowEdges(workflow.edges).map(edge => {

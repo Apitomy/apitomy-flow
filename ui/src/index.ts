@@ -6,6 +6,7 @@ export type {
 export type { WorkflowInstance, InstanceStatus, HistoryEntry, ActiveBranch } from './types/instance.ts';
 export type { ValidationProblem, ValidationSeverity } from './types/validation.ts';
 export type { EditorSpi, ActionTypeDescriptor, ActionTypeField, ActionTypeProvider, WorkflowValidator, FlowTarget, FlowContext, ContextAction } from './types/spi.ts';
+export type { ActionAppearance } from './utils/actionAppearance.ts';
 export { WorkflowEditor, type WorkflowEditorProps, type FlowTheme, type EditorFeatures } from './components/WorkflowEditor.tsx';
 export { WorkflowViewer, type WorkflowViewerProps, type WorkflowViewerNodeMenuItem } from './components/WorkflowViewer.tsx';
 export { serializeWorkflow, parseWorkflow, downloadWorkflowJson, workflowFileName, type ImportResult } from './utils/workflowIo.ts';

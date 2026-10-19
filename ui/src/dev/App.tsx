@@ -315,6 +315,7 @@ function App() {
             instance={selectedViewerScenario.instance}
             theme={theme}
             nodeContextMenuItems={nodeContextMenuItems}
+            actionTypes={demoCatalog}
           />
         )}
         {activeView === 'ai' && <AiAssistedEditorDemo theme={theme} />}

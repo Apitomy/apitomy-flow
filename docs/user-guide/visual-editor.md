@@ -385,6 +385,8 @@ interface ActionTypeDescriptor {
   description?: string;
   inputs?: ActionTypeField[];
   outputs?: ActionTypeField[];
+  icon?: ReactNode;              // shown on Action nodes of this type and in the dropdown
+  color?: string;                // accent color (any CSS color) for the node border and icon
 }
 
 interface ActionTypeField {
@@ -394,6 +396,14 @@ interface ActionTypeField {
   description?: string;
 }
 ```
+
+##### Action node icons and colors
+
+Set `icon` and/or `color` on a descriptor to make Action nodes of that type easy to tell apart. `icon`
+replaces the default play icon (it is sized to 16px). `color` is a single accent applied to the node border
+and icon; the background and text keep their theme colors so nodes stay readable in light and dark mode.
+Nodes whose type has no descriptor, or whose catalog is still loading, use the default look. Pass the same
+catalog to `WorkflowViewer`'s `actionTypes` prop so running workflows look the same.
 
 #### Host-provided validation
 

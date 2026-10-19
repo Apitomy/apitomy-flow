@@ -70,7 +70,8 @@ export function ActionTypeSelect({ value, actionTypes, loading, disabled = false
             toggle={toggle} shouldFocusFirstItemOnOpen={false}>
             <SelectList>
                 {filteredOptions.map(action => (
-                    <SelectOption key={action.value} value={action.value} description={action.description}>
+                    <SelectOption key={action.value} value={action.value} description={action.description}
+                        icon={action.icon}>
                         {action.label}
                     </SelectOption>
                 ))}

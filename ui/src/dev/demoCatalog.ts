@@ -1,3 +1,5 @@
+import { createElement } from 'react';
+import { EnvelopeIcon, GlobeIcon, BugIcon, TicketAltIcon, SearchIcon } from '@patternfly/react-icons';
 import { type ActionTypeDescriptor, type WorkflowValidator } from '../types/spi.ts';
 import { type ValidationProblem } from '../types/validation.ts';
 
@@ -6,6 +8,8 @@ import { type ValidationProblem } from '../types/validation.ts';
 export const demoCatalog: ActionTypeDescriptor[] = [
   {
     value: 'send-email',
+    icon: createElement(EnvelopeIcon),
+    color: '#c9190b',
     label: 'Send Email',
     description: 'Send an email notification via the configured SMTP gateway',
     inputs: [
@@ -21,6 +25,7 @@ export const demoCatalog: ActionTypeDescriptor[] = [
   },
   {
     value: 'http-request',
+    icon: createElement(GlobeIcon),
     label: 'HTTP Request',
     description: 'Make an outbound HTTP request to an external service',
     inputs: [
@@ -37,6 +42,8 @@ export const demoCatalog: ActionTypeDescriptor[] = [
   },
   {
     value: 'lookup-cve',
+    icon: createElement(BugIcon),
+    color: '#8476d1',
     label: 'Lookup CVE',
     description: 'Query the NVD database for CVE details and severity scores',
     inputs: [
@@ -51,6 +58,8 @@ export const demoCatalog: ActionTypeDescriptor[] = [
   },
   {
     value: 'create-jira-ticket',
+    icon: createElement(TicketAltIcon),
+    color: '#f0ab00',
     label: 'Create Jira Ticket',
     description: 'Create a new issue in the configured Jira project',
     inputs: [
@@ -67,6 +76,8 @@ export const demoCatalog: ActionTypeDescriptor[] = [
   },
   {
     value: 'analyze-cve',
+    icon: createElement(SearchIcon),
+    color: '#009596',
     label: 'Analyze CVE',
     description: 'Analyze a CVE to determine its severity and affected versions',
     inputs: [
