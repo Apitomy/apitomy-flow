@@ -241,6 +241,12 @@ function validateEdgeConditions(workflow: Workflow, problems: ValidationProblem[
         problems.push(problem('warning', 'SINGLE_CONDITIONAL_EDGE',
           'Node has a single outgoing edge with a condition but no fallback', sourceId));
       }
+      // A lone unconditional default is simply followed; the flag does nothing.
+      if (only.isDefault && !(only.condition && only.condition.trim() !== '')) {
+        problems.push(problem('warning', 'REDUNDANT_DEFAULT_EDGE',
+          "Default edge is the node's only outgoing edge; a default is only needed as the fallback for conditional edges.",
+          undefined, only.id));
+      }
       continue;
     }
 

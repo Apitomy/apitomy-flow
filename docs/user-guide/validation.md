@@ -127,6 +127,7 @@ Some codes in later tables can therefore be errors for malformed types and warni
 | `DUPLICATE_EDGE` | Multiple edges share the same source and target |
 | `DEFAULT_EDGE_WITH_CONDITION` | Default edge has a condition that will never be evaluated |
 | `SINGLE_CONDITIONAL_EDGE` | Node has a single outgoing edge with a condition but no fallback |
+| `REDUNDANT_DEFAULT_EDGE` | Default edge is the node's only outgoing edge; a default is only needed as the fallback for conditional edges. (Timeout edges are not counted; quick fix: "Remove default flag") |
 | `NO_DEFAULT_EDGE` | Node has multiple conditional edges but no default fallback |
 | `MULTIPLE_DEFAULT_EDGES` | Node has more than one default edge |
 | `INVALID_CONDITION` | Edge condition is not syntactically valid EL |
