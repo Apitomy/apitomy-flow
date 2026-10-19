@@ -49,6 +49,6 @@ export type {
 export { applyChangeSet, applyChangeSetChecked } from './changeset/applyChangeSet.ts';
 export type { AppliedChangeLayout } from './changeset/appliedLayout.ts';
 export type {
-    WorkflowEditorHandle, EditorSnapshot, ProposeResult, ApplyResult,
+    WorkflowEditorHandle, EditorSnapshot, ProposeResult, ApplyResult, SelectTarget, SelectOptions,
 } from './hooks/editorHandle.ts';
 export type { EditorSelection } from './hooks/editorNotifications.ts';

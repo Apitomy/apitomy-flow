@@ -129,4 +129,64 @@ describe('handle while simulating (#192)', () => {
         expect(handle.apply(rename('sha256:old')).status).toBe('rejected');
         expect(state().simulating).toBe(true);
     });
+
+    describe('select', () => {
+        function revealHarness() {
+            let state: EditorState = createEditorState(workflow());
+            const reveals: unknown[] = [];
+            const handle = createEditorHandle({
+                state: () => state,
+                dispatch: (command: EditorCommand) => { state = editorReducer(state, command); },
+                readOnly: () => false,
+                problems: () => [],
+                reveal: (target, center) => { reveals.push({ target, center }); },
+            });
+            return { handle, state: () => state, reveals };
+        }
+
+        it('selects a node and reveals it without centering by default', () => {
+            const { handle, state, reveals } = revealHarness();
+            handle.select({ nodeId: 'e' });
+            expect(state().selectedNodeId).toBe('e');
+            expect(reveals).toEqual([{ target: { nodeId: 'e' }, center: false }]);
+        });
+
+        it('selects an edge and centers it on request', () => {
+            const { handle, state, reveals } = revealHarness();
+            handle.select({ edgeId: 'se' }, { center: true });
+            expect(state().selectedEdgeId).toBe('se');
+            expect(reveals).toEqual([{ target: { edgeId: 'se' }, center: true }]);
+        });
+
+        it('clears the selection for null', () => {
+            const { handle, state, reveals } = revealHarness();
+            handle.select({ nodeId: 's' });
+            handle.select(null, { center: true });
+            expect(state().selectedNodeId).toBeNull();
+            expect(state().selectedEdgeId).toBeNull();
+            expect(reveals.at(-1)).toEqual({ target: null, center: false });
+        });
+
+        it('clears the selection for unknown ids', () => {
+            const { handle, state, reveals } = revealHarness();
+            handle.select({ nodeId: 's' });
+            handle.select({ nodeId: 'missing' }, { center: true });
+            expect(state().selectedNodeId).toBeNull();
+            expect(reveals.at(-1)).toEqual({ target: null, center: false });
+        });
+
+        it('keeps both ids like dispatch and reveals the node', () => {
+            const { handle, state, reveals } = revealHarness();
+            handle.select({ nodeId: 's', edgeId: 'se' }, { center: true });
+            expect(state().selectedNodeId).toBe('s');
+            expect(state().selectedEdgeId).toBe('se');
+            expect(reveals).toEqual([{ target: { nodeId: 's' }, center: true }]);
+        });
+
+        it('selects even when read-only', () => {
+            const { handle, state } = harness(true);
+            handle.select({ nodeId: 'e' });
+            expect(state().selectedNodeId).toBe('e');
+        });
+    });
 });

@@ -132,6 +132,7 @@ Inputs must be structured-cloneable plain JSON data; a change set that cannot be
 | `replace(workflow, origin?)` | Replaces the whole document as one undo step. Exits simulation first. `origin` defaults to `'host'`. |
 | `clearHighlights()` | Removes the applied-change highlight. |
 | `getSnapshot()` | `{ workflow, contentRevision, selection, problems }` (a detached copy). |
+| `select(target, options?)` | Selects `{ nodeId }` or `{ edgeId }` and highlights it on the canvas; `{ center: true }` also pans to it like clicking a Problems row (default `false`). `null` or an unknown id clears the selection. Given both ids, both are selected and the node is highlighted and centered. Works when read-only. |
 
 `apply` produces exactly one undo step tagged with `origin = cs.author`. The `workflow` prop remains
 seed-only; use `replace` to push a new document from the host.
