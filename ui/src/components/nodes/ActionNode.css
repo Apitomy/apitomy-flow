@@ -3,7 +3,7 @@
   border-radius: 8px;
   background: var(--flow-node-action-bg, #e0ecff);
   color: var(--flow-node-action-text, #002952);
-  border: 2px solid var(--flow-node-action-border, #06c);
+  border: 2px solid var(--flow-node-action-accent, var(--flow-node-action-border, #06c));
   display: flex;
   align-items: center;
   gap: 8px;
@@ -12,3 +12,14 @@
 }
 .flow-node-action:hover { box-shadow: 0 2px 8px var(--flow-shadow, rgba(0, 0, 0, 0.12)); filter: brightness(0.97); }
 .flow-node-action.selected { box-shadow: 0 0 0 2px var(--flow-brand, #06c); }
+.flow-node-action-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--flow-node-action-accent, inherit);
+}
+.flow-node-action-icon > svg,
+.flow-node-action-icon > img { width: 100%; height: 100%; }
