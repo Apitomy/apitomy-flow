@@ -45,7 +45,12 @@ export interface WorkflowEditorHandle {
      * `'host'`. The workflow must be structured-cloneable (plain JSON data).
      */
     replace(workflow: Workflow, origin?: Origin): void;
-    /** Removes the highlight left by the last applied change set. */
+    /**
+     * Clears the canvas selection (selection flags and the primary selection). Applied change sets are now
+     * shown by selecting their elements rather than highlighting them, so this simply deselects.
+     *
+     * @deprecated Applied changes are no longer highlighted; deselect via the canvas or {@link select} instead.
+     */
     clearHighlights(): void;
     /**
      * Returns a detached copy of the current document, revision, selection and problems. The document
@@ -78,6 +83,8 @@ export interface HandleAccess {
     problems(): ValidationProblem[];
     /** Layout policy for change sets; defaults to `'place'`. */
     layout?(): AppliedChangeLayout;
+    /** Whether applied change sets select their added and modified elements; defaults to true. */
+    selectApplied?(): boolean;
     /**
      * Mirrors an editor selection onto the canvas (selection flags) and, when `center` is set, moves the
      * viewport onto it. `target` is the effective single element (`null` when nothing is selected).
@@ -129,7 +136,8 @@ export function createEditorHandle(access: HandleAccess): WorkflowEditorHandle {
             }
             const checked = cloneAndCheck(access.state(), changeSet);
             if (!checked.ok) return { status: 'rejected', error: checked.error };
-            access.dispatch({ type: 'applyChangeSet', changeSet: checked.changeSet, layout: access.layout?.() ?? 'place' });
+            access.dispatch({ type: 'applyChangeSet', changeSet: checked.changeSet, layout: access.layout?.() ?? 'place',
+                selectApplied: access.selectApplied?.() ?? true });
             return { status: 'applied' };
         },
         withdraw(id) {

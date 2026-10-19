@@ -24,7 +24,7 @@ const rfEdges = () => toReactFlowEdges(current.edges);
 
 describe('buildProposalOverlay', () => {
     it('marks modified and removed elements and adds non-interactive ghosts', () => {
-        const overlay = buildProposalOverlay(rfNodes(), rfEdges(), current, proposal(), null);
+        const overlay = buildProposalOverlay(rfNodes(), rfEdges(), current, proposal());
         const byId = Object.fromEntries(overlay.nodes.map(node => [node.id, node]));
         expect(byId.s.className ?? '').not.toContain('flow-proposal');
         expect(byId.a.className).toContain('flow-proposal--modified');
@@ -36,18 +36,8 @@ describe('buildProposalOverlay', () => {
     });
 
     it('adds a stale modifier', () => {
-        const overlay = buildProposalOverlay(rfNodes(), rfEdges(), current, proposal(true), null);
+        const overlay = buildProposalOverlay(rfNodes(), rfEdges(), current, proposal(true));
         expect(overlay.nodes.find(node => node.id === 'a')?.className).toContain('flow-proposal--stale');
-    });
-
-    it('applies the highlight only when no proposal is staged', () => {
-        const highlight = { nodeIds: ['a'], edgeIds: ['sa'] };
-        const plain = buildProposalOverlay(rfNodes(), rfEdges(), current, null, highlight);
-        expect(plain.status).toBeNull();
-        expect(plain.nodes.find(node => node.id === 'a')?.className).toContain('flow-applied');
-        expect(plain.edges.find(edge => edge.id === 'sa')?.className).toContain('flow-applied');
-        const staged = buildProposalOverlay(rfNodes(), rfEdges(), current, proposal(), highlight);
-        expect(staged.nodes.find(node => node.id === 'a')?.className).not.toContain('flow-applied');
     });
 });
 
@@ -77,10 +67,10 @@ describe('proposalDetails', () => {
 });
 
 describe('overlay pass-through and unknown ids', () => {
-    it('returns the editor elements unchanged with no proposal and no highlight', () => {
+    it('returns the editor elements unchanged with no proposal', () => {
         const nodes = rfNodes();
         const edges = rfEdges();
-        const overlay = buildProposalOverlay(nodes, edges, current, null, null);
+        const overlay = buildProposalOverlay(nodes, edges, current, null);
         expect(overlay.nodes).toBe(nodes);
         expect(overlay.edges).toBe(edges);
         expect(overlay.status).toBeNull();
@@ -109,7 +99,7 @@ describe('proposal preview positions', () => {
     it('draws existing nodes where the preview puts them (for example after a tidy)', () => {
         const moved: StagedProposal = { ...proposal(), preview: { ...preview, nodes: preview.nodes.map(node =>
             node.id === 's' ? { ...node, position: { x: 999, y: 7 } } : node) } };
-        const overlay = buildProposalOverlay(rfNodes(), rfEdges(), current, moved, null);
+        const overlay = buildProposalOverlay(rfNodes(), rfEdges(), current, moved);
         expect(overlay.nodes.find(node => node.id === 's')?.position).toEqual({ x: 999, y: 7 });
         expect(overlay.nodes.find(node => node.id === 'x')?.position).toEqual({ x: 400, y: 0 });
     });

@@ -4,7 +4,7 @@ import { toReactFlowEdges, toReactFlowNodes, type FlowNodeData } from '../utils/
 import { jsonEqual } from '../utils/jsonEqual.ts';
 import { changeStatus, type ChangeKind, type ChangeStatusMap } from './changeStatus.ts';
 import type { ValidationDelta } from './validationDelta.ts';
-import type { Highlight, StagedProposal } from './types.ts';
+import type { StagedProposal } from './types.ts';
 
 /** Canvas elements to render plus the classification used to build them (null without a proposal). */
 export interface ProposalOverlay {
@@ -33,27 +33,17 @@ const withClass = (existing: string | undefined, extra: string) => [existing, ex
 
 /**
  * Decorates the editor's canvas elements with the staged proposal (ghost additions, modified and removed
- * markers) or, with no proposal, with the applied-change highlight.
+ * markers). With no proposal the elements pass through unchanged.
  *
  * @param nodes the editor's display nodes
  * @param edges the editor's display edges
  * @param document the current workflow
  * @param proposal the staged proposal, if any
- * @param highlight the applied-change highlight, if any and enabled
  * @returns the elements to hand to React Flow
  */
 export function buildProposalOverlay(nodes: Node<FlowNodeData>[], edges: Edge[], document: Workflow,
-    proposal: StagedProposal | null, highlight: Highlight | null): ProposalOverlay {
-    if (!proposal) {
-        if (!highlight) return { nodes, edges, status: null };
-        const nodeIds = new Set(highlight.nodeIds);
-        const edgeIds = new Set(highlight.edgeIds);
-        return {
-            nodes: nodes.map(node => nodeIds.has(node.id) ? { ...node, className: withClass(node.className, 'flow-applied') } : node),
-            edges: edges.map(edge => edgeIds.has(edge.id) ? { ...edge, className: withClass(edge.className, 'flow-applied') } : edge),
-            status: null,
-        };
-    }
+    proposal: StagedProposal | null): ProposalOverlay {
+    if (!proposal) return { nodes, edges, status: null };
     const status = changeStatus(document, proposal.preview);
     const stale = proposal.stale ? ' flow-proposal--stale' : '';
     const marker = (kind: ChangeKind | undefined) =>

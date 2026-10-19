@@ -146,7 +146,10 @@ export interface WorkflowEditorProps {
   onProposalResolved?: (id: string, outcome: ProposalOutcome) => void;
   /** Called when the set of selected nodes/edges changes. */
   onSelectionChange?: (selection: EditorSelection) => void;
-  /** Keep elements changed by the last applied change set highlighted. Defaults to true. */
+  /**
+   * Select the elements added or modified by an applied change set (or accepted proposal) on the canvas,
+   * replacing the current selection. Defaults to true.
+   */
   highlightApplied?: boolean;
   /**
    * How change sets from `propose`/`apply` are laid out. `'place'` (default) positions only new nodes, next to
@@ -268,8 +271,9 @@ function WorkflowEditorInner({
     readOnly: () => readOnly,
     problems: () => problemsRef.current,
     layout: () => appliedChangeLayout,
+    selectApplied: () => highlightApplied,
     reveal: (target, center) => revealRef.current?.(target, center),
-  }), [readOnly, rawDispatch, appliedChangeLayout]);
+  }), [readOnly, rawDispatch, appliedChangeLayout, highlightApplied]);
 
   const unresolvedIds = useMemo(() => unresolvedActionTypeIds(semanticWorkflow, actionTypeCatalog),
     [semanticWorkflow, actionTypeCatalog]);
@@ -778,12 +782,11 @@ function WorkflowEditorInner({
   }, [edges, simActive, simState]);
 
   const overlay = useMemo(() => {
-    const built = buildProposalOverlay(displayNodes, displayEdges, currentWorkflow, proposal,
-      highlightApplied ? state.highlight : null);
+    const built = buildProposalOverlay(displayNodes, displayEdges, currentWorkflow, proposal);
     const sizes = proposal && ghostSizes?.proposalId === proposal.changeSet.id ? ghostSizes.sizes : {};
     return { ...built, nodes: built.nodes.map(node => built.status?.nodes[node.id] === 'added' && sizes[node.id]
       ? { ...node, measured: sizes[node.id] } : node) };
-  }, [displayNodes, displayEdges, currentWorkflow, proposal, highlightApplied, state.highlight, ghostSizes]);
+  }, [displayNodes, displayEdges, currentWorkflow, proposal, ghostSizes]);
   // Focus is tied to a proposal id so it resets automatically when the proposal changes.
   const [proposalFocus, setProposalFocus] = useState<{ proposalId: string; elementId: string } | null>(null);
   const focusedDetails = proposal && proposalFocus?.proposalId === proposal.changeSet.id
@@ -917,7 +920,7 @@ function WorkflowEditorInner({
                   counts={formatCounts(proposalCounts(overlay.status!))}
                   validation={proposalValidation}
                   details={focusedDetails}
-                  onAccept={() => dispatch({ type: 'acceptProposal' })}
+                  onAccept={() => dispatch({ type: 'acceptProposal', selectApplied: highlightApplied })}
                   onReject={() => dispatch({ type: 'rejectProposal' })}
                 />
               </Panel>

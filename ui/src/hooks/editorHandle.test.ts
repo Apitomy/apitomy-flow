@@ -10,7 +10,7 @@ const workflow = (): Workflow => ({ id: 'w', name: 'W', nodes: [
     { id: 'e', type: 'end', name: 'E', config: {}, position: { x: 300, y: 0 } },
 ], edges: [{ id: 'se', source: 's', target: 'e', priority: 0, isDefault: false }] });
 
-function harness(readOnly = false, layout: 'place' | 'tidy' = 'place') {
+function harness(readOnly = false, layout: 'place' | 'tidy' = 'place', selectApplied?: boolean) {
     let state: EditorState = createEditorState(workflow());
     const handle = createEditorHandle({
         state: () => state,
@@ -21,12 +21,16 @@ function harness(readOnly = false, layout: 'place' | 'tidy' = 'place') {
         readOnly: () => readOnly,
         problems: () => [],
         layout: () => layout,
+        ...(selectApplied === undefined ? {} : { selectApplied: () => selectApplied }),
     });
     return { handle, state: () => state, dispatch: (command: EditorCommand) => { state = editorReducer(state, command); } };
 }
 
 const rename = (baseRevision: string, id = 'cs'): ChangeSet =>
     ({ id, baseRevision, author: 'agent:t', summary: 'Rename', ops: [{ op: 'metadata', patch: { name: 'New' } }] });
+
+const renameEnd = (baseRevision: string): ChangeSet => ({ id: 'n', baseRevision, author: 'agent:t', summary: 'Rename end',
+    ops: [{ op: 'updateNode', id: 'e', patch: { name: 'End' } }] });
 
 describe('createEditorHandle', () => {
     it('stages a valid proposal', () => {
@@ -78,11 +82,21 @@ describe('createEditorHandle', () => {
         expect(state().document.nodes[2].position).toBeDefined();
     });
 
-    it('withdraws, clears highlights and returns detached snapshots', () => {
+    it('does not select applied changes when the host disables it', () => {
+        const { handle, state } = harness(false, 'place', false);
+        handle.apply(renameEnd(handle.getSnapshot().contentRevision));
+        expect(state().nodes.some(node => node.selected)).toBe(false);
+        expect(state().selectedNodeId).toBeNull();
+    });
+
+    it('withdraws, clears the applied selection and returns detached snapshots', () => {
         const { handle, state } = harness();
-        handle.apply(rename(handle.getSnapshot().contentRevision, 'a'));
+        handle.apply(renameEnd(handle.getSnapshot().contentRevision));
+        expect(state().nodes.filter(node => node.selected).map(node => node.id)).toEqual(['e']);
+        expect(state().selectedNodeId).toBe('e');
         handle.clearHighlights();
-        expect(state().highlight).toBeNull();
+        expect(state().nodes.some(node => node.selected)).toBe(false);
+        expect(state().selectedNodeId).toBeNull();
         handle.propose(rename(handle.getSnapshot().contentRevision, 'b'));
         handle.withdraw('b');
         expect(state().proposal).toBeNull();

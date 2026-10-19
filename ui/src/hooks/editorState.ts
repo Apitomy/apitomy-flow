@@ -6,8 +6,8 @@ import { jsonEqual } from '../utils/jsonEqual.ts';
 import { computeContentRevision } from '../changeset/contentRevision.ts';
 import { applyChangeSetChecked } from '../changeset/applyChangeSet.ts';
 import { layoutAppliedChange, type AppliedChangeLayout } from '../changeset/appliedLayout.ts';
-import { changeStatus, highlightOf } from '../changeset/changeStatus.ts';
-import type { ChangeSet, Highlight, Origin, ProposalEvent, ProposalOutcome, StagedProposal } from '../changeset/types.ts';
+import { appliedChangesOf, changeStatus } from '../changeset/changeStatus.ts';
+import type { ChangeSet, Origin, ProposalEvent, ProposalOutcome, StagedProposal } from '../changeset/types.ts';
 
 interface Selection {
     selectedNodeId: string | null;
@@ -40,8 +40,6 @@ export interface EditorState extends Omit<Snapshot, 'selectedNodeIds' | 'selecte
     interactive: boolean;
     /** The single proposal under review, if any. Not part of undo history. */
     proposal: StagedProposal | null;
-    /** Elements changed by the most recently applied change set. Not part of undo history. */
-    highlight: Highlight | null;
     /** Recent proposal resolutions, drained by `createProposalPublisher`. */
     proposalEvents: ProposalEvent[];
     /** Sequence number of the last emitted proposal event. */
@@ -51,8 +49,9 @@ export interface EditorState extends Omit<Snapshot, 'selectedNodeIds' | 'selecte
 export type EditorCommand =
     | { type: 'propose'; changeSet: ChangeSet; preview: Workflow }
     | { type: 'withdraw'; id: string }
-    | { type: 'applyChangeSet'; changeSet: ChangeSet; layout?: AppliedChangeLayout }
-    | { type: 'acceptProposal' }
+    /** `selectApplied` (default true) selects the added and modified elements on the canvas. */
+    | { type: 'applyChangeSet'; changeSet: ChangeSet; layout?: AppliedChangeLayout; selectApplied?: boolean }
+    | { type: 'acceptProposal'; selectApplied?: boolean }
     | { type: 'rejectProposal' }
     | { type: 'clearHighlights' }
     | { type: 'select'; nodeId?: string; edgeId?: string }
@@ -85,7 +84,7 @@ export function createEditorState(workflow: Workflow): EditorState {
         selectedNodeId: null, selectedEdgeId: null, past: [], future: [], revision: fallback ? 1 : 0,
         simulating: false, interactive: true, draftReset: 0,
         contentRevision: computeContentRevision(document), origin: 'user',
-        proposal: null, highlight: null, proposalEvents: [], proposalSeq: 0,
+        proposal: null, proposalEvents: [], proposalSeq: 0,
     };
 }
 
@@ -304,20 +303,45 @@ function leaveSimulation(state: EditorState): EditorState {
  * layout is exactly the reviewed one); otherwise the change set is applied and laid out per `layout`.
  */
 function applyChangeSetCommand(state: EditorState, changeSet: ChangeSet, layout: AppliedChangeLayout = 'place',
-    staged?: Workflow): EditorState {
+    staged?: Workflow, selectApplied = true): EditorState {
     const result = applyChangeSetChecked(state.document, changeSet, state.contentRevision);
     if (!result.ok) return state;
     // Change sets never land under a running simulation: leave it first, like `replace` (#192).
     state = leaveSimulation(state);
-    const committed = commit(state, staged ?? layoutAppliedChange(result.workflow, changeSet, layout));
-    let next: EditorState = { ...committed, origin: changeSet.author, group: undefined,
-        highlight: highlightOf(changeStatus(state.document, committed.document)) };
+    const document = staged ?? layoutAppliedChange(result.workflow, changeSet, layout);
+    let committed: EditorState;
+    if (selectApplied) {
+        // Applied elements become the canvas selection, recorded in history so redo re-selects them.
+        const { nodeIds, edgeIds } = appliedChangesOf(changeStatus(state.document, document));
+        const single = nodeIds.length + edgeIds.length === 1;
+        const primary = { selectedNodeId: single && nodeIds.length ? nodeIds[0] : null,
+            selectedEdgeId: single && edgeIds.length ? edgeIds[0] : null };
+        committed = commit(state, document, undefined, primary, state.nodeKeys, false,
+            { selectedNodeIds: nodeIds, selectedEdgeIds: edgeIds });
+        if (committed !== state && (primary.selectedNodeId !== state.selectedNodeId
+            || primary.selectedEdgeId !== state.selectedEdgeId)) {
+            committed = { ...committed, draftReset: committed.draftReset + 1 };
+        }
+    } else {
+        committed = commit(state, document);
+    }
+    let next: EditorState = { ...committed, origin: changeSet.author, group: undefined };
     if (state.proposal?.changeSet.id === changeSet.id) {
         next = { ...emit(next, changeSet.id, 'accepted'), proposal: null };
     } else if (next.contentRevision !== state.contentRevision) {
         next = markStale(next);
     }
     return next;
+}
+
+/** Clears the canvas selection flags and the primary selection (the deprecated `clearHighlights`). */
+function clearSelection(state: EditorState): EditorState {
+    const flagged = state.nodes.some(node => node.selected) || state.edges.some(edge => edge.selected);
+    if (!flagged && state.selectedNodeId === null && state.selectedEdgeId === null) return state;
+    return { ...state, selectedNodeId: null, selectedEdgeId: null, group: undefined,
+        draftReset: state.draftReset + (state.selectedNodeId !== null || state.selectedEdgeId !== null ? 1 : 0),
+        nodes: state.nodes.map(node => node.selected ? { ...node, selected: false } : node),
+        edges: state.edges.map(edge => edge.selected ? { ...edge, selected: false } : edge) };
 }
 
 /** Applies one atomic editor command without effects, clocks, IDs, or mutable history refs. */
@@ -342,18 +366,19 @@ export function editorReducer(state: EditorState, command: EditorCommand): Edito
         }
         case 'acceptProposal':
             return state.proposal && !state.proposal.stale
-                ? applyChangeSetCommand(state, state.proposal.changeSet, 'place', state.proposal.preview) : state;
+                ? applyChangeSetCommand(state, state.proposal.changeSet, 'place', state.proposal.preview,
+                    command.selectApplied ?? true) : state;
         case 'applyChangeSet':
-            return applyChangeSetCommand(state, command.changeSet, command.layout);
+            return applyChangeSetCommand(state, command.changeSet, command.layout, undefined,
+                command.selectApplied ?? true);
         case 'clearHighlights':
-            return state.highlight ? { ...state, highlight: null } : state;
+            return clearSelection(state);
     }
     const next = reduceCommand(state, command);
     if (next === state || next.revision === state.revision) return next;
     const origin = commandOrigin(command);
     let result: EditorState = { ...next, origin };
     if (result.contentRevision !== state.contentRevision) {
-        if (origin === 'user' && result.highlight) result = { ...result, highlight: null };
         result = markStale(result);
     }
     return result;
