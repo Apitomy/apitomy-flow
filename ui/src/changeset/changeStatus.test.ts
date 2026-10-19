@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { changeStatus, highlightOf } from './changeStatus.ts';
+import { changeStatus, appliedChangesOf } from './changeStatus.ts';
 import type { Workflow } from '../types/workflow.ts';
 
 const before: Workflow = { id: 'w', name: 'W', nodes: [
@@ -24,10 +24,10 @@ describe('changeStatus', () => {
     });
 });
 
-describe('highlightOf', () => {
-    it('lists added and modified ids sorted, and returns null when nothing changed', () => {
-        expect(highlightOf(changeStatus(before, after))).toEqual({ nodeIds: ['a', 'n'], edgeIds: ['an'] });
-        expect(highlightOf(changeStatus(before, before))).toBeNull();
+describe('appliedChangesOf', () => {
+    it('lists added and modified ids sorted, and nothing when nothing changed', () => {
+        expect(appliedChangesOf(changeStatus(before, after))).toEqual({ nodeIds: ['a', 'n'], edgeIds: ['an'] });
+        expect(appliedChangesOf(changeStatus(before, before))).toEqual({ nodeIds: [], edgeIds: [] });
     });
 });
 

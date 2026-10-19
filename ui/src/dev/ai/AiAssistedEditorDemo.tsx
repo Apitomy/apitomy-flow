@@ -79,7 +79,7 @@ export function AiAssistedEditorDemo({ theme }: AiAssistedEditorDemoProps) {
     } else if (result.status === 'staged') {
       say('event', 'Proposal staged. Review it on the canvas and Accept or Reject.');
     } else {
-      say('event', 'Applied as one undoable step and highlighted on the canvas.');
+      say('event', 'Applied as one undoable step and selected on the canvas.');
     }
   };
 

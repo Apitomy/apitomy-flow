@@ -1,7 +1,7 @@
 import { diffWorkflows } from '../diff/workflowDiff.ts';
 import type { DiffStatus } from '../diff/workflowDiffTypes.ts';
 import type { Workflow } from '../types/workflow.ts';
-import type { Highlight } from './types.ts';
+import type { AppliedChanges } from './types.ts';
 
 /** Review-oriented change classification; position-only (cosmetic) changes count as unchanged. */
 export type ChangeKind = 'added' | 'modified' | 'removed' | 'unchanged';
@@ -34,15 +34,13 @@ export function changeStatus(before: Workflow, after: Workflow): ChangeStatusMap
 }
 
 /**
- * Collects the ids worth highlighting after an apply (added and modified, never removed).
+ * Collects the ids to select after an apply (added and modified, never removed).
  *
  * @param status the classification map
- * @returns sorted ids, or null when nothing was added or modified
+ * @returns sorted ids (empty lists when nothing was added or modified)
  */
-export function highlightOf(status: ChangeStatusMap): Highlight | null {
+export function appliedChangesOf(status: ChangeStatusMap): AppliedChanges {
     const pick = (map: Record<string, ChangeKind>) =>
         Object.keys(map).filter(id => map[id] === 'added' || map[id] === 'modified').sort();
-    const nodeIds = pick(status.nodes);
-    const edgeIds = pick(status.edges);
-    return nodeIds.length || edgeIds.length ? { nodeIds, edgeIds } : null;
+    return { nodeIds: pick(status.nodes), edgeIds: pick(status.edges) };
 }

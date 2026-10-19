@@ -130,7 +130,7 @@ Inputs must be structured-cloneable plain JSON data; a change set that cannot be
 | `apply(cs)` | `{ status: 'applied' }` or `{ status: 'rejected', error }`. Exits simulation first. |
 | `withdraw(id)` | Removes the staged proposal if its id matches. |
 | `replace(workflow, origin?)` | Replaces the whole document as one undo step. Exits simulation first. `origin` defaults to `'host'`. |
-| `clearHighlights()` | Removes the applied-change highlight. |
+| `clearHighlights()` | **Deprecated.** Clears the canvas selection. Applied changes are now selected rather than highlighted. Works when read-only. |
 | `getSnapshot()` | `{ workflow, contentRevision, selection, problems }` (a detached copy). |
 | `select(target, options?)` | Selects `{ nodeId }` or `{ edgeId }` and highlights it on the canvas; `{ center: true }` also pans to it like clicking a Problems row (default `false`). `null` or an unknown id clears the selection. Given both ids, both are selected and the node is highlighted and centered. Works when read-only. |
 
@@ -160,9 +160,13 @@ if (result.status === 'rejected' && result.error.code === 'stale') askAgentToRet
   `spi.validate`). **Accept** runs the same path as `apply`; **Reject** discards the proposal.
 - **Staleness.** Any content edit makes the staged proposal stale, including undo and redo. Layout-only
   edits do not. A stale proposal shows "Out of date" and can only be **Dismiss**ed.
-- **Applied highlight.** Elements added or modified by the most recently applied change set (via `apply`
-  or Accept) stay highlighted until the next user content edit, `clearHighlights()`, or the next applied
-  change set. Disable it with `highlightApplied={false}`.
+- **Applied changes are selected.** After a change set is applied (via `apply` or Accept), the elements it
+  added or modified become the canvas selection, replacing any previous selection, exactly as if the user
+  had ctrl-clicked each one. If only one element changed, the properties panel shows it. A change set that
+  only removes elements clears the selection. Clear the selection like any other: click empty canvas or
+  press Esc. Pressing Delete removes the selected changes, as one undoable step. Undo restores the
+  selection from before the apply, and redo selects the applied changes again. With
+  `highlightApplied={false}` applying a change set leaves the current selection as it is.
 - **Layout of applied changes.** `appliedChangeLayout` controls how change sets are laid out:
   - `'place'` (default): only new nodes are positioned, next to their neighbours, and existing nodes never
     move.
@@ -187,9 +191,9 @@ Clicking a changed element shows its before/after in the review bar:
 
 ![Proposal details in the review bar](images/ai-assisted-editing/after-proposal-details.png)
 
-After Accept, the change is one undo step and the changed elements stay highlighted:
+After Accept, the change is one undo step and the changed elements are selected:
 
-![Applied change highlighted](images/ai-assisted-editing/after-accepted-highlight.png)
+![Applied change selected](images/ai-assisted-editing/after-accepted-highlight.png)
 
 A user content edit makes the proposal stale. Only Dismiss remains, and the overlay is greyed out:
 

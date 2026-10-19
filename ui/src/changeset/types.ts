@@ -64,8 +64,8 @@ export interface ProposalEvent {
     outcome: ProposalOutcome;
 }
 
-/** Elements added or modified by the most recently applied change set. */
-export interface Highlight {
+/** Elements added or modified by an applied change set. */
+export interface AppliedChanges {
     nodeIds: string[];
     edgeIds: string[];
 }

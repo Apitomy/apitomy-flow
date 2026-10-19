@@ -2,7 +2,7 @@ import { test, expect, ready } from './test.ts';
 
 const node = (editor: import('@playwright/test').Locator, id: string) => editor.locator(`.react-flow__node[data-id="${id}"]`);
 
-test('a staged proposal previews, accepts as one undo step and stays highlighted', async ({ page }) => {
+test('a staged proposal previews, accepts as one undo step and selects the change', async ({ page }) => {
     await page.goto('/?ai');
     const editor = page.getByTestId('one');
     await ready(editor);
@@ -15,7 +15,8 @@ test('a staged proposal previews, accepts as one undo step and stays highlighted
     await expect(bar.getByRole('group', { name: 'Proposed change to w' })).toContainText('PT1M');
     await bar.getByRole('button', { name: 'Accept' }).click();
     await expect(bar).toBeHidden();
-    await expect(node(editor, 'w')).toHaveClass(/flow-applied/);
+    await expect(node(editor, 'w')).toHaveClass(/\bselected\b/);
+    await expect(node(editor, 'w')).not.toHaveClass(/flow-applied/);
     await expect(editor.getByTestId('proposal-resolutions')).toHaveText('["cs-1:accepted"]');
     await editor.getByRole('button', { name: 'Undo', exact: true }).click();
     await expect(node(editor, 'w')).toHaveCount(0);
@@ -48,15 +49,15 @@ test('rejecting removes the ghosts and stale change sets are refused with a code
     await expect(editor.getByTestId('proposal-resolutions')).toHaveText('["cs-1:rejected"]');
 });
 
-test('an applied change set is highlighted until the user edits content', async ({ page }) => {
+test('an applied change set is selected and clicking the canvas clears it', async ({ page }) => {
     await page.goto('/?ai');
     const editor = page.getByTestId('one');
     await ready(editor);
     await editor.getByRole('button', { name: 'Apply change' }).click();
-    await expect(node(editor, 'w')).toHaveClass(/flow-applied/);
-    await node(editor, 'a').click();
-    await page.keyboard.press('Delete');
+    await expect(node(editor, 'w')).toHaveClass(/\bselected\b/);
     await expect(node(editor, 'w')).not.toHaveClass(/flow-applied/);
+    await editor.locator('.react-flow__pane').click({ position: { x: 10, y: 10 } });
+    await expect(node(editor, 'w')).not.toHaveClass(/\bselected\b/);
 });
 
 test('the review bar never covers the canvas toolbar', async ({ page }) => {

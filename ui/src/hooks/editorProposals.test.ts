@@ -50,23 +50,67 @@ describe('applyChangeSet', () => {
         expect(editorReducer(initial, { type: 'applyChangeSet', changeSet: stale })).toBe(initial);
     });
 
-    it('highlights added and modified elements and keeps them across layout edits', () => {
-        const initial = createEditorState(workflow());
+    const flags = (state: EditorState) => ({
+        nodes: state.nodes.filter(node => node.selected).map(node => node.id).sort(),
+        edges: state.edges.filter(edge => edge.selected).map(edge => edge.id).sort(),
+        primary: [state.selectedNodeId, state.selectedEdgeId],
+    });
+    const selectA = (state: EditorState) => editorReducer(editorReducer(state, { type: 'select', nodeId: 'a' }),
+        { type: 'nodesChange', changes: [{ type: 'select', id: 'a', selected: true }] });
+
+    it('selects added and modified elements, replacing the prior selection, with no primary for many', () => {
+        const initial = selectA(createEditorState(workflow()));
         const applied = editorReducer(initial, { type: 'applyChangeSet', changeSet: addWait(initial) });
-        expect(applied.highlight).toEqual({ nodeIds: ['w'], edgeIds: ['aw', 'we'] });
-        const moved = editorReducer(editorReducer(applied, { type: 'positions', positions: { s: { x: 5, y: 5 } } }),
-            { type: 'commitPositions' });
-        expect(moved.highlight).not.toBeNull();
-        expect(rename(moved).highlight).toBeNull();
-        expect(editorReducer(applied, { type: 'clearHighlights' }).highlight).toBeNull();
+        expect(flags(applied)).toEqual({ nodes: ['w'], edges: ['aw', 'we'], primary: [null, null] });
+        expect('highlight' in applied).toBe(false);
     });
 
-    it('keeps the highlight across host metadata changes', () => {
+    it('makes a single applied element the primary selection', () => {
+        const initial = createEditorState(workflow());
+        const changeSet: ChangeSet = { id: 'r', baseRevision: initial.contentRevision, author: 'agent:test', summary: 's',
+            ops: [{ op: 'updateNode', id: 'e', patch: { name: 'End' } }] };
+        const applied = editorReducer(initial, { type: 'applyChangeSet', changeSet });
+        expect(flags(applied)).toEqual({ nodes: ['e'], edges: [], primary: ['e', null] });
+    });
+
+    it('clears the selection for a remove-only change set', () => {
+        const initial = selectA(createEditorState(workflow()));
+        const changeSet: ChangeSet = { id: 'r', baseRevision: initial.contentRevision, author: 'agent:test', summary: 's',
+            ops: [{ op: 'removeEdge', id: 'ae' }] };
+        const applied = editorReducer(initial, { type: 'applyChangeSet', changeSet });
+        expect(flags(applied)).toEqual({ nodes: [], edges: [], primary: [null, null] });
+    });
+
+    it('leaves the selection alone when selecting applied changes is disabled', () => {
+        const initial = selectA(createEditorState(workflow()));
+        const applied = editorReducer(initial,
+            { type: 'applyChangeSet', changeSet: addWait(initial), selectApplied: false });
+        expect(flags(applied)).toEqual({ nodes: ['a'], edges: [], primary: ['a', null] });
+    });
+
+    it('undo restores the prior selection and redo re-selects the applied changes', () => {
+        const initial = selectA(createEditorState(workflow()));
+        const applied = editorReducer(initial, { type: 'applyChangeSet', changeSet: addWait(initial) });
+        const undone = editorReducer(applied, { type: 'undo' });
+        expect(flags(undone)).toEqual({ nodes: ['a'], edges: [], primary: ['a', null] });
+        const redone = editorReducer(undone, { type: 'redo' });
+        expect(flags(redone)).toEqual({ nodes: ['w'], edges: ['aw', 'we'], primary: [null, null] });
+    });
+
+    it('clearHighlights clears the selection', () => {
         const initial = createEditorState(workflow());
         const applied = editorReducer(initial, { type: 'applyChangeSet', changeSet: addWait(initial) });
-        const hosted = editorReducer(applied, { type: 'metadata', metadata: { id: 'w', name: 'Host' } });
-        expect(hosted.origin).toBe('host');
-        expect(hosted.highlight).not.toBeNull();
+        expect(flags(editorReducer(applied, { type: 'clearHighlights' })))
+            .toEqual({ nodes: [], edges: [], primary: [null, null] });
+    });
+
+    it('selects the changes of an accepted proposal unless disabled', () => {
+        const initial = selectA(createEditorState(workflow()));
+        const staged = propose(initial, addWait(initial));
+        expect(flags(editorReducer(staged, { type: 'acceptProposal' })))
+            .toEqual({ nodes: ['w'], edges: ['aw', 'we'], primary: [null, null] });
+        expect(flags(editorReducer(staged, { type: 'acceptProposal', selectApplied: false })))
+            .toEqual({ nodes: ['a'], edges: [], primary: ['a', null] });
     });
 });
 
