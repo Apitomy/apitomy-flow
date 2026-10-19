@@ -149,6 +149,9 @@ When `actionTypes` is set, Action nodes use the `icon` and `color` of their Acti
 as in the editor. Share one catalog between the two components:
 
 ```tsx
+import { type ActionTypeDescriptor } from '@apitomy/flow-ui';
+import { EnvelopeIcon, SlackIcon } from '@patternfly/react-icons';
+
 const actionTypes: ActionTypeDescriptor[] = [
   { value: 'email.send', label: 'Send email', icon: <EnvelopeIcon />, color: '#c9190b' },
   { value: 'slack.post', label: 'Post to Slack', icon: <SlackIcon /> },
@@ -157,6 +160,9 @@ const actionTypes: ActionTypeDescriptor[] = [
 <WorkflowEditor spi={{ actionTypes }} ... />
 <WorkflowViewer actionTypes={actionTypes} ... />
 ```
+
+Keep the catalog reference stable (define it outside the component or memoize it), because passing a new
+array on every render reloads the catalog. The editor's `spi.actionTypes` behaves the same way.
 
 A function provider is loaded the same way as in the editor; nodes use the default look until it resolves.
 
