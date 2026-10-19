@@ -1,5 +1,5 @@
 import { createElement } from 'react';
-import { EnvelopeIcon, GlobeIcon, BugIcon, TicketAltIcon } from '@patternfly/react-icons';
+import { EnvelopeIcon, GlobeIcon, BugIcon, TicketAltIcon, SearchIcon } from '@patternfly/react-icons';
 import { type ActionTypeDescriptor, type WorkflowValidator } from '../types/spi.ts';
 import { type ValidationProblem } from '../types/validation.ts';
 
@@ -76,6 +76,8 @@ export const demoCatalog: ActionTypeDescriptor[] = [
   },
   {
     value: 'analyze-cve',
+    icon: createElement(SearchIcon),
+    color: '#009596',
     label: 'Analyze CVE',
     description: 'Analyze a CVE to determine its severity and affected versions',
     inputs: [
