@@ -15,6 +15,7 @@ durable across asynchronous (`PENDING`) resumes, a clearly defined relationship 
 - Dead-letter queues, global failure routing, or an `onExhausted` routing target.
 - An in-engine scheduler or blocking sleeps. The engine stays scheduler-free; hosts own timers.
 - Any behavior change for definitions that declare no policy.
+- Modeling retries in the UI simulator (`ui/src/simulation`), which keeps its current behavior.
 
 ## 1. Definition model
 
@@ -122,8 +123,11 @@ The engine takes an injectable `RandomGenerator` and `Clock` (defaulting to syst
 ### Host API
 
 - `List<RetryInfo> getPendingRetries(WorkflowInstance instance)` — one entry per node parked for retry:
-  `RetryInfo(String nodeId, String branchId, int attempt, Duration delay, Instant retryAt)`. Here `attempt` is
-  the number of the attempt that will run next. Modeled on `getWaitInfo`.
+  `RetryInfo(String nodeId, String branchId, int attempt, Instant retryAt)`. Here `attempt` is the number of
+  the attempt that will run next. Modeled on `getWaitInfo`. (The computed delay is not stored durably;
+  `retryAt` is what hosts schedule against.)
+- `completeNode` on a node parked for retry throws `IllegalStateException` (use `retryNode`), and
+  `getActionInfo` returns `null` for it, so hosts never mistake a scheduled retry for pending async work.
 - `WorkflowInstance retryNode(Workflow workflow, WorkflowInstance instance, String nodeId)` — called by the
   host when its timer fires. Clears `retryAt` and re-executes the node (re-resolving inputs) via the existing
   `WorkKind.RETRY` path. It is a **no-op** returning the instance unchanged if the node is not currently
