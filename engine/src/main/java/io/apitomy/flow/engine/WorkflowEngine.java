@@ -8,9 +8,12 @@ import io.apitomy.flow.validation.WorkflowValidator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
+import java.util.function.UnaryOperator;
+import java.util.random.RandomGenerator;
 
 import static io.apitomy.flow.engine.RecoveryPolicy.contextualError;
 
@@ -44,13 +47,33 @@ public class WorkflowEngine {
     private final WorkflowValidator validator;
     private final ConditionEvaluator conditionEvaluator;
     private final NodeValueResolver values;
+    private final Clock clock;
+    private final RandomGenerator random;
+
+    private enum RetryOutcome { EXHAUSTED, INLINE, PARKED }
+
+    /** Result of applying a declared policy to a RETRY decision. */
+    private record RetryStep(WorkflowInstance instance, RetryOutcome outcome) {}
 
     /**
-     * Creates an engine. Null provider means no executors; null handler selects fail-by-default recovery.
+     * Creates an engine using the system UTC clock and default randomness for retry scheduling.
+     * Null provider means no executors; null handler selects fail-by-default recovery.
      * Null listeners means none; otherwise registrations are copied in order and null entries rejected.
      */
     public WorkflowEngine(NodeExecutorProvider executorProvider, List<WorkflowEventListener> listeners,
                           WorkflowErrorHandler errorHandler) {
+        this(executorProvider, listeners, errorHandler, Clock.systemUTC(), RandomGenerator.getDefault());
+    }
+
+    /**
+     * Creates an engine with an explicit clock (for {@code retryAt}) and randomness (for retry jitter).
+     * Null provider/handler/listeners behave as in the 3-argument constructor; clock and random must be
+     * non-null.
+     */
+    public WorkflowEngine(NodeExecutorProvider executorProvider, List<WorkflowEventListener> listeners,
+                          WorkflowErrorHandler errorHandler, Clock clock, RandomGenerator random) {
+        this.clock = Objects.requireNonNull(clock, "clock");
+        this.random = Objects.requireNonNull(random, "random");
         this.executorProvider = executorProvider != null ? executorProvider : actionType -> null;
         this.listeners = listeners != null ? List.copyOf(listeners) : List.of();
         this.recoveryPolicy = new RecoveryPolicy(errorHandler);
@@ -1063,9 +1086,64 @@ public class WorkflowEngine {
         return false;
     }
 
+    /** Returns the open history entry for a branch's node, or null when none is open. */
+    private HistoryEntry openEntry(WorkflowInstance instance, String branchId, String nodeId) {
+        List<HistoryEntry> history = instance.history();
+        for (int i = history.size() - 1; i >= 0; i--) {
+            HistoryEntry h = history.get(i);
+            if (Objects.equals(h.branchId(), branchId) && h.nodeId().equals(nodeId)) {
+                return h.completedOn() == null ? h : null;
+            }
+        }
+        return null;
+    }
+
+    /** Replaces the open history entry for a branch's node; no-op when none is open. */
+    private WorkflowInstance updateOpenEntry(WorkflowInstance instance, String branchId, String nodeId,
+                                             UnaryOperator<HistoryEntry> change) {
+        List<HistoryEntry> history = new ArrayList<>(instance.history());
+        for (int i = history.size() - 1; i >= 0; i--) {
+            HistoryEntry h = history.get(i);
+            if (Objects.equals(h.branchId(), branchId) && h.nodeId().equals(nodeId)) {
+                if (h.completedOn() == null) {
+                    history.set(i, change.apply(h));
+                }
+                break;
+            }
+        }
+        return instance.toBuilder().history(history).build();
+    }
+
+    /** Returns the attempt number of the branch's open visit (1 when unrecorded). */
+    private int currentAttempt(WorkflowInstance instance, String branchId, String nodeId) {
+        HistoryEntry entry = openEntry(instance, branchId, nodeId);
+        return entry == null ? 1 : entry.effectiveAttempt();
+    }
+
+    /**
+     * Applies a declared policy after the handler chose RETRY: fails when attempts are exhausted, otherwise
+     * records the next attempt and either retries inline (zero delay) or parks with {@code retryAt}.
+     */
+    private RetryStep planRetry(WorkflowInstance instance, String branchId, WorkflowNode node,
+                                RetryPolicy policy, WorkflowError error) {
+        int attempt = currentAttempt(instance, branchId, node.id());
+        if (attempt >= policy.maxAttempts()) {
+            return new RetryStep(failWorkflow(instance,
+                "Exceeded retry limit (" + (policy.maxAttempts() - 1) + "): " + error.diagnostic(), error),
+                RetryOutcome.EXHAUSTED);
+        }
+        Duration delay = policy.delayFor(attempt, random);
+        Instant retryAt = delay.isZero() ? null : clock.instant().plus(delay);
+        WorkflowInstance updated = updateOpenEntry(instance, branchId, node.id(),
+            entry -> entry.withRetry(attempt + 1, retryAt))
+            .toBuilder().updatedOn(Instant.now()).build();
+        return new RetryStep(updated, retryAt == null ? RetryOutcome.INLINE : RetryOutcome.PARKED);
+    }
+
     private WorkflowInstance executeActionNode(Workflow workflow, WorkflowInstance instance,
                                                String branchId, WorkflowNode actionNode, Deque<BranchWork> work) {
         String actionType = ((NodeConfig.Action) actionNode.typedConfig()).actionType();
+        Optional<RetryPolicy> declared = RetryPolicy.effective(workflow, actionNode);
         int retries = 0;
 
         while (true) {
@@ -1091,13 +1169,23 @@ public class WorkflowEngine {
             }
 
             if (error != null) {
-                Recovery resolution = recoveryPolicy.resolve(workflow, instance, actionNode, result, error);
+                int attempt = currentAttempt(instance, branchId, actionNode.id());
+                Recovery resolution = recoveryPolicy.resolve(workflow, instance, actionNode, result, error,
+                    new RetryContext(attempt, declared));
                 if (resolution.action() == ErrorAction.RETRY) {
-                    if (++retries > MAX_RETRIES) {
-                        return failWorkflow(instance,
-                            "Exceeded retry limit (" + MAX_RETRIES + "): " + error.diagnostic(), error);
+                    if (declared.isEmpty()) {
+                        if (++retries > MAX_RETRIES) {
+                            return failWorkflow(instance,
+                                "Exceeded retry limit (" + MAX_RETRIES + "): " + error.diagnostic(), error);
+                        }
+                        continue;
                     }
-                    continue;
+                    RetryStep step = planRetry(instance, branchId, actionNode, declared.get(), error);
+                    instance = step.instance();
+                    if (step.outcome() == RetryOutcome.INLINE) {
+                        continue;
+                    }
+                    return instance; // EXHAUSTED (failed) or PARKED (open entry; quiesce() marks WAITING)
                 }
                 return applyResolution(workflow, instance, branchId, actionNode, resolution, work);
             }
