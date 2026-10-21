@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { describeRetryPolicy, effectiveRetryPolicy } from './retryPolicy.ts';
+import { describeRetryPolicy, effectiveRetryPolicy, retryBadgesByNodeId } from './retryPolicy.ts';
 import { isoDurationMillis } from '../validation/validateWorkflow.ts';
 import { type WorkflowNode } from '../types/workflow.ts';
 
@@ -34,5 +34,17 @@ describe('retry policy utilities', () => {
         expect(isoDurationMillis('PT0S')).toBe(0);
         expect(isoDurationMillis('P1DT1H1M1.5S')).toBe(90061500);
         expect(isoDurationMillis('soon')).toBeUndefined();
+    });
+});
+
+describe('retry badges', () => {
+    it('labels nodes with an effective policy and notes inheritance', () => {
+        const badges = retryBadgesByNodeId([action({ maxAttempts: 2 }),
+            { id: 'b', name: 'b', type: 'action', config: { actionType: 't' } },
+            { id: 'e', name: 'e', type: 'end', config: {} }], { retry: { maxAttempts: 5 } });
+        expect(badges.get('a')).toEqual({ label: '↻2', title: 'Retry: Up to 2 attempts, retried immediately' });
+        expect(badges.get('b')).toEqual({ label: '↻5',
+            title: 'Retry (workflow default): Up to 5 attempts, retried immediately' });
+        expect(badges.has('e')).toBe(false);
     });
 });

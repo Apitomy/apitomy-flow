@@ -31,3 +31,28 @@ export function describeRetryPolicy(policy: RetryPolicy): string {
     }
     return `${attempts}, ${delay} between attempts${policy.maxDelay ? ` (max ${policy.maxDelay})` : ''}${jitter}`;
 }
+
+/** Compact canvas badge for an action node's effective retry policy. */
+export interface RetryBadge {
+    label: string;
+    title: string;
+}
+
+/**
+ * Computes retry badges for action nodes that have an effective declared policy.
+ *
+ * @param nodes the workflow's nodes
+ * @param defaults the workflow's top-level defaults, whose `retry` applies to actions without their own policy
+ * @returns badges keyed by node id; nodes without an effective policy are absent
+ */
+export function retryBadgesByNodeId(nodes: WorkflowNode[], defaults?: WorkflowDefaults | null): Map<string, RetryBadge> {
+    const badges = new Map<string, RetryBadge>();
+    for (const node of nodes) {
+        const effective = effectiveRetryPolicy(node, defaults);
+        if (!effective) continue;
+        const prefix = effective.source === 'workflow' ? 'Retry (workflow default): ' : 'Retry: ';
+        badges.set(node.id, { label: `↻${effective.policy.maxAttempts ?? '?'}`,
+            title: prefix + describeRetryPolicy(effective.policy) });
+    }
+    return badges;
+}

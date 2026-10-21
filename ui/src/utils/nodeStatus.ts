@@ -14,14 +14,21 @@ export interface NodeStatusBadge {
  * @param isCurrentVisit whether the visit being displayed is the instance's current, in-progress visit
  * @param wasVisited whether the node has been reached at least once
  * @param instanceStatus the workflow instance's overall status
+ * @param pendingRetry when set, the current visit's action failed and a retry is scheduled: the upcoming
+ *   attempt number, the effective policy's `maxAttempts` (if known), and the ISO-8601 `retryAt` instant
  * @return the status key (used to pick a badge color) and its display label
  */
-export function getNodeStatusBadge({ isCurrentVisit, wasVisited, instanceStatus }: {
+export function getNodeStatusBadge({ isCurrentVisit, wasVisited, instanceStatus, pendingRetry }: {
   isCurrentVisit: boolean;
   wasVisited: boolean;
   instanceStatus: InstanceStatus;
+  pendingRetry?: { attempt: number; maxAttempts?: number; retryAt: string };
 }): NodeStatusBadge {
   if (isCurrentVisit) {
+    if (pendingRetry && instanceStatus === 'waiting') {
+      const of = pendingRetry.maxAttempts ? `/${pendingRetry.maxAttempts}` : '';
+      return { key: 'waiting', label: `Retry ${pendingRetry.attempt}${of} scheduled at ${pendingRetry.retryAt}` };
+    }
     if (instanceStatus === 'completed') return { key: 'completed', label: 'Completed' };
     if (instanceStatus === 'failed') return { key: 'failed', label: 'Failed' };
     if (instanceStatus === 'cancelled') return { key: 'cancelled', label: 'Cancelled' };
