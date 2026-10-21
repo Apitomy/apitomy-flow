@@ -9,8 +9,9 @@ not a current issue status. Use the links below and inspect code at your selecte
   [C14 #137](https://github.com/Apitomy/apitomy-flow/issues/137).
 - Product follow-ups: [#115](https://github.com/Apitomy/apitomy-flow/issues/115) through
   [#123](https://github.com/Apitomy/apitomy-flow/issues/123), plus timer
-  [#85](https://github.com/Apitomy/apitomy-flow/issues/85) and retry
-  [#86](https://github.com/Apitomy/apitomy-flow/issues/86).
+  [#85](https://github.com/Apitomy/apitomy-flow/issues/85). Declarative retry policies
+  ([#86](https://github.com/Apitomy/apitomy-flow/issues/86)) are done on this branch; see
+  [error handling](docs/user-guide/error-handling.md#retry-limits-and-durability).
 - [Current branch contracts](docs/user-guide/current-contracts.md)
 
 ## Reconciliation against the combined branch

@@ -13,6 +13,7 @@ conditions that determine routing.
 | `version` | Integer | Optional host-managed revision; instances are not automatically pinned to it |
 | `nodes` | List | The nodes in the graph |
 | `edges` | List | The edges connecting nodes |
+| `defaults` | Object | Optional workflow-wide defaults; `defaults.retry` is the retry policy for action nodes without their own |
 
 Workflow definitions are JSON-serializable. The consuming application stores them however it chooses.
 
@@ -48,11 +49,15 @@ Automated work delegated to a `NodeExecutor` provided by the host application.
 - **Config**: Must include an `actionType` field matching a registered executor
 - **Behavior**: Invokes the executor synchronously. COMPLETED output is checked/mapped into context;
   PENDING parks the action for host completion. FAILED enters error recovery.
+- **Retry**: optional `retry` policy (`maxAttempts`, `delay`, `backoff`, `multiplier`, `maxDelay`,
+  `jitter`) that bounds and delays handler-requested retries. It replaces `defaults.retry` wholesale. See
+  [retry limits and durability](error-handling.md#retry-limits-and-durability).
 
 ```json
 {
   "actionType": "analyze-cve",
-  "param1": "value1"
+  "param1": "value1",
+  "retry": { "maxAttempts": 3, "delay": "PT5S", "backoff": "exponential" }
 }
 ```
 
@@ -200,7 +205,9 @@ substitute for status and branch records. Each `HistoryEntry` has an optional `b
 a missing history branch ID denotes `root`. Entries also record, when the node is entered, the `input`
 values it received (declared workflow inputs for a start node, resolved inputs for action and human-task
 nodes) and, for human-task nodes, the computed task `title`; both are omitted when absent, so viewers can
-show per-visit values even after later nodes change the context. Java timestamps serialize as ISO strings
+show per-visit values even after later nodes change the context. For action retries governed by a policy,
+the open entry also carries `attempt` (1-based; absent means 1) and, while a delayed retry is scheduled,
+`retryAt`. Java timestamps serialize as ISO strings
 with the Jackson Java Time module. Old instances missing branch collections normalize to empty collections
 in Java; that alone does not synthesize parked branches for safe resume. Hosts must migrate legacy runtime
 state and retain the correct definition. See [current contracts](current-contracts.md).

@@ -177,6 +177,22 @@ Some codes in later tables can therefore be errors for malformed types and warni
 | `MISSING_CORRELATION_KEY_EXPRESSION` | ERROR | `subscriptionKey` or `eventKey` missing/blank when `correlationKey` is present |
 | `INVALID_CORRELATION_KEY_EXPRESSION` | ERROR | Key expression is not valid EL |
 
+### Retry policies
+
+| Code | Severity | Rule |
+|---|---|---|
+| `INVALID_RETRY_POLICY` | ERROR | `retry` is not an object |
+| `INVALID_RETRY_MAX_ATTEMPTS` | ERROR | `maxAttempts` missing or not an integer from 1 to 2147483647 |
+| `INVALID_RETRY_DELAY` | ERROR | `delay` is not a non-negative `PnDTnHnMnS` duration |
+| `INVALID_RETRY_BACKOFF` | ERROR | `backoff` is not `"fixed"` or `"exponential"` |
+| `INVALID_RETRY_MULTIPLIER` | ERROR | `multiplier` is not a number greater than 1, or `backoff` is not `"exponential"` |
+| `INVALID_RETRY_MAX_DELAY` | ERROR | `maxDelay` is not a positive duration no smaller than `delay` |
+| `INVALID_RETRY_JITTER` | ERROR | `jitter` is not a boolean |
+| `RETRY_ON_NON_ACTION_NODE` | WARNING | A non-action node declares `config.retry`; it is ignored |
+
+Problems in the workflow's `defaults.retry` carry no node ID. Shared cases live in
+`conformance/retry-validation.json`.
+
 ### Parallel Structure (ERROR)
 
 | Code | Description |

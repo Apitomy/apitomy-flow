@@ -58,6 +58,14 @@ Built-in optional config fields accept explicit null. Missing/null declaration `
 legacy flat event merging. Field presentation defaults remain in the runtime info/display consumers;
 reading configuration never writes defaults into the original config.
 
+Retry policies use the exported `RetryPolicy`, `RetryBackoff` (`'fixed' | 'exponential'`), and
+`WorkflowDefaults` types: `ActionConfig.retry?: RetryPolicy | null` and
+`Workflow.defaults?: WorkflowDefaults | null`, where `WorkflowDefaults.retry` is the workflow-wide default.
+In the editor, the properties panel shows a "Retry" section for action nodes and a "Workflow defaults"
+section when nothing is selected; action nodes with a policy show a `↻N` canvas badge, and the viewer
+shows "Retry N/M scheduled at <time>" for a parked retry. See
+[retry limits and durability](error-handling.md#retry-limits-and-durability).
+
 `position` is optional and nullable, matching Java and the import validators. Layout produces guaranteed
 positions; canvas conversion uses origin for a missing position. Browser import still performs its
 existing normalization/layout of absent positions, names, configs, and edge defaults. It does not promise
@@ -109,6 +117,10 @@ if (node.typedConfig() instanceof NodeConfig.Action action) {
 The nested `Start`, `End`, `Action`, `HumanTask`, `ReceiveEvent`, and `Wait` records expose typed
 accessors. `Field` exposes declaration and presentation metadata plus `effectiveContextKey()`;
 `Option` exposes select options; `Mapping` exposes event `contextKey()` and `expression()`.
+`NodeConfig.Action.retry()` returns `Optional<RetryPolicy>`, a view over the wire map with typed
+accessors (`maxAttempts()`, `delay()`, `backoff()`, `multiplier()`, `maxDelay()`, `jitter()`) and the pure
+`delayFor(attempt, random)`. `Workflow.defaultRetryPolicy()` reads `defaults.retry`, and
+`RetryPolicy.effective(workflow, node)` returns the node policy, else the workflow default.
 `wire()` on every adapter returns the immutable original map. Jackson serializes adapters directly as
 that map, without wrapper fields, and concrete adapter records can be deserialized from the same shape.
 No Jackson module or custom mapper registration is required. Deserialize workflows through the existing
