@@ -15,7 +15,7 @@ import {
 } from '@xyflow/react';
 import { Switch } from '@patternfly/react-core';
 import { UndoIcon, RedoIcon, LockIcon, LockOpenIcon, UploadIcon, DownloadIcon, ImageIcon } from '@patternfly/react-icons';
-import { type Workflow } from '../types/workflow.ts';
+import { type Workflow, type WorkflowDefaults } from '../types/workflow.ts';
 import { type ValidationProblem } from '../types/validation.ts';
 import { type EditorSpi, type FlowContext, type FlowTarget } from '../types/spi.ts';
 import { type FlowNodeData } from '../utils/conversion.ts';
@@ -569,6 +569,10 @@ function WorkflowEditorInner({
       group: typingGroup(`node:${id}:${Object.keys(dataUpdate).join(',')}`) });
   }, [dispatch, typingGroup]);
 
+  const onWorkflowDefaultsChange = useCallback((defaults: WorkflowDefaults | undefined) => {
+    dispatch({ type: 'defaults', defaults });
+  }, [dispatch]);
+
   const onNodeIdChange = useCallback((oldId: string, newId: string) => {
     dispatch({ type: 'renameNode', id: oldId, newId, group: typingGroup('nodeId') });
   }, [dispatch, typingGroup]);
@@ -958,6 +962,8 @@ function WorkflowEditorInner({
             onNodeChange={onNodeDataChange}
             onNodeIdChange={onNodeIdChange}
             onEdgeChange={onEdgeDataChange}
+            workflowDefaults={state.document.defaults}
+            onWorkflowDefaultsChange={onWorkflowDefaultsChange}
             spi={spi}
             readOnly={readOnly}
             sampleContext={sampleContext}
@@ -979,6 +985,8 @@ function WorkflowEditorInner({
             onNodeChange={onNodeDataChange}
             onNodeIdChange={onNodeIdChange}
             onEdgeChange={onEdgeDataChange}
+            workflowDefaults={state.document.defaults}
+            onWorkflowDefaultsChange={onWorkflowDefaultsChange}
             spi={spi}
             readOnly={readOnly}
             sampleContext={sampleContext}

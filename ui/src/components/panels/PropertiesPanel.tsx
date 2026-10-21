@@ -16,6 +16,9 @@ import { MapInputsEditor } from './MapInputsEditor.tsx';
 import { DefaultValueEditor, OptionsEditor } from './HumanTaskOutputFields.tsx';
 import { evaluateCondition, ElEvaluationError } from '../../simulation/elEvaluator.ts';
 import { JsonCodeEditor } from '../common/JsonCodeEditor.tsx';
+import { RetryPolicyFields } from './RetryPolicyFields.tsx';
+import { describeRetryPolicy } from '../../utils/retryPolicy.ts';
+import { type WorkflowDefaults } from '../../types/workflow.ts';
 import './PropertiesPanel.css';
 
 interface PropertiesPanelProps {
@@ -28,6 +31,10 @@ interface PropertiesPanelProps {
   nodeProblems?: ValidationProblem[];
   onNodeChange: (id: string, data: Partial<FlowNodeData>) => void;
   onNodeIdChange: (oldId: string, newId: string) => void;
+  /** The workflow-level defaults, shown when nothing is selected. */
+  workflowDefaults?: WorkflowDefaults | null;
+  /** Updates workflow-level defaults; when omitted (and not read-only) the defaults section is hidden. */
+  onWorkflowDefaultsChange?: (defaults: WorkflowDefaults | undefined) => void;
   onEdgeChange: (id: string, data: Record<string, unknown>) => void;
   spi?: EditorSpi;
   /** A sample context used to seed the inline "Test condition" affordance. */
@@ -263,10 +270,23 @@ export function PropertiesPanel(props: PropertiesPanelProps) {
   );
 
   if (!selectedNode && !selectedEdge) {
+    const onDefaults = readOnly ? undefined : props.onWorkflowDefaultsChange;
+    const showDefaults = !!onDefaults || (readOnly && !!props.workflowDefaults?.retry);
     return wrap(
-      <div className="properties-panel__empty">
-        Select a node or edge to view its properties
-      </div>,
+      <>
+        <div className="properties-panel__empty">Select a node or edge to view its properties</div>
+        {showDefaults && (
+          <div className="properties-panel__section">
+            <h4>Workflow defaults</h4>
+            <RetryPolicyFields policy={props.workflowDefaults?.retry} enableLabel="Default retry policy for action nodes"
+              onChange={retry => {
+                const rest: WorkflowDefaults = { ...(props.workflowDefaults ?? {}) };
+                delete rest.retry;
+                onDefaults?.(retry ? { ...rest, retry } : Object.keys(rest).length ? rest : undefined);
+              }} />
+          </div>
+        )}
+      </>,
     );
   }
 
@@ -460,6 +480,7 @@ export function PropertiesPanel(props: PropertiesPanelProps) {
             actionTypesLoading={actionTypesLoading}
             catalogStatus={catalog.status}
             openActionType={props.spi?.openActionType}
+            workflowDefaults={props.workflowDefaults}
           />
         )}
         {selectedNode.data.nodeType === 'receive-event' && (
@@ -772,7 +793,8 @@ function ConditionTester({ condition, sampleContext }: {
   );
 }
 
-function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading, catalogStatus, draftIdentity, readOnly = false, openActionType }: {
+function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading, catalogStatus, draftIdentity, readOnly = false, openActionType, workflowDefaults }: {
+  workflowDefaults?: WorkflowDefaults | null;
   draftIdentity?: string;
   openActionType?: (request: { value: string; resolved: boolean }) => void;
   readOnly?: boolean;
@@ -1061,6 +1083,12 @@ function ActionNodeFields({ node, onNodeChange, actionTypes, actionTypesLoading,
           </div>
         </>
       )}
+      <RetryPolicyFields
+        policy={config.retry}
+        enableLabel={workflowDefaults?.retry ? 'Override workflow default retry policy' : 'Retry on failure'}
+        inheritedHint={workflowDefaults?.retry ? `Inherits: ${describeRetryPolicy(workflowDefaults.retry)}` : undefined}
+        onChange={retry => onNodeChange(node.id, { config: { ...config, retry } })}
+      />
     </>
   );
 }

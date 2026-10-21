@@ -20,6 +20,7 @@ export function effectiveRetryPolicy(node: WorkflowNode, defaults?: WorkflowDefa
 
 /** Summarizes a policy in one human-readable sentence for tooltips and the properties panel. */
 export function describeRetryPolicy(policy: RetryPolicy): string {
+    if (policy.maxAttempts === 1) return '1 attempt, no retries';
     const attempts = `Up to ${policy.maxAttempts ?? '?'} attempts`;
     const delay = policy.delay ?? 'PT0S';
     if (/^P(?:0D)?(?:T(?:0H)?(?:0M)?(?:0(?:\.0+)?S)?)?$/.test(delay)) return `${attempts}, retried immediately`;

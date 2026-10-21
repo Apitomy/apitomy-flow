@@ -25,6 +25,11 @@ describe('retry policy utilities', () => {
             .toBe('Up to 5 attempts, exponential backoff from PT2S (x3, max PT1M), with jitter');
     });
 
+    it('describes a single-attempt policy as no retries', () => {
+        expect(describeRetryPolicy({ maxAttempts: 1 })).toBe('1 attempt, no retries');
+        expect(describeRetryPolicy({ maxAttempts: 1, delay: 'PT5S', backoff: 'exponential' })).toBe('1 attempt, no retries');
+    });
+
     it('parses ISO durations to milliseconds', () => {
         expect(isoDurationMillis('PT0S')).toBe(0);
         expect(isoDurationMillis('P1DT1H1M1.5S')).toBe(90061500);
