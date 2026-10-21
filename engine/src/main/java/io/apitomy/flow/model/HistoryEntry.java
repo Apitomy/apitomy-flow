@@ -23,6 +23,8 @@ import java.util.Map;
  *                      or they could not be resolved
  * @param title         the task title computed when a human-task node was entered (its resolved
  *                      {@code title} expression, or the node name); {@code null} for other node types
+ * @param attempt       the 1-based attempt number of this visit; absent ({@code null}) means 1
+ * @param retryAt       when a delayed retry of this visit is due; set only while parked for a delayed retry
  */
 public record HistoryEntry(
     String nodeId,
@@ -34,12 +36,47 @@ public record HistoryEntry(
     Map<String, Object> output,
     String branchId,
     @JsonInclude(JsonInclude.Include.NON_NULL) Map<String, Object> input,
-    @JsonInclude(JsonInclude.Include.NON_NULL) String title
+    @JsonInclude(JsonInclude.Include.NON_NULL) String title,
+    @JsonInclude(JsonInclude.Include.NON_NULL) Integer attempt,
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @JsonFormat(shape = JsonFormat.Shape.STRING) Instant retryAt
 ) {
     /** Owns output and input data while preserving null for an entry without them. */
     public HistoryEntry {
         output = JsonSnapshots.map(output);
         input = JsonSnapshots.map(input);
+    }
+
+    /**
+     * Back-compat constructor for callers that predate retry recording; sets {@code attempt} and
+     * {@code retryAt} to {@code null}.
+     */
+    public HistoryEntry(String nodeId, String nodeName, String edgeId, String edgeCondition,
+                        Instant enteredOn, Instant completedOn, Map<String, Object> output, String branchId,
+                        Map<String, Object> input, String title) {
+        this(nodeId, nodeName, edgeId, edgeCondition, enteredOn, completedOn, output, branchId, input, title,
+            null, null);
+    }
+
+    /**
+     * Returns the 1-based attempt number, treating an absent value as the first attempt.
+     *
+     * @return the effective attempt number
+     */
+    public int effectiveAttempt() {
+        return attempt == null ? 1 : attempt;
+    }
+
+    /**
+     * Returns a copy with the given retry bookkeeping.
+     *
+     * @param attempt the attempt number to record
+     * @param retryAt when a parked retry is due, or {@code null} when not parked for retry
+     * @return the updated entry
+     */
+    public HistoryEntry withRetry(Integer attempt, Instant retryAt) {
+        return new HistoryEntry(nodeId, nodeName, edgeId, edgeCondition, enteredOn, completedOn, output,
+            branchId, input, title, attempt, retryAt);
     }
 
     /**

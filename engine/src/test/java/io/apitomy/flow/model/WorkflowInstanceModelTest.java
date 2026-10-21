@@ -1,6 +1,7 @@
 package io.apitomy.flow.model;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -117,5 +118,22 @@ class WorkflowInstanceModelTest {
         WorkflowInstance copy = instance.toBuilder().build();
         assertNotNull(copy.activeBranches());
         assertNotNull(copy.joinArrivals());
+    }
+
+    @Test
+    void historyEntryRetryFieldsRoundTripAndAreOmittedWhenAbsent() throws Exception {
+        ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
+        Instant now = Instant.parse("2026-10-21T10:00:00Z");
+        HistoryEntry plain = new HistoryEntry("a", "A", null, null, now, null, null, "root", null, null);
+        String plainJson = mapper.writeValueAsString(plain);
+        assertFalse(plainJson.contains("attempt"));
+        assertFalse(plainJson.contains("retryAt"));
+        assertEquals(1, plain.effectiveAttempt());
+
+        HistoryEntry retrying = plain.withRetry(3, now.plusSeconds(5));
+        HistoryEntry read = mapper.readValue(mapper.writeValueAsString(retrying), HistoryEntry.class);
+        assertEquals(3, read.attempt());
+        assertEquals(now.plusSeconds(5), read.retryAt());
+        assertEquals(3, read.effectiveAttempt());
     }
 }

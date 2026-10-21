@@ -1239,7 +1239,8 @@ public class WorkflowEngine {
             boolean sameBranch = Objects.equals(h.branchId(), branchId);
             if (sameBranch && h.nodeId().equals(nodeId) && h.completedOn() == null) {
                 history.set(i, new HistoryEntry(h.nodeId(), h.nodeName(), h.edgeId(), h.edgeCondition(),
-                    h.enteredOn(), completedOn, output != null ? output : h.output(), h.branchId(), h.input(), h.title()));
+                    h.enteredOn(), completedOn, output != null ? output : h.output(), h.branchId(), h.input(),
+                    h.title(), h.attempt(), null));
                 break;
             }
         }
