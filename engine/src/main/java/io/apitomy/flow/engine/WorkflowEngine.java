@@ -1250,7 +1250,10 @@ public class WorkflowEngine {
             }
 
             if (error != null) {
-                int attempt = currentAttempt(instance, branchId, actionNode.id());
+                // Without a policy the attempt is call-local and never recorded in history.
+                int attempt = declared.isEmpty()
+                    ? retries + 1
+                    : currentAttempt(instance, branchId, actionNode.id());
                 Recovery resolution = recoveryPolicy.resolve(workflow, instance, actionNode, result, error,
                     new RetryContext(attempt, declared));
                 if (resolution.action() == ErrorAction.RETRY) {

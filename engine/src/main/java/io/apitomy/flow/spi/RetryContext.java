@@ -8,7 +8,8 @@ import java.util.Optional;
 /**
  * Retry bookkeeping passed to {@link WorkflowErrorHandler} for action-node failures.
  *
- * @param attempt the 1-based attempt that just failed
+ * @param attempt the 1-based attempt that just failed; durable across async resumes when a policy is
+ *                declared, otherwise counted only within one synchronous execution (not durable)
  * @param policy  the node's effective declared retry policy, or empty for the legacy policy
  */
 public record RetryContext(int attempt, Optional<RetryPolicy> policy) {

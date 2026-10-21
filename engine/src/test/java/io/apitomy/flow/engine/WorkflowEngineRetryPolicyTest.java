@@ -219,4 +219,25 @@ class WorkflowEngineRetryPolicyTest {
         assertEquals(List.of(new RetryInfo("act", "root", 2, NOW.plusSeconds(5))),
             engine.getPendingRetries(instance));
     }
+
+    @Test
+    void legacyHandlerSeesCallLocalAttemptNumbers() {
+        List<Integer> seen = new ArrayList<>();
+        WorkflowErrorHandler handler = new WorkflowErrorHandler() {
+            @Override public ErrorResolution handleError(WorkflowInstance i, WorkflowNode n, NodeResult r,
+                                                         WorkflowError e, RetryContext retry) {
+                seen.add(retry.attempt());
+                return retry.attempt() < 3 ? ErrorResolution.retry() : ErrorResolution.fail();
+            }
+            @Override public ErrorResolution handleNodeError(WorkflowInstance i, WorkflowNode n, NodeResult r,
+                                                             Exception e) { return ErrorResolution.fail(); }
+            @Override public ErrorResolution handleNoMatchingEdge(WorkflowInstance i, WorkflowNode n) {
+                return ErrorResolution.fail();
+            }
+        };
+        WorkflowInstance instance = engine(flaky(Integer.MAX_VALUE, new AtomicInteger()), handler)
+            .startWorkflow(workflow(null, null), Map.of());
+        assertEquals(List.of(1, 2, 3), seen);
+        assertEquals(InstanceStatus.FAILED, instance.status());
+    }
 }
