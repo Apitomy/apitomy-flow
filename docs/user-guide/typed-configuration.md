@@ -61,10 +61,10 @@ reading configuration never writes defaults into the original config.
 Retry policies use the exported `RetryPolicy`, `RetryBackoff` (`'fixed' | 'exponential'`), and
 `WorkflowDefaults` types: `ActionConfig.retry?: RetryPolicy | null` and
 `Workflow.defaults?: WorkflowDefaults | null`, where `WorkflowDefaults.retry` is the workflow-wide default.
-In the editor, the properties panel shows a "Retry" section for action nodes and a "Workflow defaults"
-section when nothing is selected; action nodes with a policy show a `↻N` canvas badge, and the viewer
-shows "Retry N/M scheduled at <time>" for a parked retry. See
-[retry limits and durability](error-handling.md#retry-limits-and-durability).
+In the editor, the properties panel shows a "Retry" section for action nodes and a "Workflow defaults" section
+when nothing is selected; action nodes with an effective policy (their own or inherited from `defaults.retry`)
+show a `↻N` canvas badge, and the viewer shows "Retry N/M scheduled at <time>" for a parked retry. See [retry
+limits and durability](error-handling.md#retry-limits-and-durability).
 
 `position` is optional and nullable, matching Java and the import validators. Layout produces guaranteed
 positions; canvas conversion uses origin for a missing position. Browser import still performs its

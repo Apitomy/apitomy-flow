@@ -87,8 +87,11 @@ The delay before attempt `attempt + 1` is computed by `RetryPolicy.delayFor(atte
 
 - fixed: `delay`
 - exponential: `delay * multiplier^(attempt - 1)`
-- capped at `maxDelay` if set (overflow saturates rather than wrapping)
+- capped at `maxDelay` if set, otherwise at `RetryPolicy.MAX_UNCAPPED_DELAY` (365 days); overflow
+  saturates at the cap rather than wrapping
 - with `jitter`, a uniform random value in `[0, capped]`
+
+Delays are computed and truncated to millisecond precision.
 
 When the handler returns `retry()` and `attempt >= maxAttempts`, the workflow fails with
 `Exceeded retry limit (<maxAttempts - 1>): <diagnostic>`. Otherwise a zero delay re-executes the action
@@ -136,7 +139,8 @@ For deterministic tests, construct the engine with an explicit `Clock` and `Rand
 The engine calls `handleError(instance, node, result, error, RetryContext retry)`, whose default delegates
 to the four-argument `handleError`, so existing handlers are unaffected. `RetryContext(int attempt,
 Optional<RetryPolicy> policy)` reports the failed attempt number and the effective policy. Without a
-policy, `attempt` is the call-local number (`retries + 1`) and is not durable.
+policy, `attempt` is not durable: within the inline execution loop it is the call-local number
+(`retries + 1`), and a failed external completion (`completeNode`) always reports 1.
 
 ```java
 public class TransientOnlyHandler implements WorkflowErrorHandler {
@@ -144,6 +148,10 @@ public class TransientOnlyHandler implements WorkflowErrorHandler {
     public ErrorResolution handleError(WorkflowInstance instance, WorkflowNode node, NodeResult result,
                                        WorkflowError error, RetryContext retry) {
         if (error.getCause() instanceof IllegalArgumentException) {
+            return ErrorResolution.fail();
+        }
+        // Without a declared policy, apply a host ceiling to the call-local attempt count.
+        if (retry.policy().isEmpty() && retry.attempt() > 3) {
             return ErrorResolution.fail();
         }
         return ErrorResolution.retry();

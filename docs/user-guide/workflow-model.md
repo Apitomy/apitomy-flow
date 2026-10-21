@@ -200,17 +200,17 @@ persistence.
 | `createdOn` | Instant | When the instance was created |
 | `updatedOn` | Instant | When the instance was last modified |
 
-At a parallel wait, `currentNodeId` is null; it is a convenience for the single-branch case, not a
-substitute for status and branch records. Each `HistoryEntry` has an optional `branchId` tagging its visit;
-a missing history branch ID denotes `root`. Entries also record, when the node is entered, the `input`
-values it received (declared workflow inputs for a start node, resolved inputs for action and human-task
-nodes) and, for human-task nodes, the computed task `title`; both are omitted when absent, so viewers can
-show per-visit values even after later nodes change the context. For action retries governed by a policy,
-the open entry also carries `attempt` (1-based; absent means 1) and, while a delayed retry is scheduled,
-`retryAt`. Java timestamps serialize as ISO strings
-with the Jackson Java Time module. Old instances missing branch collections normalize to empty collections
-in Java; that alone does not synthesize parked branches for safe resume. Hosts must migrate legacy runtime
-state and retain the correct definition. See [current contracts](current-contracts.md).
+At a parallel wait, `currentNodeId` is null; it is a convenience for the single-branch case, not a substitute
+for status and branch records. Each `HistoryEntry` has an optional `branchId` tagging its visit; a missing
+history branch ID denotes `root`. Entries also record, when the node is entered, the `input` values it
+received (declared workflow inputs for a start node, resolved inputs for action and human-task nodes) and, for
+human-task nodes, the computed task `title`; both are omitted when absent, so viewers can show per-visit
+values even after later nodes change the context. For action retries governed by a policy, the open entry also
+carries `attempt` (1-based; absent means 1) and, while a delayed retry is scheduled, `retryAt`. Java
+timestamps serialize as ISO strings with the Jackson Java Time module. Old instances missing branch
+collections normalize to empty collections in Java; that alone does not synthesize parked branches for safe
+resume. Hosts must migrate legacy runtime state and retain the correct definition. See [current
+contracts](current-contracts.md).
 
 ### Status Lifecycle
 

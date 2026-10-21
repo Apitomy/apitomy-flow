@@ -64,8 +64,9 @@ When no policy applies, behavior is unchanged: retries run immediately and the w
 Fields are mirrored in:
 
 - Java: `NodeConfig.Action.retry()` returns `Optional<RetryPolicy>`, a nested view record over the wire map
-  (same pattern as `CorrelationKey`). `Workflow` gains `defaults` (`WorkflowDefaults` record with
-  `Optional<RetryPolicy> retry()`), null-normalized in the compact constructor; a backward-compatible
+  (same pattern as `CorrelationKey`). `Workflow` gains a raw `Map<String, Object> defaults`
+  component (`@JsonInclude(NON_NULL)`, snapshotted in the compact constructor) plus
+  `Optional<RetryPolicy> defaultRetryPolicy()`, which reads `defaults.retry`; a backward-compatible
   constructor without `defaults` is retained.
 - TypeScript: `RetryPolicy` interface; `ActionConfig.retry?: RetryPolicy`; `Workflow.defaults?: { retry?:
   RetryPolicy }`.
