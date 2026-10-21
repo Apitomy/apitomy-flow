@@ -11,6 +11,10 @@ export interface HistoryEntry {
   nodeName: string;
   edgeId?: string;
   edgeCondition?: string;
+  /** 1-based attempt number of this visit for retried action nodes. Absent means the first attempt. */
+  attempt?: number;
+  /** ISO-8601 instant when a parked delayed retry is due; present only while the retry is scheduled. */
+  retryAt?: string;
   enteredOn: string;
   completedOn?: string;
   output?: Record<string, unknown>;

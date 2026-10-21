@@ -4,6 +4,7 @@ import routing from '../../../conformance/routing.json';
 import budgets from '../../../conformance/budgets.json';
 import forkBudgets from '../../../conformance/fork-budgets.json';
 import validation from '../../../conformance/validation.json';
+import retryValidation from '../../../conformance/retry-validation.json';
 import { classifyExpression, evaluateCondition, isValidExpression, resolveExpression } from './elEvaluator.ts';
 import { validateWorkflow } from '../validation/validateWorkflow.ts';
 import { parseWorkflow, serializeWorkflow } from '../utils/workflowIo.ts';
@@ -211,6 +212,31 @@ describe('shared duration validation', () => {
                 { id: 'finish', source: 'wait', target: 'end', priority: 0, isDefault: false }];
             expect(validateWorkflow(workflow).map(p => `${p.code}:${p.severity}:${p.nodeId}`))
                 .toEqual(fixture.browserProblems ?? fixture.problems);
+        });
+    }
+});
+
+describe('shared retry policy validation', () => {
+    for (const fixture of retryValidation as Array<{ name: string; retry?: unknown; defaultsRetry?: unknown;
+        nodeType?: string; problems: string[] }>) {
+        it(fixture.name, () => {
+            const type = fixture.nodeType ?? 'action';
+            const config: Record<string, unknown> = type === 'action'
+                ? { actionType: 't', inputs: {}, outputs: [] } : type === 'wait' ? { duration: 'PT1S' } : {};
+            if ('retry' in fixture) config.retry = fixture.retry;
+            const workflow = {
+                id: 'retry', name: 'Retry',
+                ...('defaultsRetry' in fixture ? { defaults: { retry: fixture.defaultsRetry } } : {}),
+                nodes: [
+                    { id: 'start', name: 'start', type: 'start', config: { inputs: [] }, position: { x: 0, y: 0 } },
+                    { id: 'act', name: 'act', type, config, position: { x: 100, y: 0 } },
+                    { id: 'end', name: 'end', type: 'end', config: {}, position: { x: 200, y: 0 } },
+                ],
+                edges: [{ id: 'begin', source: 'start', target: 'act', priority: 0, isDefault: false },
+                    { id: 'finish', source: 'act', target: 'end', priority: 0, isDefault: false }],
+            };
+            expect(validateWorkflow(workflow).filter(p => p.code.includes('RETRY'))
+                .map(p => `${p.code}:${p.severity}:${p.nodeId ?? '-'}`)).toEqual(fixture.problems);
         });
     }
 });

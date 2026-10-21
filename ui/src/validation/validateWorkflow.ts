@@ -417,7 +417,64 @@ function validateSemantics(workflow: Workflow, problems: ValidationProblem[]) {
     }
   }
 
+  validateRetryPolicies(workflow, problems);
   detectAutomatedCycles(workflow, problems);
+}
+
+/** Validates node-level and workflow-default retry policies (mirrors WorkflowValidator.java). */
+function validateRetryPolicies(workflow: Workflow, problems: ValidationProblem[]) {
+  const defaults = workflow.defaults;
+  if (defaults && typeof defaults === 'object' && defaults.retry != null) {
+    validateRetryPolicy(defaults.retry, undefined, problems);
+  }
+  for (const node of workflow.nodes) {
+    const retry = (node.config as Record<string, unknown> | undefined)?.retry;
+    if (retry == null) continue;
+    if (node.type !== 'action') {
+      problems.push(problem('warning', 'RETRY_ON_NON_ACTION_NODE', 'Retry policies only apply to action nodes', node.id));
+      continue;
+    }
+    validateRetryPolicy(retry, node.id, problems);
+  }
+}
+
+/** Validates one retry policy, attributing problems to nodeId (undefined for workflow defaults). */
+function validateRetryPolicy(raw: unknown, nodeId: string | undefined, problems: ValidationProblem[]) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    problems.push(problem('error', 'INVALID_RETRY_POLICY', 'Retry policy must be an object', nodeId));
+    return;
+  }
+  const policy = raw as Record<string, unknown>;
+  const max = policy.maxAttempts;
+  if (typeof max !== 'number' || !Number.isInteger(max) || max < 1 || max > 2147483647) {
+    problems.push(problem('error', 'INVALID_RETRY_MAX_ATTEMPTS', 'Retry maxAttempts must be an integer of at least 1', nodeId));
+  }
+  let delay: number | undefined;
+  if (policy.delay != null) {
+    delay = typeof policy.delay === 'string' ? isoDurationMillis(policy.delay) : undefined;
+    if (delay === undefined) {
+      problems.push(problem('error', 'INVALID_RETRY_DELAY', 'Retry delay must be a non-negative ISO 8601 duration', nodeId));
+    }
+  }
+  const backoff = policy.backoff;
+  if (backoff != null && backoff !== 'fixed' && backoff !== 'exponential') {
+    problems.push(problem('error', 'INVALID_RETRY_BACKOFF', 'Retry backoff must be "fixed" or "exponential"', nodeId));
+  }
+  const multiplier = policy.multiplier;
+  if (multiplier != null && (typeof multiplier !== 'number' || !(multiplier > 1) || backoff !== 'exponential')) {
+    problems.push(problem('error', 'INVALID_RETRY_MULTIPLIER',
+      'Retry multiplier must be a number greater than 1 and requires exponential backoff', nodeId));
+  }
+  if (policy.maxDelay != null) {
+    const maxDelay = typeof policy.maxDelay === 'string' ? isoDurationMillis(policy.maxDelay) : undefined;
+    if (maxDelay === undefined || maxDelay <= 0 || (delay !== undefined && maxDelay < delay)) {
+      problems.push(problem('error', 'INVALID_RETRY_MAX_DELAY',
+        'Retry maxDelay must be a positive ISO 8601 duration no smaller than delay', nodeId));
+    }
+  }
+  if (policy.jitter != null && typeof policy.jitter !== 'boolean') {
+    problems.push(problem('error', 'INVALID_RETRY_JITTER', 'Retry jitter must be a boolean', nodeId));
+  }
 }
 
 /**
@@ -599,6 +656,19 @@ function isValidIsoDuration(value: string): boolean {
   return /^P(?:\d+D)?(?:T(?:\d+H)?(?:\d+M)?(?:\d+(?:\.\d+)?S)?)?$/.test(value)
     && value !== 'P' && value !== 'PT'
     && !/T$/.test(value);
+}
+
+/**
+ * Converts a `java.time.Duration`-compatible ISO-8601 duration (PnDTnHnMnS) to milliseconds.
+ *
+ * @returns the non-negative duration in milliseconds, or `undefined` when malformed
+ */
+export function isoDurationMillis(value: string): number | undefined {
+  if (!isValidIsoDuration(value)) return undefined;
+  const match = /^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?)?$/.exec(value);
+  if (!match) return undefined;
+  const [, d = '0', h = '0', m = '0', s = '0'] = match;
+  return Math.round(((Number(d) * 24 + Number(h)) * 60 + Number(m)) * 60000 + Number(s) * 1000);
 }
 
 /**
