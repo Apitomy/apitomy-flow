@@ -987,4 +987,23 @@ class WorkflowValidatorTest {
         assertTrue(problems.stream().anyMatch(p ->
             p.code().equals("PARALLEL_BRANCH_REACHES_END") || p.code().equals("FORK_WITHOUT_JOIN")));
     }
+
+    @Test
+    void validRetryPolicyProducesNoRetryProblems() {
+        Workflow workflow = new Workflow("w", "W", null, null, List.of(startNode("s"),
+            new WorkflowNode("a", NodeType.ACTION, "a", Map.of("actionType", "t", "inputs", Map.of(),
+                "outputs", List.of(), "retry", Map.of("maxAttempts", 3, "delay", "PT1S")), new Position(0, 0)),
+            endNode("e")), List.of(edge("1", "s", "a"), edge("2", "a", "e")));
+        assertTrue(new WorkflowValidator().validate(workflow).stream().noneMatch(p -> p.code().contains("RETRY")));
+    }
+
+    @Test
+    void negativeRetryDelayIsRejected() {
+        Workflow workflow = new Workflow("w", "W", null, null, List.of(startNode("s"),
+            new WorkflowNode("a", NodeType.ACTION, "a", Map.of("actionType", "t", "inputs", Map.of(),
+                "outputs", List.of(), "retry", Map.of("maxAttempts", 3, "delay", "-PT1S")), new Position(0, 0)),
+            endNode("e")), List.of(edge("1", "s", "a"), edge("2", "a", "e")));
+        assertTrue(new WorkflowValidator().validate(workflow).stream()
+            .anyMatch(p -> p.code().equals("INVALID_RETRY_DELAY")));
+    }
 }

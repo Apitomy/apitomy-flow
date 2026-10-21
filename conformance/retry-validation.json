@@ -1,0 +1,20 @@
+[
+    { "name": "minimal policy", "retry": { "maxAttempts": 1 }, "problems": [] },
+    { "name": "full exponential policy", "retry": { "maxAttempts": 5, "delay": "PT2S", "backoff": "exponential", "multiplier": 1.5, "maxDelay": "PT1M", "jitter": true }, "problems": [] },
+    { "name": "zero delay", "retry": { "maxAttempts": 3, "delay": "PT0S" }, "problems": [] },
+    { "name": "policy not object", "retry": 3, "problems": ["INVALID_RETRY_POLICY:error:act"] },
+    { "name": "missing maxAttempts", "retry": { "delay": "PT1S" }, "problems": ["INVALID_RETRY_MAX_ATTEMPTS:error:act"] },
+    { "name": "zero maxAttempts", "retry": { "maxAttempts": 0 }, "problems": ["INVALID_RETRY_MAX_ATTEMPTS:error:act"] },
+    { "name": "fractional maxAttempts", "retry": { "maxAttempts": 2.5 }, "problems": ["INVALID_RETRY_MAX_ATTEMPTS:error:act"] },
+    { "name": "bad delay text", "retry": { "maxAttempts": 2, "delay": "soon" }, "problems": ["INVALID_RETRY_DELAY:error:act"] },
+    { "name": "delay not string", "retry": { "maxAttempts": 2, "delay": 5 }, "problems": ["INVALID_RETRY_DELAY:error:act"] },
+    { "name": "unknown backoff", "retry": { "maxAttempts": 2, "backoff": "linear" }, "problems": ["INVALID_RETRY_BACKOFF:error:act"] },
+    { "name": "multiplier with fixed", "retry": { "maxAttempts": 2, "multiplier": 2 }, "problems": ["INVALID_RETRY_MULTIPLIER:error:act"] },
+    { "name": "multiplier not above one", "retry": { "maxAttempts": 2, "backoff": "exponential", "multiplier": 1 }, "problems": ["INVALID_RETRY_MULTIPLIER:error:act"] },
+    { "name": "zero maxDelay", "retry": { "maxAttempts": 2, "maxDelay": "PT0S" }, "problems": ["INVALID_RETRY_MAX_DELAY:error:act"] },
+    { "name": "maxDelay below delay", "retry": { "maxAttempts": 2, "delay": "PT10S", "maxDelay": "PT5S" }, "problems": ["INVALID_RETRY_MAX_DELAY:error:act"] },
+    { "name": "jitter not boolean", "retry": { "maxAttempts": 2, "jitter": "yes" }, "problems": ["INVALID_RETRY_JITTER:error:act"] },
+    { "name": "valid workflow default", "defaultsRetry": { "maxAttempts": 3, "delay": "PT1S" }, "problems": [] },
+    { "name": "invalid workflow default", "defaultsRetry": { "maxAttempts": 0 }, "problems": ["INVALID_RETRY_MAX_ATTEMPTS:error:-"] },
+    { "name": "retry on wait node", "nodeType": "wait", "retry": { "maxAttempts": 2 }, "problems": ["RETRY_ON_NON_ACTION_NODE:warning:act"] }
+]
