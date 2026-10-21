@@ -32,6 +32,20 @@ public interface WorkflowErrorHandler {
     }
 
     /**
+     * Handles a structured failure with retry bookkeeping. The engine always calls this overload; the default
+     * delegates to {@link #handleError(WorkflowInstance, WorkflowNode, NodeResult, WorkflowError)} so existing
+     * handlers are unaffected. RETRY is shaped by the declared policy: it decides delay and ceiling, the
+     * handler decides whether to retry at all.
+     *
+     * @param retry the failed attempt number and effective policy; {@link RetryContext#NONE} outside actions
+     * @return a non-null recovery decision
+     */
+    default ErrorResolution handleError(WorkflowInstance instance, WorkflowNode node, NodeResult result,
+                                        WorkflowError error, RetryContext retry) {
+        return handleError(instance, node, result, error);
+    }
+
+    /**
      * Legacy node callback. Instance/node are non-null; result is null before a result exists, and error is
      * null for an explicit FAILED result. A non-null result may accompany an output-validation/mapping error.
      * Return a valid resolution; throwing an Exception fails the workflow.
