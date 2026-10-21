@@ -55,6 +55,11 @@ public sealed interface NodeConfig permits NodeConfig.Start, NodeConfig.End, Nod
         public Map<String, Object> inputs() { return object(wire.get("inputs")); }
         /** Returns output declarations in authored order. */
         public List<Field> outputs() { return records(wire, "outputs", Field::new); }
+        /** Returns the node's own declared retry policy, or empty to inherit the workflow default. */
+        public java.util.Optional<RetryPolicy> retry() {
+            Object value = wire.get("retry");
+            return value == null ? java.util.Optional.empty() : java.util.Optional.of(new RetryPolicy(object(value)));
+        }
     }
 
     /** Human-task title expression, instructions, expression/literal inputs, and form output metadata. */
