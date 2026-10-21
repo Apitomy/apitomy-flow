@@ -91,7 +91,8 @@ The delay before attempt `attempt + 1` is computed by `RetryPolicy.delayFor(atte
   saturates at the cap rather than wrapping
 - with `jitter`, a uniform random value in `[0, capped]`
 
-Delays are computed and truncated to millisecond precision.
+Delays are computed and truncated to millisecond precision. A computed delay under 1 ms, including a
+jittered 0, retries inline.
 
 When the handler returns `retry()` and `attempt >= maxAttempts`, the workflow fails with
 `Exceeded retry limit (<maxAttempts - 1>): <diagnostic>`. Otherwise a zero delay re-executes the action

@@ -37,6 +37,10 @@ public interface WorkflowErrorHandler {
      * handlers are unaffected. RETRY is shaped by the declared policy: it decides delay and ceiling, the
      * handler decides whether to retry at all.
      *
+     * <p>Non-action failures receive {@link RetryContext#NONE}. Without a policy, the inline retry loop
+     * reports a call-local attempt count, while a failed external completion ({@code completeNode}) always
+     * reports attempt 1.
+     *
      * @param retry the failed attempt number and effective policy; {@link RetryContext#NONE} outside actions
      * @return a non-null recovery decision
      */

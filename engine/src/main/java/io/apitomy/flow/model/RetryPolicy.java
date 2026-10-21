@@ -10,7 +10,8 @@ import java.util.random.RandomGenerator;
 /**
  * Immutable view of a declarative retry policy ({@code config.retry} on an action node or
  * {@code defaults.retry} on a workflow). Accessors apply defaults without rewriting {@link #wire()}.
- * Validation should run first; malformed fields throw {@link IllegalArgumentException}.
+ * Validation should run first; malformed fields throw {@link IllegalArgumentException}, except
+ * malformed duration text, which throws {@link java.time.format.DateTimeParseException}.
  */
 public record RetryPolicy(@JsonValue Map<String, Object> wire) {
     /** Constant delay between attempts. */
