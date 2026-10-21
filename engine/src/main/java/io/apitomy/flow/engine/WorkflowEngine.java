@@ -155,6 +155,9 @@ public class WorkflowEngine {
             throw new IllegalStateException(
                 "Cannot complete node: instance is not in WAITING status (current: " + instance.status() + ")");
         }
+        if (isRetryParked(instance, nodeId)) {
+            throw new IllegalStateException("Node is scheduled for retry; call retryNode instead: " + nodeId);
+        }
         ActiveBranch branch = instance.activeBranches().stream()
             .filter(b -> b.nodeId().equals(nodeId))
             .findFirst()
@@ -235,7 +238,11 @@ public class WorkflowEngine {
     private WorkflowInstance handleFailedCompletion(Workflow workflow, WorkflowInstance instance,
                                                     String branchId, WorkflowNode node,
                                                     NodeResult result, WorkflowError error) {
-        Recovery resolution = recoveryPolicy.resolve(workflow, instance, node, result, error);
+        Optional<RetryPolicy> declared = RetryPolicy.effective(workflow, node);
+        Recovery resolution = recoveryPolicy.resolve(workflow, instance, node, result, error,
+            node.type() == NodeType.ACTION
+                ? new RetryContext(currentAttempt(instance, branchId, node.id()), declared)
+                : RetryContext.NONE);
         if (resolution.awaitsExternalDelivery(node)) {
             return instance; // External tasks require another delivery, never action-executor dispatch.
         }
@@ -252,9 +259,21 @@ public class WorkflowEngine {
         Deque<BranchWork> work = runnableBranches(running);
         WorkflowInstance resolved;
         if (resolution.action() == ErrorAction.RETRY) {
-            work.addFirst(new BranchWork(new ActiveBranch(branchId, node.id()), WorkKind.RETRY,
-                null, resolution.error()));
-            resolved = running;
+            Optional<RetryPolicy> declared = RetryPolicy.effective(workflow, node);
+            if (declared.isEmpty()) {
+                work.addFirst(new BranchWork(new ActiveBranch(branchId, node.id()), WorkKind.RETRY,
+                    null, resolution.error()));
+                resolved = running;
+            } else {
+                RetryStep step = planRetry(running, branchId, node, declared.get(), resolution.error());
+                if (step.outcome() == RetryOutcome.EXHAUSTED) return step.instance();
+                resolved = step.instance();
+                if (step.outcome() == RetryOutcome.INLINE) {
+                    work.addFirst(new BranchWork(new ActiveBranch(branchId, node.id()), WorkKind.RETRY,
+                        null, resolution.error()));
+                }
+                // PARKED: nothing queued for this branch; quiesce() derives WAITING from the open entry.
+            }
         } else {
             resolved = applyResolution(workflow, running, branchId, node, resolution, work);
         }
@@ -481,6 +500,64 @@ public class WorkflowEngine {
     }
 
     /**
+     * Lists action nodes parked for a delayed retry. Hosts schedule a timer per entry and call
+     * {@link #retryNode} when it fires.
+     *
+     * @param instance the instance to inspect
+     * @return parked retries in active-branch order; empty unless the instance is WAITING
+     */
+    public List<RetryInfo> getPendingRetries(WorkflowInstance instance) {
+        if (instance.status() != InstanceStatus.WAITING) return List.of();
+        return instance.activeBranches().stream()
+            .map(branch -> {
+                HistoryEntry entry = openEntry(instance, branch.branchId(), branch.nodeId());
+                return entry == null || entry.retryAt() == null ? null
+                    : new RetryInfo(branch.nodeId(), branch.branchId(), entry.effectiveAttempt(), entry.retryAt());
+            })
+            .filter(Objects::nonNull)
+            .toList();
+    }
+
+    /**
+     * Runs a parked delayed retry. The host calls this when the timer it scheduled from
+     * {@link RetryInfo#retryAt()} fires; the engine does not enforce the due time.
+     *
+     * <p>Timers race with cancellation and duplicates, so this is a no-op (the instance is returned
+     * unchanged) when the node is not currently parked for a retry.
+     *
+     * @param workflow the workflow definition
+     * @param instance the WAITING instance
+     * @param nodeId   the parked action node id
+     * @return the advanced instance, or {@code instance} unchanged when no retry is parked at the node
+     */
+    public WorkflowInstance retryNode(Workflow workflow, WorkflowInstance instance, String nodeId) {
+        if (!isParkedNode(instance, nodeId)) return instance;
+        ActiveBranch branch = instance.activeBranches().stream()
+            .filter(b -> nodeId.equals(b.nodeId()))
+            .filter(b -> {
+                HistoryEntry entry = openEntry(instance, b.branchId(), nodeId);
+                return entry != null && entry.retryAt() != null;
+            })
+            .findFirst()
+            .orElse(null);
+        if (branch == null) return instance;
+        WorkflowInstance running = updateOpenEntry(instance, branch.branchId(), nodeId,
+            entry -> entry.withRetry(entry.attempt(), null))
+            .toBuilder().status(InstanceStatus.RUNNING).updatedOn(Instant.now()).build();
+        Deque<BranchWork> work = runnableBranches(running);
+        work.addFirst(new BranchWork(branch, WorkKind.RETRY));
+        return advanceBranches(workflow, running, work, ParallelRegions.analyze(workflow));
+    }
+
+    /** Reports whether a branch's open visit at the node is parked for a delayed retry. */
+    private boolean isRetryParked(WorkflowInstance instance, String nodeId) {
+        return instance.activeBranches().stream()
+            .filter(b -> nodeId.equals(b.nodeId()))
+            .map(b -> openEntry(instance, b.branchId(), nodeId))
+            .anyMatch(entry -> entry != null && entry.retryAt() != null);
+    }
+
+    /**
      * Resumes a parked RECEIVE_EVENT branch as timed out: the node's history entry is completed without
      * merging any event output, and the branch follows the node's timeout edge ({@code isTimeout == true}).
      * The host calls this when the timer it scheduled from {@link ReceiveEventInfo#timeout()} fires.
@@ -626,6 +703,9 @@ public class WorkflowEngine {
      */
     public ActionInfo getActionInfo(Workflow workflow, WorkflowInstance instance, String nodeId) {
         if (!isParkedNode(instance, nodeId)) {
+            return null;
+        }
+        if (isRetryParked(instance, nodeId)) {
             return null;
         }
         WorkflowNode node = workflow.findNodeById(nodeId).orElse(null);
@@ -788,8 +868,9 @@ public class WorkflowEngine {
     /**
      * Drives continuations, recovery entries, and externally requested retries to quiescence under one
      * per-call budget. Each edge move, recovery entry, external retry, or unsuccessful edge selection
-     * consumes one unit. Successful edge selection queues moves without an extra charge. Local action
-     * retries retain their separate MAX_RETRIES guard; neither limit is a durable retry policy.
+     * consumes one unit. Successful edge selection queues moves without an extra charge. Action
+     * retries are bounded by the node's declared retry policy (durable on the history entry) or, without
+     * one, by the call-local MAX_RETRIES guard.
      * Forks fan out, joins synchronize, and END terminates the instance.
      *
      * @param workflow the workflow definition

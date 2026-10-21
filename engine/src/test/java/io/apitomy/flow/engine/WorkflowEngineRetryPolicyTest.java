@@ -139,4 +139,84 @@ class WorkflowEngineRetryPolicyTest {
         assertEquals(List.of(1, 2, 3), seen.stream().map(RetryContext::attempt).toList());
         assertTrue(seen.stream().allMatch(c -> c.policy().orElseThrow().maxAttempts() == 3));
     }
+
+    /** Executor that parks (PENDING) every call. */
+    static NodeExecutor pending(AtomicInteger calls) {
+        return new NodeExecutor() {
+            @Override public String actionType() { return "flaky"; }
+            @Override public NodeResult execute(NodeExecutionContext context) {
+                calls.incrementAndGet();
+                return new NodeResult(NodeResultStatus.PENDING, Map.of());
+            }
+        };
+    }
+
+    @Test
+    void retryNodeRunsParkedRetryAndClearsRetryAt() {
+        AtomicInteger calls = new AtomicInteger();
+        WorkflowEngine engine = engine(flaky(1, calls), alwaysRetry(new ArrayList<>()));
+        Workflow workflow = workflow(Map.of("maxAttempts", 3, "delay", "PT30S"), null);
+        WorkflowInstance parked = engine.startWorkflow(workflow, Map.of());
+
+        assertEquals(List.of(new RetryInfo("act", "root", 2, NOW.plusSeconds(30))),
+            engine.getPendingRetries(parked));
+        assertNull(engine.getActionInfo(workflow, parked, "act"), "a scheduled retry is not pending async work");
+        assertThrows(IllegalStateException.class, () -> engine.completeNode(workflow, parked, "act",
+            new NodeResult(NodeResultStatus.COMPLETED, Map.of())));
+
+        WorkflowInstance done = engine.retryNode(workflow, parked, "act");
+        assertEquals(InstanceStatus.COMPLETED, done.status());
+        assertEquals(2, calls.get());
+        assertEquals(2, actEntry(done).attempt());
+        assertNull(actEntry(done).retryAt());
+        assertEquals(List.of(), engine.getPendingRetries(done));
+    }
+
+    @Test
+    void lateOrDuplicateRetryNodeIsNoOp() {
+        AtomicInteger calls = new AtomicInteger();
+        WorkflowEngine engine = engine(flaky(1, calls), alwaysRetry(new ArrayList<>()));
+        Workflow workflow = workflow(Map.of("maxAttempts", 3, "delay", "PT30S"), null);
+        WorkflowInstance done = engine.retryNode(workflow, engine.startWorkflow(workflow, Map.of()), "act");
+        assertSame(done, engine.retryNode(workflow, done, "act"));
+        assertEquals(2, calls.get());
+    }
+
+    @Test
+    void retryNodeIgnoresAsyncPendingAction() {
+        WorkflowEngine engine = engine(pending(new AtomicInteger()), alwaysRetry(new ArrayList<>()));
+        Workflow workflow = workflow(Map.of("maxAttempts", 3), null);
+        WorkflowInstance waiting = engine.startWorkflow(workflow, Map.of());
+        assertSame(waiting, engine.retryNode(workflow, waiting, "act"));
+    }
+
+    @Test
+    void attemptCountSurvivesAsyncResumes() {
+        AtomicInteger calls = new AtomicInteger();
+        WorkflowEngine engine = engine(pending(calls), alwaysRetry(new ArrayList<>()));
+        Workflow workflow = workflow(Map.of("maxAttempts", 3), null);
+        WorkflowInstance instance = engine.startWorkflow(workflow, Map.of());
+        NodeResult failed = new NodeResult(NodeResultStatus.FAILED, Map.of("error", "boom"));
+
+        instance = engine.completeNode(workflow, instance, "act", failed); // attempt 1 fails -> runs attempt 2
+        assertEquals(InstanceStatus.WAITING, instance.status());
+        assertEquals(2, actEntry(instance).attempt());
+        instance = engine.completeNode(workflow, instance, "act", failed); // attempt 2 fails -> runs attempt 3
+        assertEquals(3, actEntry(instance).attempt());
+        instance = engine.completeNode(workflow, instance, "act", failed); // attempt 3 fails -> exhausted
+        assertEquals(InstanceStatus.FAILED, instance.status());
+        assertTrue(instance.failureReason().startsWith("Exceeded retry limit (2): "), instance.failureReason());
+        assertEquals(3, calls.get());
+    }
+
+    @Test
+    void asyncFailureWithDelayParksForRetry() {
+        WorkflowEngine engine = engine(pending(new AtomicInteger()), alwaysRetry(new ArrayList<>()));
+        Workflow workflow = workflow(Map.of("maxAttempts", 3, "delay", "PT5S"), null);
+        WorkflowInstance instance = engine.completeNode(workflow, engine.startWorkflow(workflow, Map.of()), "act",
+            new NodeResult(NodeResultStatus.FAILED, Map.of()));
+        assertEquals(InstanceStatus.WAITING, instance.status());
+        assertEquals(List.of(new RetryInfo("act", "root", 2, NOW.plusSeconds(5))),
+            engine.getPendingRetries(instance));
+    }
 }
