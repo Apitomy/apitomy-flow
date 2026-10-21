@@ -5,7 +5,9 @@ import io.apitomy.flow.engine.ParallelRegions;
 import io.apitomy.flow.model.*;
 
 import java.time.Duration;
+import java.time.format.DateTimeParseException;
 import java.util.*;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class WorkflowValidator {
@@ -460,8 +462,8 @@ public class WorkflowValidator {
             }
         }
 
-        // Automated cycles (cycles with only action nodes)
         validateRetryPolicies(workflow, problems);
+        // Automated cycles (cycles with only action nodes)
         detectAutomatedCycles(workflow, problems);
     }
 
@@ -708,12 +710,22 @@ public class WorkflowValidator {
         }
     }
 
+    /**
+     * Retry duration grammar: unsigned, uppercase PnDTnHnMnS. Mirrors {@code isValidIsoDuration} in
+     * ui/src/validation/validateWorkflow.ts.
+     */
+    private static final Pattern RETRY_DURATION =
+        Pattern.compile("^P(?:\\d+D)?(?:T(?:\\d+H)?(?:\\d+M)?(?:\\d+(?:\\.\\d+)?S)?)?$");
+
     /** Parses a retry duration, returning null when absent or malformed. */
     private static Duration retryDuration(Object value) {
-        if (!(value instanceof String text)) return null;
+        if (!(value instanceof String text) || !RETRY_DURATION.matcher(text).matches()
+                || text.equals("P") || text.equals("PT") || text.endsWith("T")) {
+            return null;
+        }
         try {
             return Duration.parse(text);
-        } catch (Exception e) {
+        } catch (DateTimeParseException e) {
             return null;
         }
     }

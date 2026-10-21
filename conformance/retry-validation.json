@@ -16,5 +16,19 @@
     { "name": "jitter not boolean", "retry": { "maxAttempts": 2, "jitter": "yes" }, "problems": ["INVALID_RETRY_JITTER:error:act"] },
     { "name": "valid workflow default", "defaultsRetry": { "maxAttempts": 3, "delay": "PT1S" }, "problems": [] },
     { "name": "invalid workflow default", "defaultsRetry": { "maxAttempts": 0 }, "problems": ["INVALID_RETRY_MAX_ATTEMPTS:error:-"] },
-    { "name": "retry on wait node", "nodeType": "wait", "retry": { "maxAttempts": 2 }, "problems": ["RETRY_ON_NON_ACTION_NODE:warning:act"] }
+    { "name": "retry on wait node", "nodeType": "wait", "retry": { "maxAttempts": 2 }, "problems": ["RETRY_ON_NON_ACTION_NODE:warning:act"] },
+    { "name": "negative delay", "retry": { "maxAttempts": 2, "delay": "-PT1S" }, "problems": ["INVALID_RETRY_DELAY:error:act"] },
+    { "name": "mixed-sign delay", "retry": { "maxAttempts": 2, "delay": "PT1M-30S" }, "problems": ["INVALID_RETRY_DELAY:error:act"] },
+    { "name": "lowercase delay", "retry": { "maxAttempts": 2, "delay": "pt1s" }, "problems": ["INVALID_RETRY_DELAY:error:act"] },
+    { "name": "fractional delay", "retry": { "maxAttempts": 2, "delay": "PT0.5S" }, "problems": [] },
+    { "name": "day delay", "retry": { "maxAttempts": 2, "delay": "P1D" }, "problems": [] },
+    { "name": "invalid maxDelay text", "retry": { "maxAttempts": 2, "maxDelay": "later" }, "problems": ["INVALID_RETRY_MAX_DELAY:error:act"] },
+    { "name": "maxDelay not string", "retry": { "maxAttempts": 2, "maxDelay": 60 }, "problems": ["INVALID_RETRY_MAX_DELAY:error:act"] },
+    { "name": "multiplier not number", "retry": { "maxAttempts": 2, "backoff": "exponential", "multiplier": "2" }, "problems": ["INVALID_RETRY_MULTIPLIER:error:act"] },
+    { "name": "maxAttempts string", "retry": { "maxAttempts": "3" }, "problems": ["INVALID_RETRY_MAX_ATTEMPTS:error:act"] },
+    { "name": "maxAttempts integral float", "retry": { "maxAttempts": 2.0 }, "problems": [] },
+    { "name": "maxAttempts too large", "retry": { "maxAttempts": 3000000000 }, "problems": ["INVALID_RETRY_MAX_ATTEMPTS:error:act"] },
+    { "name": "null retry ignored", "retry": null, "problems": [] },
+    { "name": "non-object retry on wait", "nodeType": "wait", "retry": 5, "problems": ["RETRY_ON_NON_ACTION_NODE:warning:act"] },
+    { "name": "bad backoff with multiplier", "retry": { "maxAttempts": 2, "backoff": "linear", "multiplier": 2 }, "problems": ["INVALID_RETRY_BACKOFF:error:act", "INVALID_RETRY_MULTIPLIER:error:act"] }
 ]

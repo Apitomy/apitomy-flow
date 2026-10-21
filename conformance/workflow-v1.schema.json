@@ -73,8 +73,8 @@
             "type": ["object", "null"],
             "description": "Declarative retry policy. Semantic rules (ranges, maxDelay >= delay, multiplier only with exponential) are enforced by the validators.",
             "properties": {
-                "maxAttempts": { "type": "integer", "minimum": 1 },
-                "delay": { "type": "string", "description": "Non-negative ISO-8601 duration; default PT0S." },
+                "maxAttempts": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
+                "delay": { "type": "string", "description": "Non-negative ISO-8601 duration (unsigned, uppercase PnDTnHnMnS); default PT0S." },
                 "backoff": { "enum": ["fixed", "exponential"] },
                 "multiplier": { "type": "number", "exclusiveMinimum": 1 },
                 "maxDelay": { "type": "string", "description": "Positive ISO-8601 duration cap." },

@@ -12,6 +12,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
@@ -251,7 +252,7 @@ class ConformanceTest {
         JsonNode data = fixture.data();
         NodeType type = data.has("nodeType") ? NodeType.valueOf(data.path("nodeType").asText().toUpperCase())
             : NodeType.ACTION;
-        Map<String, Object> config = new java.util.HashMap<>(type == NodeType.ACTION
+        Map<String, Object> config = new HashMap<>(type == NodeType.ACTION
             ? Map.of("actionType", "t", "inputs", Map.of(), "outputs", List.of())
             : type == NodeType.WAIT ? Map.of("duration", "PT1S") : Map.of());
         if (data.has("retry")) config.put("retry", MAPPER.convertValue(data.path("retry"), Object.class));

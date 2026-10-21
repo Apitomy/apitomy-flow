@@ -10,7 +10,7 @@ language-specific fixture is required.
 | File | Contract |
 | --- | --- |
 | `expressions.json` | Raw values, strict boolean routing, numeric coercion, nulls, access, short circuiting, ternaries, malformed syntax, engine-only syntax |
-| `retry-validation.json` | Retry policy validation codes/severities for node and workflow-default policies, consumed by Java and browser validators |
+| `retry-validation.json` | Retry policy validation codes/severities for node and workflow-default policies, consumed by Java and browser validators. Retry durations share one grammar: unsigned, uppercase `PnDTnHnMnS` (e.g. `PT0.5S`, `P1D`); signs and lowercase are rejected |
 | `validation.json` | Common duration validation examples and problem codes/severities |
 | `routing.json` | Priority/default routing, event mappings, pre-merge context, output aliases, literal inputs, workflow round trips, parked branches and join arrivals across serialized resumes |
 | `budgets.json` | Fresh budget per advancement, repeated resumes, exact limit and one-over-limit, browser Step and Run |
