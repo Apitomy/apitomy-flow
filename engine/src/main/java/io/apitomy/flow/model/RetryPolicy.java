@@ -42,7 +42,8 @@ public record RetryPolicy(@JsonValue Map<String, Object> wire) {
     /** Returns the total attempt ceiling, including the first attempt. */
     public int maxAttempts() {
         Object value = wire.get("maxAttempts");
-        if (value instanceof Number number && number.doubleValue() == Math.rint(number.doubleValue())) {
+        if (value instanceof Number number && number.doubleValue() == Math.rint(number.doubleValue())
+                && Math.abs(number.doubleValue()) <= Integer.MAX_VALUE) {
             return number.intValue();
         }
         throw new IllegalArgumentException("retry.maxAttempts must be an integer");
@@ -100,6 +101,35 @@ public record RetryPolicy(@JsonValue Map<String, Object> wire) {
         long computed = (long) millis;
         if (jitter()) computed = random.nextLong(computed + 1);
         return Duration.ofMillis(computed);
+    }
+
+    /**
+     * Eagerly reads every field so a malformed policy fails fast with one exception type. The engine calls
+     * this before acting on a policy, because a definition passed to a resume call is not re-validated.
+     *
+     * @return this policy
+     * @throws IllegalArgumentException if any field is malformed or out of range
+     */
+    public RetryPolicy check() {
+        try {
+            if (maxAttempts() < 1) throw new IllegalArgumentException("retry.maxAttempts must be at least 1");
+            if (delay().isNegative()) throw new IllegalArgumentException("retry.delay must not be negative");
+            String backoff = backoff();
+            if (!FIXED.equals(backoff) && !EXPONENTIAL.equals(backoff)) {
+                throw new IllegalArgumentException("retry.backoff must be \"fixed\" or \"exponential\"");
+            }
+            if (EXPONENTIAL.equals(backoff) && !(multiplier() > 1)) {
+                throw new IllegalArgumentException("retry.multiplier must be greater than 1");
+            }
+            Duration cap = maxDelay();
+            if (cap != null && (cap.isNegative() || cap.isZero())) {
+                throw new IllegalArgumentException("retry.maxDelay must be positive");
+            }
+            jitter();
+            return this;
+        } catch (java.time.DateTimeException e) {
+            throw new IllegalArgumentException("retry duration is malformed: " + e.getMessage(), e);
+        }
     }
 
     private Duration duration(String key) {

@@ -332,6 +332,8 @@ class WorkflowEngineRetryPolicyTest {
         assertSame(cancelled, engine.retryNode(workflow, cancelled, "act"));
         assertEquals(List.of(), engine.getPendingRetries(cancelled));
         assertEquals(1, calls.get());
+        assertNull(actEntry(cancelled).retryAt(), "cancel clears the scheduled retry from history");
+        assertEquals(2, actEntry(cancelled).attempt());
     }
 
     @Test
@@ -394,5 +396,55 @@ class WorkflowEngineRetryPolicyTest {
         assertEquals(InstanceStatus.FAILED, instance.status());
         assertTrue(instance.failureReason().startsWith("Exceeded retry limit (2): "), instance.failureReason());
         assertEquals(3, calls.get());
+    }
+
+    @Test
+    void zeroDelayInlineRetriesAreBoundedPerCallThenPark() {
+        AtomicInteger calls = new AtomicInteger();
+        WorkflowEngine engine = engine(flaky(99, calls), alwaysRetry(new ArrayList<>()));
+        Workflow workflow = workflow(Map.of("maxAttempts", 1_000_000), null);
+        WorkflowInstance parked = engine.startWorkflow(workflow, Map.of());
+        assertEquals(InstanceStatus.WAITING, parked.status());
+        assertEquals(11, calls.get(), "first attempt plus MAX_RETRIES inline retries");
+        assertEquals(List.of(new RetryInfo("act", "root", 12, NOW)), engine.getPendingRetries(parked));
+
+        WorkflowInstance again = engine.retryNode(workflow, parked, "act");
+        assertEquals(InstanceStatus.WAITING, again.status());
+        assertEquals(22, calls.get());
+        assertEquals(23, actEntry(again).attempt());
+    }
+
+    @Test
+    void inlineCapDoesNotPreventExhaustion() {
+        AtomicInteger calls = new AtomicInteger();
+        WorkflowInstance result = engine(flaky(99, calls), alwaysRetry(new ArrayList<>()))
+            .startWorkflow(workflow(Map.of("maxAttempts", 11), null), Map.of());
+        assertEquals(InstanceStatus.FAILED, result.status());
+        assertEquals(11, calls.get());
+    }
+
+    @Test
+    void malformedPolicyOnResumeFailsInsteadOfThrowing() {
+        AtomicInteger calls = new AtomicInteger();
+        WorkflowEngine engine = engine(flaky(99, calls), alwaysRetry(new ArrayList<>()));
+        WorkflowInstance parked = engine.startWorkflow(
+            workflow(Map.of("maxAttempts", 3, "delay", "PT30S"), null), Map.of());
+        Workflow edited = workflow(Map.of("maxAttempts", 3, "delay", "soon"), null);
+        WorkflowInstance result = engine.retryNode(edited, parked, "act");
+        assertEquals(InstanceStatus.FAILED, result.status());
+        assertTrue(result.failureReason().startsWith("Invalid retry policy for node act: "), result.failureReason());
+    }
+
+    @Test
+    void malformedWorkflowDefaultOnResumeFailsInsteadOfThrowing() {
+        AtomicInteger calls = new AtomicInteger();
+        WorkflowEngine engine = engine(flaky(99, calls), alwaysRetry(new ArrayList<>()));
+        WorkflowInstance parked = engine.startWorkflow(
+            workflow(Map.of("maxAttempts", 3, "delay", "PT30S"), null), Map.of());
+        Workflow edited = new Workflow("w", "W", null, null, workflow(null, null).nodes(),
+            workflow(null, null).edges(), Map.of("retry", "nope"));
+        WorkflowInstance result = engine.retryNode(edited, parked, "act");
+        assertEquals(InstanceStatus.FAILED, result.status());
+        assertTrue(result.failureReason().startsWith("Invalid retry policy for node act: "), result.failureReason());
     }
 }

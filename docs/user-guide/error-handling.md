@@ -99,6 +99,18 @@ When the handler returns `retry()` and `attempt >= maxAttempts`, the workflow fa
 inline, and a positive delay parks the node: the instance quiesces to `WAITING` until the host calls
 `retryNode`.
 
+One engine call runs at most **ten inline retries** of a node. After that, a zero-delay retry parks with
+`retryAt` set to the current time instead of looping, so a large `maxAttempts` with no delay cannot block
+the calling thread. Hosts resume it through `retryNode` like any other parked retry.
+
+The engine does not re-validate the definition passed to `completeNode` or `retryNode`. If the effective
+policy is malformed when a retry is decided (for example, after a definition edit), the workflow fails with
+`Invalid retry policy for node <id>: <reason>` rather than throwing.
+
+Exhaustion is final: the handler is not consulted again. To route somewhere else on the last failure
+(skip, transition to a repair node), check `retry.attempt() >= policy.maxAttempts()` in an attempt-aware
+handler and return that resolution instead of `retry()`.
+
 The open history entry for the node visit carries `attempt` (1-based; absent means 1) and, while parked
 for a delayed retry, `retryAt`. Because this state lives on the instance, counts survive `PENDING` parking,
 host persistence, and restarts. A later re-entry of the same node (for example, a loop) opens a new history
@@ -129,6 +141,7 @@ for (RetryInfo retry : engine.getPendingRetries(instance)) {
 `RetryInfo(nodeId, branchId, attempt, retryAt)` reports the attempt that will run next. `retryNode`
 clears `retryAt` and re-executes the node, re-resolving inputs. It returns the instance unchanged for late
 or duplicate timers (when the node is no longer parked for retry). The engine does not enforce `retryAt`.
+`cancelWorkflow` clears `retryAt` from history, so a cancelled instance never shows a scheduled retry.
 `completeNode` throws `IllegalStateException` for a node parked for retry, and `getActionInfo` returns
 `null` for it, so a scheduled retry is never mistaken for pending async work.
 
