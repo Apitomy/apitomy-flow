@@ -30,5 +30,9 @@
     { "name": "maxAttempts too large", "retry": { "maxAttempts": 3000000000 }, "problems": ["INVALID_RETRY_MAX_ATTEMPTS:error:act"] },
     { "name": "null retry ignored", "retry": null, "problems": [] },
     { "name": "non-object retry on wait", "nodeType": "wait", "retry": 5, "problems": ["RETRY_ON_NON_ACTION_NODE:warning:act"] },
-    { "name": "bad backoff with multiplier", "retry": { "maxAttempts": 2, "backoff": "linear", "multiplier": 2 }, "problems": ["INVALID_RETRY_BACKOFF:error:act", "INVALID_RETRY_MULTIPLIER:error:act"] }
+    { "name": "bad backoff with multiplier", "retry": { "maxAttempts": 2, "backoff": "linear", "multiplier": 2 }, "problems": ["INVALID_RETRY_BACKOFF:error:act", "INVALID_RETRY_MULTIPLIER:error:act"] },
+    { "name": "sub-millisecond maxDelay below delay", "retry": { "maxAttempts": 2, "delay": "PT0.0014S", "maxDelay": "PT0.0011S" }, "problems": ["INVALID_RETRY_MAX_DELAY:error:act"] },
+    { "name": "nanosecond delay accepted", "retry": { "maxAttempts": 2, "delay": "PT0.000000001S" }, "problems": [] },
+    { "name": "sub-nanosecond delay rejected", "retry": { "maxAttempts": 2, "delay": "PT0.0000000001S" }, "problems": ["INVALID_RETRY_DELAY:error:act"] },
+    { "name": "overflowing delay rejected", "retry": { "maxAttempts": 2, "delay": "P999999999999999999D" }, "problems": ["INVALID_RETRY_DELAY:error:act"] }
 ]

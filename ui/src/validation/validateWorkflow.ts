@@ -449,9 +449,9 @@ function validateRetryPolicy(raw: unknown, nodeId: string | undefined, problems:
   if (typeof max !== 'number' || !Number.isInteger(max) || max < 1 || max > 2147483647) {
     problems.push(problem('error', 'INVALID_RETRY_MAX_ATTEMPTS', 'Retry maxAttempts must be an integer of at least 1', nodeId));
   }
-  let delay: number | undefined;
+  let delay: bigint | undefined;
   if (policy.delay != null) {
-    delay = typeof policy.delay === 'string' ? isoDurationMillis(policy.delay) : undefined;
+    delay = typeof policy.delay === 'string' ? isoDurationNanos(policy.delay) : undefined;
     if (delay === undefined) {
       problems.push(problem('error', 'INVALID_RETRY_DELAY', 'Retry delay must be a non-negative ISO 8601 duration', nodeId));
     }
@@ -466,8 +466,8 @@ function validateRetryPolicy(raw: unknown, nodeId: string | undefined, problems:
       'Retry multiplier must be a number greater than 1 and requires exponential backoff', nodeId));
   }
   if (policy.maxDelay != null) {
-    const maxDelay = typeof policy.maxDelay === 'string' ? isoDurationMillis(policy.maxDelay) : undefined;
-    if (maxDelay === undefined || maxDelay <= 0 || (delay !== undefined && maxDelay < delay)) {
+    const maxDelay = typeof policy.maxDelay === 'string' ? isoDurationNanos(policy.maxDelay) : undefined;
+    if (maxDelay === undefined || maxDelay <= 0n || (delay !== undefined && maxDelay < delay)) {
       problems.push(problem('error', 'INVALID_RETRY_MAX_DELAY',
         'Retry maxDelay must be a positive ISO 8601 duration no smaller than delay', nodeId));
     }
@@ -659,16 +659,32 @@ function isValidIsoDuration(value: string): boolean {
 }
 
 /**
- * Converts a `java.time.Duration`-compatible ISO-8601 duration (PnDTnHnMnS) to milliseconds.
+ * Converts a `java.time.Duration`-compatible ISO-8601 duration (PnDTnHnMnS) to exact nanoseconds, matching
+ * Java's `Duration.parse` precision so retry comparisons agree with the engine validator.
+ *
+ * @returns the non-negative duration in nanoseconds, or `undefined` when malformed (including fractions
+ *   finer than nanoseconds, which `Duration.parse` rejects)
+ */
+export function isoDurationNanos(value: string): bigint | undefined {
+  if (!isValidIsoDuration(value)) return undefined;
+  const match = /^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)(?:\.(\d+))?S)?)?$/.exec(value);
+  if (!match) return undefined;
+  const [, d = '0', h = '0', m = '0', s = '0', frac = ''] = match;
+  if (frac.length > 9) return undefined;
+  const seconds = ((BigInt(d) * 24n + BigInt(h)) * 60n + BigInt(m)) * 60n + BigInt(s);
+  if (seconds > 9_223_372_036_854_775_807n) return undefined; // Duration.parse overflows past Long.MAX_VALUE
+  return seconds * 1_000_000_000n + BigInt(frac.padEnd(9, '0'));
+}
+
+/**
+ * Converts a `java.time.Duration`-compatible ISO-8601 duration (PnDTnHnMnS) to milliseconds, truncating
+ * sub-millisecond precision like `Duration.toMillis()`.
  *
  * @returns the non-negative duration in milliseconds, or `undefined` when malformed
  */
 export function isoDurationMillis(value: string): number | undefined {
-  if (!isValidIsoDuration(value)) return undefined;
-  const match = /^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?)?$/.exec(value);
-  if (!match) return undefined;
-  const [, d = '0', h = '0', m = '0', s = '0'] = match;
-  return Math.round(((Number(d) * 24 + Number(h)) * 60 + Number(m)) * 60000 + Number(s) * 1000);
+  const nanos = isoDurationNanos(value);
+  return nanos === undefined ? undefined : Number(nanos / 1_000_000n);
 }
 
 /**
