@@ -13,7 +13,8 @@ import { getNodeDefinition } from '../utils/nodeDefinition.ts';
 import { nodeInputRows } from '../utils/nodeInputs.ts';
 import { humanTaskSummary } from '../utils/humanTaskSummary.ts';
 import { getNodeStatusBadge } from '../utils/nodeStatus.ts';
-import { activeNodeIds, activeEdgeIds } from '../utils/parallelView.ts';
+import { activeNodeIds, activeEdgeIds, traversedEdgeIds, parallelRole } from '../utils/parallelView.ts';
+import { analyzeParallelRegions } from '../simulation/parallelRegions.ts';
 import { type FlowTheme } from './WorkflowEditor.tsx';
 import { nodeTypes } from './nodes/nodeTypes.ts';
 import { edgeTypes } from './edges/edgeTypes.ts';
@@ -66,9 +67,13 @@ function WorkflowViewerInner({ workflow, instance, theme = 'light', nodeContextM
     [instance.history],
   );
 
+  // Static fork/join structure, used for the Fork/Join badges and to fill in join arrival edges that a
+  // single-edge history entry cannot record.
+  const parallelAnalysis = useMemo(() => analyzeParallelRegions(workflow), [workflow]);
+
   const visitedEdgeIds = useMemo(
-    () => new Set(instance.history.filter(h => h.edgeId).map(h => h.edgeId!)),
-    [instance.history],
+    () => traversedEdgeIds(instance.history, instance.joinArrivals, parallelAnalysis),
+    [instance.history, instance.joinArrivals, parallelAnalysis],
   );
 
   const isTerminal = instance.status === 'completed' || instance.status === 'failed' || instance.status === 'cancelled';
@@ -133,13 +138,18 @@ function WorkflowViewerInner({ workflow, instance, theme = 'light', nodeContextM
       }
       return {
         ...node,
-        data: { ...node.data, isCurrent: isCurrent && !isTerminal, actionAppearance: appearances.get(node.id) },
+        data: {
+          ...node.data,
+          isCurrent: isCurrent && !isTerminal,
+          actionAppearance: appearances.get(node.id),
+          parallelRole: parallelRole(node.id, parallelAnalysis),
+        },
         className,
         selected: isNodeSelected(node.id, selectedNodeId),
         draggable: false,
       };
     });
-  }, [laidOutNodes, activeIds, instance.status, isTerminal, visitedNodeIds, selectedNodeId, appearances]);
+  }, [laidOutNodes, activeIds, instance.status, isTerminal, visitedNodeIds, selectedNodeId, appearances, parallelAnalysis]);
 
   const edges = useMemo(() => {
     return toReactFlowEdges(workflow.edges).map(edge => {

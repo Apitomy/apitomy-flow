@@ -75,6 +75,34 @@ export function activeEdgeIds(branches: ActiveBranch[], history: HistoryEntry[])
 }
 
 /**
+ * The set of edge ids an instance has traversed. A history entry records only a single arrival edge,
+ * so branches converging on an AND-join leave no trace of their arrival edges except the last one.
+ * This fills those gaps: every incoming edge of a join that has fired (appears in history) is
+ * traversed, since the join fires only once all of them have arrived, and the edges of branches
+ * currently waiting at a join are taken from {@code joinArrivals}.
+ *
+ * @param history the full, branch-attributed history
+ * @param joinArrivals per-join incoming edge ids that have arrived but not yet fired (may be absent)
+ * @param analysis the static parallel-region analysis of the workflow
+ * @returns a set of edge ids (never null)
+ */
+export function traversedEdgeIds(
+  history: HistoryEntry[],
+  joinArrivals: Record<string, string[]> | undefined,
+  analysis: ParallelAnalysis,
+): Set<string> {
+  const edges = new Set<string>();
+  for (const entry of history) {
+    if (entry.edgeId) edges.add(entry.edgeId);
+    if (analysis.isJoin(entry.nodeId)) {
+      analysis.incomingEdgeIds(entry.nodeId).forEach(id => edges.add(id));
+    }
+  }
+  Object.values(joinArrivals ?? {}).forEach(ids => ids.forEach(id => edges.add(id)));
+  return edges;
+}
+
+/**
  * Resolves the parked (blocked) branches to displayable {@link ParkedNode}s.
  *
  * @param branches the live branch tokens

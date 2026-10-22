@@ -15,7 +15,7 @@ const HINT_TITLE: Record<'fork' | 'join', string> = {
 
 /**
  * Wraps a node component to render a small corner hint when the node is a parallel fork or join.
- * Renders nothing when {@code data.parallelRole} is unset (e.g. in the read-only viewer).
+ * Renders nothing when {@code data.parallelRole} is unset.
  *
  * @param Node the node component to wrap
  * @returns the wrapped component
