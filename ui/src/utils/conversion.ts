@@ -3,6 +3,7 @@ import {type Workflow, type WorkflowEdge, type WorkflowNode, type NodeConfigMap,
 import {type ValidationProblem} from '../types/validation.ts';
 import {type ParallelRole} from './parallelView.ts';
 import {type ActionAppearance} from './actionAppearance.ts';
+import {type RetryBadge} from './retryPolicy.ts';
 
 export type FlowNodeData = { [K in NodeType]: Record<string, unknown> & {
   name: string;
@@ -13,6 +14,8 @@ export type FlowNodeData = { [K in NodeType]: Record<string, unknown> & {
   unresolvedActionType?: string;
   /** Host-chosen icon/color for an Action node, from its Action Type descriptor. */
   actionAppearance?: ActionAppearance;
+  /** Effective retry policy badge for an Action node, if any. */
+  retryBadge?: RetryBadge;
   /** Static fork/join role for the authoring hint, if any (editor only). */
   parallelRole?: ParallelRole;
   /** Wire fields retained for host extensions when converting back from the canvas. */

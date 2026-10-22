@@ -12,6 +12,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
@@ -240,6 +241,33 @@ class ConformanceTest {
             new WorkflowEdge("finish", "wait", "end", null, 0, false, null)));
         assertJson(data.path("problems"), MAPPER.valueToTree(new WorkflowValidator().validate(workflow).stream()
             .map(p -> p.code() + ":" + p.severity().toString().toLowerCase() + ":" + p.nodeId()).toList()));
+    }
+
+    /** Loads the shared retry validation fixtures. */
+    static Stream<Fixture> retryValidation() throws Exception { return fixtures("retry-validation"); }
+
+    @ParameterizedTest(name = "retry validation: {0}")
+    @MethodSource("retryValidation")
+    void retryValidationContract(Fixture fixture) {
+        JsonNode data = fixture.data();
+        NodeType type = data.has("nodeType") ? NodeType.valueOf(data.path("nodeType").asText().toUpperCase())
+            : NodeType.ACTION;
+        Map<String, Object> config = new HashMap<>(type == NodeType.ACTION
+            ? Map.of("actionType", "t", "inputs", Map.of(), "outputs", List.of())
+            : type == NodeType.WAIT ? Map.of("duration", "PT1S") : Map.of());
+        if (data.has("retry")) config.put("retry", MAPPER.convertValue(data.path("retry"), Object.class));
+        Map<String, Object> defaults = data.has("defaultsRetry")
+            ? Map.of("retry", MAPPER.convertValue(data.path("defaultsRetry"), Object.class)) : null;
+        Workflow workflow = new Workflow("retry", "Retry", null, null, List.of(
+            node("start", NodeType.START, Map.of("inputs", List.of())),
+            node("act", type, config),
+            node("end", NodeType.END, Map.of())
+        ), List.of(new WorkflowEdge("begin", "start", "act", null, 0, false, null),
+            new WorkflowEdge("finish", "act", "end", null, 0, false, null)), defaults);
+        assertJson(data.path("problems"), MAPPER.valueToTree(new WorkflowValidator().validate(workflow).stream()
+            .filter(p -> p.code().contains("RETRY"))
+            .map(p -> p.code() + ":" + p.severity().toString().toLowerCase() + ":"
+                + (p.nodeId() == null ? "-" : p.nodeId())).toList()));
     }
 
     private static WorkflowNode node(String id, NodeType type, Map<String, Object> config) {

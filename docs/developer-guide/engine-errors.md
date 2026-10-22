@@ -47,6 +47,11 @@ actions in a call. Recovery entries, external action retries, and human input re
 Budget failures retain the triggering/last recovery diagnostic when available. Parked sibling branches are
 never selected as runnable just because another branch recovers. These limits are not durable retry policy.
 
+With a declared retry policy (node `config.retry` or `defaults.retry`), the action attempt count is durable
+on the open history entry, and exhaustion fails with `Exceeded retry limit (N): <diagnostic>`, where
+`N = maxAttempts - 1`. Without a policy, the legacy message `Exceeded retry limit (10): <diagnostic>` is
+unchanged. See [retry limits and durability](../user-guide/error-handling.md#retry-limits-and-durability).
+
 On external ACTION completion, `RETRY` re-executes the action. For non-action completion failures and event
 output-mapping failures, `RETRY` leaves the instance parked for another delivery. No invalid completion
 output is merged. A completed action must supply each required output as non-null before context-key

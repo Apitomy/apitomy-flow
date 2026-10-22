@@ -2,7 +2,8 @@ import { useMemo, useState, useCallback, useRef } from 'react';
 import { ReactFlow, Background, Controls, ReactFlowProvider, type Node } from '@xyflow/react';
 import { AngleDoubleRightIcon, AngleDoubleLeftIcon } from '@patternfly/react-icons';
 import { type HistoryEntry, type InstanceStatus } from '../types/instance.ts';
-import { type Workflow } from '../types/workflow.ts';
+import { type Workflow, type WorkflowDefaults } from '../types/workflow.ts';
+import { effectiveRetryPolicy, retryBadgesByNodeId } from '../utils/retryPolicy.ts';
 import { type ActionTypeProvider } from '../types/spi.ts';
 import { useActionTypeCatalog } from '../hooks/useActionTypeCatalog.ts';
 import { actionAppearanceByNodeId } from '../utils/actionAppearance.ts';
@@ -114,6 +115,8 @@ function WorkflowViewerInner({ workflow, instance, theme = 'light', nodeContextM
   const actionTypeCatalog = useActionTypeCatalog(actionTypes);
   const appearances = useMemo(() => actionAppearanceByNodeId(laidOutNodes, actionTypeCatalog),
     [laidOutNodes, actionTypeCatalog]);
+  const retryBadges = useMemo(() => retryBadgesByNodeId(laidOutNodes, workflow.defaults),
+    [laidOutNodes, workflow.defaults]);
 
   const nodes = useMemo(() => {
     return toReactFlowNodes(laidOutNodes).map(node => {
@@ -133,13 +136,14 @@ function WorkflowViewerInner({ workflow, instance, theme = 'light', nodeContextM
       }
       return {
         ...node,
-        data: { ...node.data, isCurrent: isCurrent && !isTerminal, actionAppearance: appearances.get(node.id) },
+        data: { ...node.data, isCurrent: isCurrent && !isTerminal, actionAppearance: appearances.get(node.id),
+          retryBadge: retryBadges.get(node.id) },
         className,
         selected: isNodeSelected(node.id, selectedNodeId),
         draggable: false,
       };
     });
-  }, [laidOutNodes, activeIds, instance.status, isTerminal, visitedNodeIds, selectedNodeId, appearances]);
+  }, [laidOutNodes, activeIds, instance.status, isTerminal, visitedNodeIds, selectedNodeId, appearances, retryBadges]);
 
   const edges = useMemo(() => {
     return toReactFlowEdges(workflow.edges).map(edge => {
@@ -313,6 +317,7 @@ function WorkflowViewerInner({ workflow, instance, theme = 'light', nodeContextM
               onSelectVisit={setSelectedVisitIndex}
               isCurrent={selectedNodeId ? activeIds.has(selectedNodeId) : false}
               instanceStatus={instance.status}
+              workflowDefaults={workflow.defaults}
               viewMode={detailViewMode}
               theme={theme}
             />
@@ -336,7 +341,7 @@ function WorkflowViewerInner({ workflow, instance, theme = 'light', nodeContextM
   );
 }
 
-function NodeDetail({ node, history, visits, visitsByBranch, visitIndex, onSelectVisit, isCurrent, instanceStatus, viewMode, theme }: {
+function NodeDetail({ node, history, visits, visitsByBranch, visitIndex, onSelectVisit, isCurrent, instanceStatus, workflowDefaults, viewMode, theme }: {
   node: WorkflowViewerProps['workflow']['nodes'][number] | null;
   history: HistoryEntry | null;
   visits: HistoryEntry[];
@@ -345,6 +350,7 @@ function NodeDetail({ node, history, visits, visitsByBranch, visitIndex, onSelec
   onSelectVisit: (index: number) => void;
   isCurrent: boolean;
   instanceStatus: InstanceStatus;
+  workflowDefaults?: WorkflowDefaults | null;
   viewMode: 'state' | 'definition';
   theme: FlowTheme;
 }) {
@@ -360,7 +366,12 @@ function NodeDetail({ node, history, visits, visitsByBranch, visitIndex, onSelec
   // most recent visit. An earlier visit of a looping node has completed, even
   // when the node happens to be the instance's current node.
   const isCurrentVisit = isCurrent && visitIndex >= visits.length - 1;
-  const statusBadge = getNodeStatusBadge({ isCurrentVisit, wasVisited, instanceStatus });
+  const effectiveRetry = effectiveRetryPolicy(node, workflowDefaults);
+  const pendingRetry = isCurrentVisit && history?.retryAt
+    ? { attempt: history.attempt ?? 1, maxAttempts: effectiveRetry?.policy.maxAttempts ?? undefined,
+        retryAt: history.retryAt }
+    : undefined;
+  const statusBadge = getNodeStatusBadge({ isCurrentVisit, wasVisited, instanceStatus, pendingRetry });
 
   return (
     <div className="workflow-viewer__node-detail">

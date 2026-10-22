@@ -37,11 +37,17 @@ final class RecoveryPolicy {
             error.getMessage() == null ? error.getClass().getName() : error.getMessage(), error);
     }
 
-    /** Resolves once; malformed decisions and handler Exceptions become failures retaining both causes. */
+    /** Resolves a non-action (or attempt-agnostic) failure. */
     Recovery resolve(Workflow workflow, WorkflowInstance instance, WorkflowNode node,
                      NodeResult result, WorkflowError error) {
+        return resolve(workflow, instance, node, result, error, RetryContext.NONE);
+    }
+
+    /** Resolves once; malformed decisions and handler Exceptions become failures retaining both causes. */
+    Recovery resolve(Workflow workflow, WorkflowInstance instance, WorkflowNode node,
+                     NodeResult result, WorkflowError error, RetryContext retry) {
         try {
-            ErrorResolution resolution = handler.handleError(instance, node, result, error);
+            ErrorResolution resolution = handler.handleError(instance, node, result, error, retry);
             if (resolution == null || resolution.action() == null) {
                 throw new IllegalArgumentException("Error resolution and action must not be null");
             }

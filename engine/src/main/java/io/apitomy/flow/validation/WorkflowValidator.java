@@ -5,7 +5,9 @@ import io.apitomy.flow.engine.ParallelRegions;
 import io.apitomy.flow.model.*;
 
 import java.time.Duration;
+import java.time.format.DateTimeParseException;
 import java.util.*;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class WorkflowValidator {
@@ -460,6 +462,7 @@ public class WorkflowValidator {
             }
         }
 
+        validateRetryPolicies(workflow, problems);
         // Automated cycles (cycles with only action nodes)
         detectAutomatedCycles(workflow, problems);
     }
@@ -644,6 +647,87 @@ public class WorkflowValidator {
         Object matchA = a.config().get("match");
         Object matchB = b.config().get("match");
         return Objects.equals(matchA, matchB);
+    }
+
+    /** Validates node-level and workflow-default retry policies (mirrors validateWorkflow.ts). */
+    private void validateRetryPolicies(Workflow workflow, List<ValidationProblem> problems) {
+        if (workflow.defaults() != null && workflow.defaults().get("retry") != null) {
+            validateRetryPolicy(workflow.defaults().get("retry"), null, problems);
+        }
+        for (WorkflowNode node : workflow.nodes()) {
+            Object retry = node.config() == null ? null : node.config().get("retry");
+            if (retry == null) continue;
+            if (node.type() != NodeType.ACTION) {
+                problems.add(ValidationProblem.warning("RETRY_ON_NON_ACTION_NODE",
+                    "Retry policies only apply to action nodes", node.id()));
+                continue;
+            }
+            validateRetryPolicy(retry, node.id(), problems);
+        }
+    }
+
+    /** Validates one retry policy, attributing problems to nodeId (null for workflow defaults). */
+    private void validateRetryPolicy(Object raw, String nodeId, List<ValidationProblem> problems) {
+        if (!(raw instanceof Map<?, ?> policy)) {
+            problems.add(ValidationProblem.error("INVALID_RETRY_POLICY", "Retry policy must be an object", nodeId));
+            return;
+        }
+        Object maxAttempts = policy.get("maxAttempts");
+        if (!(maxAttempts instanceof Number n) || n.doubleValue() != Math.rint(n.doubleValue())
+                || n.doubleValue() < 1 || n.doubleValue() > Integer.MAX_VALUE) {
+            problems.add(ValidationProblem.error("INVALID_RETRY_MAX_ATTEMPTS",
+                "Retry maxAttempts must be an integer of at least 1", nodeId));
+        }
+        Duration delay = retryDuration(policy.get("delay"));
+        if (policy.get("delay") != null && (delay == null || delay.isNegative())) {
+            problems.add(ValidationProblem.error("INVALID_RETRY_DELAY",
+                "Retry delay must be a non-negative ISO 8601 duration", nodeId));
+            delay = null;
+        }
+        Object backoff = policy.get("backoff");
+        if (backoff != null && !RetryPolicy.FIXED.equals(backoff) && !RetryPolicy.EXPONENTIAL.equals(backoff)) {
+            problems.add(ValidationProblem.error("INVALID_RETRY_BACKOFF",
+                "Retry backoff must be \"fixed\" or \"exponential\"", nodeId));
+        }
+        Object multiplier = policy.get("multiplier");
+        if (multiplier != null && (!(multiplier instanceof Number m) || !(m.doubleValue() > 1)
+                || !RetryPolicy.EXPONENTIAL.equals(backoff))) {
+            problems.add(ValidationProblem.error("INVALID_RETRY_MULTIPLIER",
+                "Retry multiplier must be a number greater than 1 and requires exponential backoff", nodeId));
+        }
+        Object maxDelayRaw = policy.get("maxDelay");
+        if (maxDelayRaw != null) {
+            Duration maxDelay = retryDuration(maxDelayRaw);
+            if (maxDelay == null || maxDelay.isNegative() || maxDelay.isZero()
+                    || (delay != null && maxDelay.compareTo(delay) < 0)) {
+                problems.add(ValidationProblem.error("INVALID_RETRY_MAX_DELAY",
+                    "Retry maxDelay must be a positive ISO 8601 duration no smaller than delay", nodeId));
+            }
+        }
+        Object jitter = policy.get("jitter");
+        if (jitter != null && !(jitter instanceof Boolean)) {
+            problems.add(ValidationProblem.error("INVALID_RETRY_JITTER", "Retry jitter must be a boolean", nodeId));
+        }
+    }
+
+    /**
+     * Retry duration grammar: unsigned, uppercase PnDTnHnMnS. Mirrors {@code isValidIsoDuration} in
+     * ui/src/validation/validateWorkflow.ts.
+     */
+    private static final Pattern RETRY_DURATION =
+        Pattern.compile("^P(?:\\d+D)?(?:T(?:\\d+H)?(?:\\d+M)?(?:\\d+(?:\\.\\d+)?S)?)?$");
+
+    /** Parses a retry duration, returning null when absent or malformed. */
+    private static Duration retryDuration(Object value) {
+        if (!(value instanceof String text) || !RETRY_DURATION.matcher(text).matches()
+                || text.equals("P") || text.equals("PT") || text.endsWith("T")) {
+            return null;
+        }
+        try {
+            return Duration.parse(text);
+        } catch (DateTimeParseException e) {
+            return null;
+        }
     }
 
     private void detectAutomatedCycles(Workflow workflow, List<ValidationProblem> problems) {

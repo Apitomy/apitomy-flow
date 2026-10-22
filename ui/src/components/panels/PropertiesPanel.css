@@ -335,3 +335,7 @@
   white-space: nowrap; }
 .properties-panel__open-action-type:focus-visible { outline: 2px solid var(--flow-brand, #06c); outline-offset: 2px; }
 .properties-panel__open-action-type:hover { background: var(--flow-bg-hover, #f0f0f0); }
+
+.properties-panel__retry > label,
+.properties-panel__retry > input,
+.properties-panel__retry > select { display: block; margin-top: 4px; }

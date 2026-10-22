@@ -100,10 +100,32 @@ export interface StartConfig extends ConfigExtensions {
     inputs?: WorkflowInput[] | null;
 }
 export type EndConfig = ConfigExtensions;
+/** Delay growth between retry attempts. */
+export type RetryBackoff = 'fixed' | 'exponential';
+/**
+ * Declarative retry policy for action nodes (mirrors Java `RetryPolicy`). `maxAttempts` counts every
+ * attempt including the first. `delay` (default `PT0S`) and `maxDelay` are ISO-8601 durations; `multiplier`
+ * (default 2) applies only to exponential backoff; `jitter` randomizes each delay in `[0, delay]`.
+ */
+export interface RetryPolicy extends ConfigExtensions {
+    maxAttempts?: number | null;
+    delay?: string | null;
+    backoff?: RetryBackoff | null;
+    multiplier?: number | null;
+    maxDelay?: string | null;
+    jitter?: boolean | null;
+}
+/** Workflow-level defaults. `retry` applies to action nodes that declare no policy of their own. */
+export interface WorkflowDefaults extends ConfigExtensions {
+    retry?: RetryPolicy | null;
+}
+
 export interface ActionConfig extends ConfigExtensions {
     actionType?: string | null;
     inputs?: JsonObject | null;
     outputs?: ActionOutputConfig[] | null;
+    /** Overrides `workflow.defaults.retry` wholesale. */
+    retry?: RetryPolicy | null;
 }
 export interface HumanTaskConfig extends ConfigExtensions {
     /**
@@ -182,6 +204,7 @@ export interface Workflow {
   name: string;
   description?: string;
   version?: number;
+  defaults?: WorkflowDefaults | null;
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
 }

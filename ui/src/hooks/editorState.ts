@@ -1,5 +1,5 @@
 import { applyNodeChanges, applyEdgeChanges, type Connection, type Edge, type EdgeChange, type Node, type NodeChange } from '@xyflow/react';
-import type { Workflow, WorkflowNode } from '../types/workflow.ts';
+import type { Workflow, WorkflowDefaults, WorkflowNode } from '../types/workflow.ts';
 import { TIMEOUT_HANDLE, toReactFlowEdges, toReactFlowNodes, type FlowNodeData } from '../utils/conversion.ts';
 import { layoutForImport, layoutWorkflow } from '../layout/layoutWorkflow.ts';
 import { jsonEqual } from '../utils/jsonEqual.ts';
@@ -66,6 +66,7 @@ export type EditorCommand =
     | { type: 'connect'; id: string; connection: Connection }
     | { type: 'import'; workflow: Workflow; origin?: Origin }
     | { type: 'metadata'; metadata: Pick<Workflow, 'id' | 'name' | 'description' | 'version'> }
+    | { type: 'defaults'; defaults: WorkflowDefaults | undefined }
     | { type: 'positions'; positions: Record<string, { x: number; y: number }> }
     | { type: 'commitPositions' }
     | { type: 'tidy' }
@@ -260,6 +261,12 @@ function reduceCommand(state: EditorState, command: Exclude<EditorCommand, { typ
             return { ...next, draftReset: state.draftReset + 1,
                 selectedNodeId: null, selectedEdgeId: null,
                 nodes: toReactFlowNodes(next.document.nodes), edges: toReactFlowEdges(next.document.edges) };
+        }
+        case 'defaults': {
+            const next: Workflow = { ...document };
+            if (command.defaults) next.defaults = command.defaults;
+            else delete next.defaults;
+            return commit(state, next);
         }
         case 'metadata':
             return commit(state, { ...document, id: command.metadata.id, name: command.metadata.name,

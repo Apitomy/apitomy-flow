@@ -16,6 +16,9 @@ export function ActionNode({ data, selected }: NodeProps) {
       <Handle type="target" position={Position.Left} />
       <span className="flow-node-action-icon" aria-hidden="true">{appearance?.icon ?? <PlayIcon />}</span>
       <span>{nodeData.name}</span>
+      {nodeData.retryBadge && (
+        <span className="flow-node-action-retry" title={nodeData.retryBadge.title}>{nodeData.retryBadge.label}</span>
+      )}
       <Handle type="source" position={Position.Right} />
     </div>
   );

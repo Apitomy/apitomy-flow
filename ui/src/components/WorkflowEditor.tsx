@@ -15,7 +15,7 @@ import {
 } from '@xyflow/react';
 import { Switch } from '@patternfly/react-core';
 import { UndoIcon, RedoIcon, LockIcon, LockOpenIcon, UploadIcon, DownloadIcon, ImageIcon } from '@patternfly/react-icons';
-import { type Workflow } from '../types/workflow.ts';
+import { type Workflow, type WorkflowDefaults } from '../types/workflow.ts';
 import { type ValidationProblem } from '../types/validation.ts';
 import { type EditorSpi, type FlowContext, type FlowTarget } from '../types/spi.ts';
 import { type FlowNodeData } from '../utils/conversion.ts';
@@ -29,6 +29,7 @@ import { useHostValidation } from '../hooks/useHostValidation.ts';
 import { useActionTypeCatalog } from '../hooks/useActionTypeCatalog.ts';
 import { unresolvedActionTypeIds } from '../utils/unresolvedActionTypes.ts';
 import { actionAppearanceByNodeId } from '../utils/actionAppearance.ts';
+import { retryBadgesByNodeId } from '../utils/retryPolicy.ts';
 import {
   buildProposalOverlay, formatCounts, proposalCounts, proposalDetails, splitGhostChanges, validationText, type GhostSizes,
 } from '../changeset/proposalOverlay.ts';
@@ -279,16 +280,20 @@ function WorkflowEditorInner({
     [semanticWorkflow, actionTypeCatalog]);
   const appearances = useMemo(() => actionAppearanceByNodeId(semanticWorkflow.nodes, actionTypeCatalog),
     [semanticWorkflow, actionTypeCatalog]);
+  const retryBadges = useMemo(() => retryBadgesByNodeId(semanticWorkflow.nodes, semanticWorkflow.defaults),
+    [semanticWorkflow]);
 
   const nodesWithValidation = useMemo(() => {
-    if (!validationProblems?.length && !parallelAnalysis && !unresolvedIds.size && !appearances.size) return nodes;
+    if (!validationProblems?.length && !parallelAnalysis && !unresolvedIds.size && !appearances.size
+      && !retryBadges.size) return nodes;
     return nodes.map(node => {
       const problems = validationProblems.filter(p => p.nodeId === node.id);
       const role = parallelRole(node.id, parallelAnalysis);
       const unresolved = unresolvedIds.has(node.id)
         ? String((node.data.config as { actionType?: unknown }).actionType) : undefined;
       const appearance = appearances.get(node.id);
-      return (problems.length || role || unresolved || appearance) ? {
+      const retryBadge = retryBadges.get(node.id);
+      return (problems.length || role || unresolved || appearance || retryBadge) ? {
         ...node,
         data: {
           ...node.data,
@@ -296,10 +301,11 @@ function WorkflowEditorInner({
           parallelRole: role,
           unresolvedActionType: unresolved,
           actionAppearance: appearance,
+          retryBadge,
         },
       } : node;
     });
-  }, [nodes, validationProblems, parallelAnalysis, unresolvedIds, appearances]);
+  }, [nodes, validationProblems, parallelAnalysis, unresolvedIds, appearances, retryBadges]);
 
   const selectedNodeProblems = useMemo(
     () => (selectedNodeId ? validationProblems.filter(p => p.nodeId === selectedNodeId) : []),
@@ -568,6 +574,10 @@ function WorkflowEditorInner({
     dispatch({ type: 'nodeData', id, data: dataUpdate,
       group: typingGroup(`node:${id}:${Object.keys(dataUpdate).join(',')}`) });
   }, [dispatch, typingGroup]);
+
+  const onWorkflowDefaultsChange = useCallback((defaults: WorkflowDefaults | undefined) => {
+    dispatch({ type: 'defaults', defaults });
+  }, [dispatch]);
 
   const onNodeIdChange = useCallback((oldId: string, newId: string) => {
     dispatch({ type: 'renameNode', id: oldId, newId, group: typingGroup('nodeId') });
@@ -958,6 +968,8 @@ function WorkflowEditorInner({
             onNodeChange={onNodeDataChange}
             onNodeIdChange={onNodeIdChange}
             onEdgeChange={onEdgeDataChange}
+            workflowDefaults={state.document.defaults}
+            onWorkflowDefaultsChange={onWorkflowDefaultsChange}
             spi={spi}
             readOnly={readOnly}
             sampleContext={sampleContext}
@@ -979,6 +991,8 @@ function WorkflowEditorInner({
             onNodeChange={onNodeDataChange}
             onNodeIdChange={onNodeIdChange}
             onEdgeChange={onEdgeDataChange}
+            workflowDefaults={state.document.defaults}
+            onWorkflowDefaultsChange={onWorkflowDefaultsChange}
             spi={spi}
             readOnly={readOnly}
             sampleContext={sampleContext}

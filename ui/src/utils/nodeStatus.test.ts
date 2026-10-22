@@ -24,4 +24,13 @@ describe('getNodeStatusBadge', () => {
     expect(getNodeStatusBadge({ isCurrentVisit: false, wasVisited: false, instanceStatus: 'running' }))
       .toEqual({ key: 'not-reached', label: 'Not yet reached' });
   });
+
+  it('reports a scheduled retry for the current visit', () => {
+    expect(getNodeStatusBadge({ isCurrentVisit: true, wasVisited: true, instanceStatus: 'waiting',
+      pendingRetry: { attempt: 2, maxAttempts: 5, retryAt: '2026-10-21T10:00:30Z' } }))
+      .toEqual({ key: 'waiting', label: 'Retry 2/5 scheduled at 2026-10-21T10:00:30Z' });
+    expect(getNodeStatusBadge({ isCurrentVisit: true, wasVisited: true, instanceStatus: 'waiting',
+      pendingRetry: { attempt: 2, retryAt: '2026-10-21T10:00:30Z' } }).label)
+      .toBe('Retry 2 scheduled at 2026-10-21T10:00:30Z');
+  });
 });

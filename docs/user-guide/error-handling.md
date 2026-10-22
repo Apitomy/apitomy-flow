@@ -55,17 +55,127 @@ and original error. Failure of one branch fails the instance.
 
 ### Retry limits and durability
 
-Each local action execution retry loop allows **ten retries after its initial attempt**. This is not a
-total allowance across every action in an engine call. Recovery entries, externally requested action
-retries, human input retries, ordinary edge moves, and unsuccessful edge selections use the shared
-**100-unit driver budget**. Successful selection itself adds no charge; a fork charges each child move.
-These guards bound in-process loops; they do not schedule backoff or persist an attempt policy. A repeated
-immutable input error will not repair itself through immediate retries.
+The handler decides *whether* to retry (`retry()`, `fail()`, or `transitionTo(...)`). For action nodes, the
+effective retry policy decides *how many times* and *when*. The effective policy is the node's own
+`config.retry` if present, otherwise the workflow's `defaults.retry`. A node policy replaces the default
+wholesale; fields are never merged.
 
-For transient action failures a handler can return `retry()` under its own host policy; for bad config or
-data, transition to a repair node or fail. Do not mutate `instance.context()` to increment a retry counter:
-it is an owned snapshot. Persist durable attempt counts and scheduling in the host. Declarative retry and
-backoff remain proposed in [#86](https://github.com/Apitomy/apitomy-flow/issues/86).
+```json
+"retry": {
+  "maxAttempts": 5,
+  "delay": "PT2S",
+  "backoff": "exponential",
+  "multiplier": 2.0,
+  "maxDelay": "PT1M",
+  "jitter": true
+}
+```
+
+| Field | Type | Default | Rules |
+|---|---|---|---|
+| `maxAttempts` | integer | required | `>= 1`. Counts total attempts including the first. `1` means never retry. |
+| `delay` | ISO-8601 duration | `PT0S` | `>= 0`. Base delay before the first retry. `PT0S` means retry inline. |
+| `backoff` | `"fixed"` \| `"exponential"` | `"fixed"` | |
+| `multiplier` | number | `2.0` | `> 1`. Only valid when `backoff` is `"exponential"`. |
+| `maxDelay` | ISO-8601 duration | none | `> 0` and `>= delay`. Caps the computed delay. |
+| `jitter` | boolean | `false` | When true, uses "full jitter": uniform random in `[0, computedDelay]`. |
+
+Durations use the unsigned, uppercase `PnDTnHnMnS` form shared by Java and the UI: `PT0.5S` and `P1D` are
+valid; `-PT1S`, `pt1s`, and `PT1M-30S` are not.
+
+The delay before attempt `attempt + 1` is computed by `RetryPolicy.delayFor(attempt, random)`:
+
+- fixed: `delay`
+- exponential: `delay * multiplier^(attempt - 1)`
+- capped at `maxDelay` if set, otherwise at `RetryPolicy.MAX_UNCAPPED_DELAY` (365 days); overflow
+  saturates at the cap rather than wrapping
+- with `jitter`, a uniform random value in `[0, capped]`
+
+Delays are computed and truncated to millisecond precision. A computed delay under 1 ms, including a
+jittered 0, retries inline.
+
+When the handler returns `retry()` and `attempt >= maxAttempts`, the workflow fails with
+`Exceeded retry limit (<maxAttempts - 1>): <diagnostic>`. Otherwise a zero delay re-executes the action
+inline, and a positive delay parks the node: the instance quiesces to `WAITING` until the host calls
+`retryNode`.
+
+One engine call runs at most **ten inline retries** of a node. After that, a zero-delay retry parks with
+`retryAt` set to the current time instead of looping, so a large `maxAttempts` with no delay cannot block
+the calling thread. Hosts resume it through `retryNode` like any other parked retry.
+
+The engine does not re-validate the definition passed to `completeNode` or `retryNode`. If the effective
+policy is malformed when a retry is decided (for example, after a definition edit), the workflow fails with
+`Invalid retry policy for node <id>: <reason>` rather than throwing.
+
+Exhaustion is final: the handler is not consulted again. To route somewhere else on the last failure
+(skip, transition to a repair node), check `retry.attempt() >= policy.maxAttempts()` in an attempt-aware
+handler and return that resolution instead of `retry()`.
+
+The open history entry for the node visit carries `attempt` (1-based; absent means 1) and, while parked
+for a delayed retry, `retryAt`. Because this state lives on the instance, counts survive `PENDING` parking,
+host persistence, and restarts. A later re-entry of the same node (for example, a loop) opens a new history
+entry, so the count resets per visit.
+
+#### Without a policy
+
+When no policy applies, behavior is unchanged. Each local action execution retry loop allows **ten retries
+after its initial attempt**, and exhaustion fails with `Exceeded retry limit (10): <diagnostic>`. That
+counter is local to one engine call: it is not durable and resets when an async action resumes via
+`completeNode`. Recovery entries, externally requested action retries, human input retries, ordinary edge
+moves, and unsuccessful edge selections use the shared **100-unit driver budget**. Successful selection
+itself adds no charge; a fork charges each child move.
+
+`OUTPUT_MAPPING` retries and retries on non-action nodes keep their existing semantics with or without a
+policy: they wait for another host delivery and do not consume policy attempts.
+
+#### Host scheduling contract
+
+The engine never sleeps or schedules. After each call, ask for parked retries and schedule a timer for each:
+
+```java
+for (RetryInfo retry : engine.getPendingRetries(instance)) {
+    scheduler.schedule(retry.retryAt(), () -> save(engine.retryNode(workflow, load(id), retry.nodeId())));
+}
+```
+
+`RetryInfo(nodeId, branchId, attempt, retryAt)` reports the attempt that will run next. `retryNode`
+clears `retryAt` and re-executes the node, re-resolving inputs. It returns the instance unchanged for late
+or duplicate timers (when the node is no longer parked for retry). The engine does not enforce `retryAt`.
+`cancelWorkflow` clears `retryAt` from history, so a cancelled instance never shows a scheduled retry.
+`completeNode` throws `IllegalStateException` for a node parked for retry, and `getActionInfo` returns
+`null` for it, so a scheduled retry is never mistaken for pending async work.
+
+For deterministic tests, construct the engine with an explicit `Clock` and `RandomGenerator`:
+`new WorkflowEngine(provider, listeners, handler, clock, random)`.
+
+#### Attempt-aware handlers
+
+The engine calls `handleError(instance, node, result, error, RetryContext retry)`, whose default delegates
+to the four-argument `handleError`, so existing handlers are unaffected. `RetryContext(int attempt,
+Optional<RetryPolicy> policy)` reports the failed attempt number and the effective policy. Without a
+policy, `attempt` is not durable: within the inline execution loop it is the call-local number
+(`retries + 1`), and a failed external completion (`completeNode`) always reports 1.
+
+```java
+public class TransientOnlyHandler implements WorkflowErrorHandler {
+    @Override
+    public ErrorResolution handleError(WorkflowInstance instance, WorkflowNode node, NodeResult result,
+                                       WorkflowError error, RetryContext retry) {
+        if (error.getCause() instanceof IllegalArgumentException) {
+            return ErrorResolution.fail();
+        }
+        // Without a declared policy, apply a host ceiling to the call-local attempt count.
+        if (retry.policy().isEmpty() && retry.attempt() > 3) {
+            return ErrorResolution.fail();
+        }
+        return ErrorResolution.retry();
+    }
+}
+```
+
+For bad config or data, transition to a repair node or fail: a repeated immutable input error will not
+repair itself through retries. Do not mutate `instance.context()` to count attempts; it is an owned
+snapshot.
 
 ## Errors outside recovery
 

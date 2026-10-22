@@ -34,4 +34,12 @@ describe('read-only properties panel', () => {
             onNodeChange={() => {}} onNodeIdChange={() => {}} onEdgeChange={() => {}} />);
         expect(markup).not.toContain('<fieldset');
     });
+
+    it('shows workflow default retry policy read-only when nothing is selected', () => {
+        const markup = renderToStaticMarkup(<PropertiesPanel readOnly workflowDefaults={{ retry: { maxAttempts: 4 } }}
+            onNodeChange={() => {}} onNodeIdChange={() => {}} onEdgeChange={() => {}} />);
+        expect(markup).toMatch(/<fieldset[^>]*disabled/);
+        expect(markup).toContain('Workflow defaults');
+        expect(markup).toContain('value="4"');
+    });
 });
