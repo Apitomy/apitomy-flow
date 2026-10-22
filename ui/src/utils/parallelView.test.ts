@@ -8,6 +8,7 @@ import {
   branchPaths,
   simNodeClass,
   parallelRole,
+  traversedEdgeIds,
 } from './parallelView.ts';
 import { type ParallelAnalysis } from '../simulation/parallelRegions.ts';
 
@@ -189,5 +190,48 @@ describe('parallelRole', () => {
   });
   it('prefers "fork" if a node is somehow both fork and join', () => {
     expect(parallelRole('x', analysisStub(['x'], ['x']))).toBe('fork');
+  });
+});
+
+function joinAnalysisStub(joins: Record<string, string[]>): ParallelAnalysis {
+  return {
+    isFork: () => false,
+    isJoin: (id) => id in joins,
+    joinFor: () => undefined,
+    incomingEdgeIds: (id) => new Set(joins[id] ?? []),
+    problems: [],
+  };
+}
+
+describe('traversedEdgeIds', () => {
+  it('collects the arrival edge of every history entry', () => {
+    const history = [entry('start'), entry('a', { edgeId: 'e1' }), entry('b', { edgeId: 'e2' })];
+    expect(traversedEdgeIds(history, {}, joinAnalysisStub({}))).toEqual(new Set(['e1', 'e2']));
+  });
+
+  it('includes every incoming edge of a join that has fired', () => {
+    const history = [
+      entry('fork'),
+      entry('a', { branchId: 'root.0', edgeId: 'f-a' }),
+      entry('b', { branchId: 'root.1', edgeId: 'f-b' }),
+      entry('j', { branchId: 'j#join', edgeId: 'b-j' }),
+    ];
+    const analysis = joinAnalysisStub({ j: ['a-j', 'b-j'] });
+    expect(traversedEdgeIds(history, {}, analysis)).toEqual(new Set(['f-a', 'f-b', 'a-j', 'b-j']));
+  });
+
+  it('includes edges of branches already waiting at a join that has not fired', () => {
+    const history = [
+      entry('fork'),
+      entry('a', { branchId: 'root.0', edgeId: 'f-a' }),
+      entry('b', { branchId: 'root.1', edgeId: 'f-b' }),
+    ];
+    const analysis = joinAnalysisStub({ j: ['a-j', 'b-j'] });
+    expect(traversedEdgeIds(history, { j: ['a-j'] }, analysis)).toEqual(new Set(['f-a', 'f-b', 'a-j']));
+  });
+
+  it('tolerates a missing joinArrivals record', () => {
+    expect(traversedEdgeIds([entry('a', { edgeId: 'e1' })], undefined, joinAnalysisStub({})))
+      .toEqual(new Set(['e1']));
   });
 });
