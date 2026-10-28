@@ -145,7 +145,6 @@ Some codes in later tables can therefore be errors for malformed types and warni
 | `INVALID_INPUT_DEFINITION` | Start node input entry is missing a name |
 | `DUPLICATE_INPUT_NAME` | Start node has multiple inputs with the same name |
 | `MISSING_ACTION_INPUTS` | Action node has no inputs defined |
-| `MISSING_ACTION_OUTPUTS` | Action node has no outputs defined |
 | `DUPLICATE_OUTPUT_NAME` | Action or human-task node has duplicate output names |
 | `EMPTY_ACTION_INPUT_EXPRESSION` | Action node input has an empty or blank EL expression |
 | `MISSING_TASK_DESCRIPTION` | Human task node has no description |

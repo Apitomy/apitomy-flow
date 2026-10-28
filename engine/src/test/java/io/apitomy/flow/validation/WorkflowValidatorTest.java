@@ -120,11 +120,11 @@ class WorkflowValidatorTest {
     }
 
     @Test
-    void missingActionOutputs() {
+    void missingActionOutputsIsNotAProblem() {
         Workflow w = new Workflow("w", "W", null, null,
             List.of(startNode("start"), actionNode("a", "test"), endNode("end")),
             List.of(edge("e1", "start", "a"), edge("e2", "a", "end")));
-        assertTrue(hasCode(validate(w), "MISSING_ACTION_OUTPUTS"));
+        assertFalse(hasCode(validate(w), "MISSING_ACTION_OUTPUTS"));
     }
 
     @Test

@@ -108,5 +108,5 @@ Action nodes must include an `actionType` field and should declare `inputs` and 
 - **`outputs`** — list of `{name, type, required}` with optional `contextKey`. Missing/null required
   outputs enter error recovery before any output is merged.
 
-Absent declarations produce `MISSING_ACTION_INPUTS` / `MISSING_ACTION_OUTPUTS` warnings. The executor also
+An absent `inputs` declaration produces a `MISSING_ACTION_INPUTS` warning; `outputs` is optional. The executor also
 receives the full config map as `nodeConfig`.
