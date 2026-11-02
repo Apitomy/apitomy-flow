@@ -243,15 +243,32 @@ describe('node lifecycle', () => {
         expect(state.context.secondResult).toBe('B');
     });
 
-    it('preserves the flat-merge for a receive-event node with no output mappings declared', () => {
+    it('writes nothing to context for a receive-event node with no output mappings declared', () => {
         const wf = workflow(
             [node('start', 'start'), node('recv', 'receive-event', { eventType: 'order.created' }), node('end', 'end')],
             [edge('e1', 'start', 'recv'), edge('e2', 'recv', 'end')],
         );
-        let state = stepSimulation(wf, startSimulation(wf, {}));
+        let state = stepSimulation(wf, startSimulation(wf, { existing: 'keep' }));
         state = resumeSimulation(wf, state, { output: { orderId: 'ord-42', storeId: 's1' } });
-        expect(state.context.orderId).toBe('ord-42');
-        expect(state.context.storeId).toBe('s1');
+        expect(state.context).toEqual({ existing: 'keep' });
+    });
+
+    it('stores the whole event under `event` with an event -> event mapping', () => {
+        const wf = workflow(
+            [
+                node('start', 'start'),
+                node('recv', 'receive-event', {
+                    eventType: 'order.created',
+                    outputs: [{ contextKey: 'event', expression: 'event' }],
+                }),
+                node('end', 'end'),
+            ],
+            [edge('e1', 'start', 'recv'), edge('e2', 'recv', 'end')],
+        );
+        let state = stepSimulation(wf, startSimulation(wf, {}));
+        state = resumeSimulation(wf, state, { output: { orderId: 'ord-42' } });
+        expect(state.context.event).toEqual({ orderId: 'ord-42' });
+        expect(state.context.orderId).toBeUndefined();
     });
 
     it('evaluates a receive-event node\'s output mappings against the event, replacing the flat merge', () => {

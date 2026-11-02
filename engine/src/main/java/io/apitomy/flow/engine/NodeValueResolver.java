@@ -118,9 +118,13 @@ final class NodeValueResolver {
         }
     }
 
-    /** Event mappings all see the same pre-merge context; a failed mapping publishes no partial output. */
+    /**
+     * Resolves the values a completed node writes into the context. A receive-event node writes only its
+     * declared output mappings (nothing when none are declared); the mappings all see the same pre-merge
+     * context, and a failed mapping publishes no partial output.
+     */
     Map<String, Object> mergeOutput(WorkflowInstance instance, WorkflowNode node, Map<String, Object> output) {
-        if (node.typedConfig() instanceof NodeConfig.ReceiveEvent config && !config.outputs().isEmpty()) {
+        if (node.typedConfig() instanceof NodeConfig.ReceiveEvent config) {
             Map<String, Object> event = output == null ? Map.of() : output;
             Map<String, Object> mapped = new HashMap<>();
             for (NodeConfig.Mapping mapping : config.outputs()) {

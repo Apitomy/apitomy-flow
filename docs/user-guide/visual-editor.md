@@ -161,8 +161,9 @@ A panel on the right side shows configuration fields for the selected node or ed
 
 - Name (all node types)
 - Action Type (action nodes)
-- Event Type, Match Expressions, Lookback (`run-start` default, `none`, or a duration), and Output
-  mappings (receive-event nodes)
+- Event Type, Match Expressions, Lookback (`run-start` default, `none`, or a duration), and Outputs
+  (receive-event nodes; each output is a Name plus an EL expression over `event`, and with no outputs
+  nothing is written to the context)
 - Title (an EL expression for the task inbox subject; blank uses the node name), Description, Inputs
   (label/expression pairs), and Outputs (human task nodes). Each output is a
   form field the assignee fills in to complete the task and supports rich authoring metadata: name,
@@ -298,7 +299,8 @@ aid; host execution and full Jakarta EL behavior require verification with the J
    fork; it is not necessarily one transition-budget unit. **Reset** clears the run.
 4. Where a node would block for real work — `action`, `human-task`, or `receive-event` — the
    simulation pauses so you can supply a **mock output** (JSON). The output is merged into the
-   context using declared output aliases and receive-event mappings, and the run continues. `wait`
+   context using declared output aliases and receive-event outputs (a receive-event node with no outputs
+   writes nothing), and the run continues. `wait`
    nodes route through immediately (no input needed); real engine waits pause for external completion.
 
 **Expression support:** the browser supports JSON property/index access, literals, arithmetic,

@@ -81,7 +81,8 @@ Blocks until a matching external event arrives.
 
 - **Config**: `eventType` (required) and `match` expressions (optional) for event correlation
 - **Behavior**: The host uses `matchesEvent` to correlate, then `completeNode` to deliver a matching event.
-  Optional `outputs` expressions map selected event values into context.
+  Optional `outputs` (`contextKey` + EL `expression` over `event`) write selected event values into
+  context; with no outputs, nothing from the event is written to context.
 - **Timeout** (optional): `timeout` is a positive ISO 8601 duration (e.g. `PT1H`). A node with a timeout
   must have exactly one outgoing edge with `isTimeout: true` (like a BPMN boundary timer) plus at least one
   normal edge. The host schedules a timer from `ReceiveEventInfo.timeout()` and calls

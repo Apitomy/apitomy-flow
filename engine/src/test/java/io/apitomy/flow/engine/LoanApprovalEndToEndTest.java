@@ -98,7 +98,7 @@ class LoanApprovalEndToEndTest {
                 ),
                 receiveEventNode("await-funding", "funding-confirmed", List.of(
                     "event.loanId == context.loanId"
-                )),
+                ), List.of(Map.of("contextKey", "fundingReference", "expression", "event.fundingReference"))),
                 actionNode("disburse-loan", "disburse-loan",
                     Map.of("Applicant", "context.applicantName", "Loan Amount", "context.loanAmount",
                            "Funding Reference", "context.fundingReference"),

@@ -40,6 +40,9 @@ fields. Configuration extensions belong in namespaced JSON keys.
 
 - Replace mutation of Java context/config/history collections with construction of new values. Nested JSON
   is owned by snapshots; opaque Java objects are still host-owned immutable references.
+- Add explicit `outputs` to receive-event nodes whose event payload is read downstream; a node without
+  outputs no longer flat-merges the event into context (see
+  [Migrating from the flat merge](event-correlation.md#migrating-from-the-flat-merge)).
 - Enumerate `activeBranches` and use node-addressed completion/info methods when parallel work is possible.
   `currentNodeId` alone cannot identify multiple parked branches.
 - Remove duplicate executor registrations and malformed extension results; inspect structured

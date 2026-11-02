@@ -280,7 +280,8 @@ class WorkflowEngineParallelTest {
     private WorkflowNode parkedNode(String id, NodeType type) {
         return switch (type) {
             case HUMAN_TASK -> humanTaskNode(id);
-            case RECEIVE_EVENT -> receiveEventNode(id, "approved");
+            case RECEIVE_EVENT -> receiveEventNode(id, "approved", List.of(),
+                List.of(Map.of("contextKey", "approved", "expression", "event.approved")));
             case WAIT -> waitNode(id, "PT1H");
             case ACTION -> actionNode(id, "pending");
             default -> throw new IllegalArgumentException("Not a parked node type: " + type);

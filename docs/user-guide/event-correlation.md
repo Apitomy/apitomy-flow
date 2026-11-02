@@ -211,8 +211,10 @@ The engine does not provide an event bus or exactly-once completion.
 
 ## Event output mappings
 
-Without mappings (absent, null, or empty `outputs`), the raw result payload is flat-merged into context.
-With mappings, only the declared keys are merged:
+A receive-event node writes only what its `outputs` declare. Each output has a `contextKey` (the name of
+the context key to write) and an EL `expression` evaluated against the received `event`. Without outputs
+(absent, null, or empty `outputs`), **nothing** is written to the context; the event is still consumed and
+the node still completes and routes normally.
 
 ```json
 {
@@ -230,3 +232,23 @@ mapping's newly written key. `ReceiveEventInfo.outputMappings()` exposes the dec
 exception enters structured `OUTPUT_MAPPING` recovery without merging a partial result; RETRY leaves the
 receiver parked for another delivery. Shared [executable fixtures](../developer-guide/documentation-checks.md)
 cover mappings and serialized parallel resumes.
+
+To keep the whole event, declare a single output that stores it under one key:
+
+```json
+"outputs": [ { "contextKey": "event", "expression": "event" } ]
+```
+
+Downstream nodes then read fields as `context.event.<field>`.
+
+### Migrating from the flat merge
+
+Earlier releases flat-merged the raw event payload into context when a receive-event node declared no
+outputs (for example, a payload `{"fundingReference": "WIRE-1"}` produced `context.fundingReference`).
+That implicit merge has been removed ([#229](https://github.com/Apitomy/apitomy-flow/issues/229)). For each
+receive-event node without outputs whose event fields are read later, either:
+
+- declare one output per field that later nodes read, keeping their existing references, e.g.
+  `{ "contextKey": "fundingReference", "expression": "event.fundingReference" }`; or
+- declare `{ "contextKey": "event", "expression": "event" }` and change downstream references from
+  `context.<field>` to `context.event.<field>`.
