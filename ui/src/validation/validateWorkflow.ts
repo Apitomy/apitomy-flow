@@ -144,8 +144,9 @@ function validateStructure(workflow: Workflow, problems: ValidationProblem[]) {
     }
 
     const outputsVal = action.config.outputs;
+    // Outputs are optional for action nodes; only validate them when present.
     if (outputsVal === undefined || outputsVal === null) {
-      problems.push(problem('warning', 'MISSING_ACTION_OUTPUTS', 'Action node has no outputs defined', action.id));
+      // nothing to validate
     } else if (!Array.isArray(outputsVal)) {
       problems.push(problem('warning', 'INVALID_OUTPUTS_TYPE', 'Action node outputs must be a List', action.id));
     } else {

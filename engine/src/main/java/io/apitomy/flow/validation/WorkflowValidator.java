@@ -176,10 +176,8 @@ public class WorkflowValidator {
                 }
             }
 
-            if (config.wire().get("outputs") == null) {
-                problems.add(ValidationProblem.warning("MISSING_ACTION_OUTPUTS",
-                    "Action node has no outputs defined", action.id()));
-            } else {
+            // Outputs are optional for action nodes; only validate them when present.
+            if (config.wire().get("outputs") != null) {
                 validateOutputNames(config.outputs(), action.id(), problems);
             }
         });
