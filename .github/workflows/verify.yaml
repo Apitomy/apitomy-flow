@@ -17,7 +17,7 @@ jobs:
         uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6
         with:
           distribution: temurin
-          java-version: 21
+          java-version: 25
       # Pre-fetch the Maven distribution used by the wrapper, retrying transient download failures
       # (e.g. Maven Central hiccups) with exponential backoff: 5s, 10s, 20s, 40s between attempts.
       - name: Download Maven (with retry)
@@ -43,7 +43,7 @@ jobs:
       - name: Set up Node.js 22
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
-          node-version: 24.22.2
+          node-version: 26.13.0
           cache: npm
           cache-dependency-path: ui/package-lock.json
       - name: Install dependencies
@@ -73,7 +73,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
-          node-version: 24.22.2
+          node-version: 26.13.0
           cache: npm
           cache-dependency-path: |
             ui/package-lock.json
