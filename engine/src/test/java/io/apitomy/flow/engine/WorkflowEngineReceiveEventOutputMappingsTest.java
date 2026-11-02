@@ -82,19 +82,35 @@ class WorkflowEngineReceiveEventOutputMappingsTest {
     }
 
     @Test
-    void completingWithNoMappingsPreservesFlatMerge() {
+    void completingWithNoMappingsWritesNothingToContext() {
         WorkflowEngine engine = engine();
         Workflow workflow = new Workflow("wf", "W", null, null,
             List.of(startNode("start"), receiveEventNode("wait", "order.created"), endNode("end")),
             List.of(edge("e1", "start", "wait"), edge("e2", "wait", "end")));
-        WorkflowInstance waiting = engine.startWorkflow(workflow, Map.of());
+        WorkflowInstance waiting = engine.startWorkflow(workflow, Map.of("existing", "keep"));
 
         WorkflowInstance completed = engine.completeNode(workflow, waiting, "wait",
             new NodeResult(NodeResultStatus.COMPLETED, Map.of("orderId", "ord-42", "storeId", "s1")));
 
         assertEquals(InstanceStatus.COMPLETED, completed.status());
-        assertEquals("ord-42", completed.context().get("orderId"));
-        assertEquals("s1", completed.context().get("storeId"));
+        assertEquals(Map.of("existing", "keep"), completed.context());
+    }
+
+    @Test
+    void eventToEventMappingStoresWholePayloadUnderEvent() {
+        WorkflowEngine engine = engine();
+        WorkflowNode receive = receiveEventNode("wait", "order.created", List.of(),
+            List.of(Map.of("contextKey", "event", "expression", "event")));
+        Workflow workflow = new Workflow("wf", "W", null, null,
+            List.of(startNode("start"), receive, endNode("end")),
+            List.of(edge("e1", "start", "wait"), edge("e2", "wait", "end")));
+        WorkflowInstance waiting = engine.startWorkflow(workflow, Map.of());
+
+        WorkflowInstance completed = engine.completeNode(workflow, waiting, "wait",
+            new NodeResult(NodeResultStatus.COMPLETED, Map.of("orderId", "ord-42")));
+
+        assertEquals(Map.of("orderId", "ord-42"), completed.context().get("event"));
+        assertNull(completed.context().get("orderId"));
     }
 
     @Test

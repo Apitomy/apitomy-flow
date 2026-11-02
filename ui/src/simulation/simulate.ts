@@ -293,21 +293,20 @@ export function resumeSimulation(
 }
 
 /**
- * Resolves what should actually be merged into context for a node's raw mock output: for a
- * `receive-event` node with a non-empty `config.outputs` (output mappings), evaluates each
- * mapping's expression against the event and the current (pre-merge) context; for every other
- * node — including a receive-event node with no mappings declared — falls through to
- * {@link resolveContextKeys}, which is a no-op when the node declares no `outputs` at all
- * (preserving the flat merge for receive-event nodes with no mappings). Mirrors the Java engine's
- * `WorkflowEngine.resolveMergeOutput`.
+ * Resolves what should actually be merged into context for a node's raw mock output: a
+ * `receive-event` node writes only its `config.outputs` mappings, each evaluated against the event
+ * and the current (pre-merge) context, and writes nothing when no mappings are declared; every other
+ * node falls through to {@link resolveContextKeys}. Mirrors the Java engine's
+ * `NodeValueResolver.mergeOutput`.
  */
 function resolveMergeOutput(
     node: WorkflowNode | undefined,
     context: Record<string, unknown>,
     rawOutput: Record<string, unknown>,
 ): Record<string, unknown> {
-    if (node?.type === 'receive-event' && Array.isArray(node.config.outputs) && node.config.outputs.length > 0) {
-        return applyEventOutputMappings(node.config.outputs, context, rawOutput);
+    if (node?.type === 'receive-event') {
+        const outputs = Array.isArray(node.config.outputs) ? node.config.outputs : [];
+        return applyEventOutputMappings(outputs, context, rawOutput);
     }
     return resolveContextKeys(node, rawOutput);
 }

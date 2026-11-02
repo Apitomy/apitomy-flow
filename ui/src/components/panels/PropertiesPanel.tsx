@@ -582,7 +582,11 @@ export function PropertiesPanel(props: PropertiesPanelProps) {
               />
             </div>
             <div className="properties-panel__field">
-              <label>Output mappings</label>
+              <label>Outputs</label>
+              <div className="properties-panel__hint">
+                Each output writes the value of an expression over the received <code>event</code> to the
+                named context key. With no outputs, nothing is written to the context.
+              </div>
               <div className="properties-panel__inputs-list">
                 {getOutputMappings(eventConfig).map((mapping, i) => (
                   <div key={i} className="properties-panel__input-item">
@@ -590,7 +594,7 @@ export function PropertiesPanel(props: PropertiesPanelProps) {
                       <input
                         type="text"
                         value={mapping.contextKey ?? ''}
-                        placeholder="Context key"
+                        placeholder="Name"
                         onChange={(e) => {
                           const outputs = getOutputMappings(eventConfig);
                           outputs[i] = { ...outputs[i], contextKey: e.target.value };
@@ -613,7 +617,7 @@ export function PropertiesPanel(props: PropertiesPanelProps) {
                       />
                       <button
                         className="properties-panel__match-remove"
-                        title="Remove output mapping"
+                        title="Remove output"
                         onClick={() => {
                           const outputs = getOutputMappings(eventConfig).filter((_, j) => j !== i);
                           onNodeChange(selectedNode.id, {
@@ -638,7 +642,7 @@ export function PropertiesPanel(props: PropertiesPanelProps) {
                     });
                   }}
                 >
-                  + Add output mapping
+                  + Add output
                 </button>
               </div>
             </div>

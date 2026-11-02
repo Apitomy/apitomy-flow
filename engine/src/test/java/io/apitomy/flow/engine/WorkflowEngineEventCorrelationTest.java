@@ -105,7 +105,7 @@ class WorkflowEngineEventCorrelationTest {
     }
 
     @Test
-    void completeReceiveEventMergesEventPayload() {
+    void completeReceiveEventWithoutOutputsDoesNotMergeEventPayload() {
         Workflow workflow = receiveEventWorkflow("notify");
         WorkflowInstance waiting = engine.startWorkflow(workflow, Map.of());
 
@@ -114,8 +114,8 @@ class WorkflowEngineEventCorrelationTest {
             new NodeResult(NodeResultStatus.COMPLETED, eventPayload));
 
         assertEquals(InstanceStatus.COMPLETED, completed.status());
-        assertEquals("hello", completed.context().get("message"));
-        assertEquals("system", completed.context().get("sender"));
+        assertFalse(completed.context().containsKey("message"));
+        assertFalse(completed.context().containsKey("sender"));
     }
 
     @Test

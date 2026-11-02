@@ -163,7 +163,8 @@ class ReceiveEventTimeoutTest {
     void timeoutsOnConcurrentReceiveEventsAreIndependent() {
         Workflow workflow = new Workflow("w", "W", null, null,
             List.of(startNode("start"), receiveEventNodeWithTimeout("a", "evA", "PT1M"),
-                receiveEventNodeWithTimeout("b", "evB", "PT2M"),
+                receiveEventNodeWithTimeout("b", "evB", "PT2M",
+                    List.of(Map.of("contextKey", "paid", "expression", "event.paid"))),
                 actionNode("aMerge", "noop"), actionNode("bMerge", "noop"),
                 actionNode("join", "noop"), endNode("end")),
             List.of(edge("f1", "start", "a"), edge("f2", "start", "b"),
