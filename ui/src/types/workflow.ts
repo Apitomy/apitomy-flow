@@ -112,6 +112,12 @@ export interface HumanTaskConfig extends ConfigExtensions {
      */
     title?: string | null;
     description?: string | null;
+    /**
+     * Optional markdown body template with embedded `${...}` EL expressions, such as
+     * `## Review ${context.cveId}`. Resolved to raw (unescaped) markdown; when absent, blank, or
+     * unparseable, the description is used. A failing expression renders as an empty string.
+     */
+    body?: string | null;
     inputs?: JsonObject | null;
     outputs?: HumanTaskOutput[] | null;
 }

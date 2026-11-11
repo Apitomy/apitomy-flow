@@ -252,6 +252,30 @@ class WorkflowValidatorTest {
     }
 
     @Test
+    void invalidTaskBodyExpressionIsAWarning() {
+        for (String body : List.of("Hi ${'a' +=}", "Hi ${context.name")) {
+            WorkflowNode task = new WorkflowNode("ht", NodeType.HUMAN_TASK, "ht",
+                Map.of("body", body, "description", "d"), new Position(200, 0));
+            Workflow w = new Workflow("w", "W", null, null,
+                List.of(startNode("start"), task, endNode("end")),
+                List.of(edge("e1", "start", "ht"), edge("e2", "ht", "end")));
+            assertTrue(validate(w).stream().anyMatch(p -> p.code().equals("INVALID_TASK_BODY_EXPRESSION")
+                && p.severity() == ValidationSeverity.WARNING), body);
+        }
+    }
+
+    @Test
+    void validTaskBodyTemplateHasNoProblem() {
+        WorkflowNode task = new WorkflowNode("ht", NodeType.HUMAN_TASK, "ht",
+            Map.of("body", "## ${context.id}\n\nPlain {braces} and **${'x' += context.y}**", "description", "d"),
+            new Position(200, 0));
+        Workflow w = new Workflow("w", "W", null, null,
+            List.of(startNode("start"), task, endNode("end")),
+            List.of(edge("e1", "start", "ht"), edge("e2", "ht", "end")));
+        assertFalse(hasCode(validate(w), "INVALID_TASK_BODY_EXPRESSION"));
+    }
+
+    @Test
     void missingTaskOutputs() {
         Workflow w = new Workflow("w", "W", null, null,
             List.of(startNode("start"), humanTaskNode("ht"), endNode("end")),

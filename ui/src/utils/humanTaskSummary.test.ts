@@ -28,4 +28,14 @@ describe('humanTaskSummary', () => {
   it('returns null for other node types', () => {
     expect(humanTaskSummary(node('action'), visit())).toBeNull();
   });
+
+  it('includes the body recorded on the visit as raw text', () => {
+    expect(humanTaskSummary(node('human-task', { body: '## ${context.id}' }), visit({ title: 'T', body: '## A-1' })))
+      .toEqual({ title: 'T', body: '## A-1' });
+  });
+
+  it('omits the body when the visit recorded none or the node was not visited', () => {
+    expect(humanTaskSummary(node('human-task', { body: 'x' }), visit({ title: 'T' }))).toEqual({ title: 'T' });
+    expect(humanTaskSummary(node('human-task', { body: 'x' }), null)).toEqual({});
+  });
 });

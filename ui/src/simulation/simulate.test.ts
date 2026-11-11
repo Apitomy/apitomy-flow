@@ -72,6 +72,20 @@ describe('recorded inputs', () => {
         expect(title('start')).toBeUndefined();
     });
 
+    it('records the rendered body only on human-task entries that configure one', () => {
+        const wf = workflow([
+            node('start', 'start'),
+            node('withBody', 'human-task', { body: 'Item ${context.id}', description: 'd' }),
+            node('withoutBody', 'human-task', { description: 'd' }),
+            node('end', 'end'),
+        ], [edge('e1', 'start', 'withBody'), edge('e2', 'withBody', 'withoutBody'), edge('e3', 'withoutBody', 'end')]);
+        const state = runWithMocks(wf, { id: 'A-1' }, [{ id: 'B-2' }, {}]);
+        const body = (id: string) => state.history.find(h => h.nodeId === id)?.body;
+        expect(body('withBody')).toBe('Item A-1');
+        expect(body('withoutBody')).toBeUndefined();
+        expect(body('start')).toBeUndefined();
+    });
+
     it('records no inputs when an expression cannot be resolved', () => {
         const wf = workflow([
             node('start', 'start'),

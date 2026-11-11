@@ -23,6 +23,9 @@ import java.util.Map;
  *                      or they could not be resolved
  * @param title         the task title computed when a human-task node was entered (its resolved
  *                      {@code title} expression, or the node name); {@code null} for other node types
+ * @param body          the task body rendered when a human-task node with a configured {@code body} was
+ *                      entered (raw markdown); {@code null} for other node types and for human tasks
+ *                      without a body, whose description is static on the node
  */
 public record HistoryEntry(
     String nodeId,
@@ -34,12 +37,22 @@ public record HistoryEntry(
     Map<String, Object> output,
     String branchId,
     @JsonInclude(JsonInclude.Include.NON_NULL) Map<String, Object> input,
-    @JsonInclude(JsonInclude.Include.NON_NULL) String title
+    @JsonInclude(JsonInclude.Include.NON_NULL) String title,
+    @JsonInclude(JsonInclude.Include.NON_NULL) String body
 ) {
     /** Owns output and input data while preserving null for an entry without them. */
     public HistoryEntry {
         output = JsonSnapshots.map(output);
         input = JsonSnapshots.map(input);
+    }
+
+    /**
+     * Back-compat constructor for callers that predate body recording; sets {@code body} to {@code null}.
+     */
+    public HistoryEntry(String nodeId, String nodeName, String edgeId, String edgeCondition,
+                        Instant enteredOn, Instant completedOn, Map<String, Object> output, String branchId,
+                        Map<String, Object> input, String title) {
+        this(nodeId, nodeName, edgeId, edgeCondition, enteredOn, completedOn, output, branchId, input, title, null);
     }
 
     /**

@@ -48,6 +48,14 @@ describe('nodeFieldComparisons', () => {
     expect(comparisons).toEqual([{ field: 'description', before: 'Old text', after: 'New text' }]);
   });
 
+  it('expands a changed human-task body to a body row', () => {
+    const record = nodeRecord({
+      baseNode: { id: 't', type: 'human-task', name: 'T', config: { body: '## ${context.a}' }, position: { x: 0, y: 0 } },
+      compareNode: { id: 't', type: 'human-task', name: 'T', config: { body: '## ${context.b}' }, position: { x: 0, y: 0 } },
+    });
+    expect(nodeFieldComparisons(record)).toEqual([{ field: 'body', before: '## ${context.a}', after: '## ${context.b}' }]);
+  });
+
   it('expands action config into specific changed rows only', () => {
     const record = nodeRecord({
       baseNode: {

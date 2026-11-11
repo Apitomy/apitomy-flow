@@ -7,12 +7,18 @@ export interface HumanTaskSummary {
   title?: string;
   /** The node's authored description; absent when blank. */
   description?: string;
+  /**
+   * The raw markdown body rendered for the selected visit; absent when the node was not visited or the
+   * visit recorded no body (the node has no `body`, so hosts show the description instead).
+   */
+  body?: string;
 }
 
 /**
  * Builds the task summary for a human-task node's State tab. The title is the one recorded on the
  * selected visit; history recorded before titles existed falls back to the node name, which is what a host
- * would have shown then. Other node types have no summary.
+ * would have shown then. The body is the one recorded on the selected visit, if any. Other node types have
+ * no summary.
  *
  * @param node the node being shown
  * @param history the selected visit, or `null` when the node was not visited
@@ -25,5 +31,6 @@ export function humanTaskSummary(node: WorkflowNode, history: HistoryEntry | nul
   return {
     ...(history ? { title: history.title ?? node.name } : {}),
     ...(description ? { description } : {}),
+    ...(history?.body !== undefined ? { body: history.body } : {}),
   };
 }

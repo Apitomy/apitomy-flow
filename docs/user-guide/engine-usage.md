@@ -150,6 +150,7 @@ Returns `HumanTaskInfo` for an eligible parked human-task node, null otherwise. 
 | `nodeName` | String | The human-task node name |
 | `title` | String | The task title (e.g. an inbox subject): the node's `title` expression resolved, else the node name |
 | `description` | String | Instructions for the person completing the task |
+| `body` | String | Rich task content as raw markdown: the node's `body` template rendered, else the `description` |
 | `inputs` | Map<String, Object> | Display labels as keys, resolved context values as values |
 | `outputs` | List<OutputDefinition> | The form fields to complete the task (see below) |
 
@@ -159,6 +160,13 @@ Input expression strings resolve against instance context; non-string JSON input
 converted to text. It falls back to `nodeName` when the node has no title, the expression fails, or it
 yields `null`; a failing title is logged as a warning and never blocks the task. Use `title` rather than
 `nodeName` as the subject of task inbox items.
+
+`body` is also rendered each time the info is read. Every embedded `${...}` expression is evaluated on its
+own; one that fails or yields `null` renders as an empty string (logged as a warning), so the rest of the
+body still renders. When the node has no body, or the template cannot be parsed, `body` is the
+`description` (possibly `null`), so hosts can always render `body` as the main task content. The value is
+**raw, unescaped markdown**: context values are inserted verbatim and may contain markdown, HTML, or links
+from external data, so hosts must sanitize it when rendering.
 
 ### Output field metadata
 

@@ -2,6 +2,7 @@ import { type Workflow, type WorkflowEdge, type WorkflowNode, type NodeType } fr
 import { type HistoryEntry, type ActiveBranch } from '../types/instance.ts';
 import { evaluateCondition, ElEvaluationError, resolveExpression, type ElScope } from './elEvaluator.ts';
 import { analyzeParallelRegions, type ParallelAnalysis } from './parallelRegions.ts';
+import { renderTextTemplate } from './textTemplate.ts';
 
 /**
  * Pure, side-effect-free simulation of a workflow's routing logic, mirroring the Java
@@ -639,6 +640,8 @@ function mergeEvaluations(
 function enterEntry(node: WorkflowNode, edge: WorkflowEdge | undefined, context: Record<string, unknown>): HistoryEntry {
     const input = recordedInputs(node, context);
     const title = node.type === 'human-task' ? taskTitle(node, context) : undefined;
+    const hasBody = node.type === 'human-task' && typeof node.config.body === 'string' && node.config.body.trim() !== '';
+    const body = hasBody ? taskBody(node, context) : undefined;
     return {
         nodeId: node.id,
         nodeName: node.name,
@@ -647,7 +650,35 @@ function enterEntry(node: WorkflowNode, edge: WorkflowEdge | undefined, context:
         enteredOn: new Date().toISOString(),
         ...(input ? { input } : {}),
         ...(title !== undefined ? { title } : {}),
+        ...(body !== undefined ? { body } : {}),
     };
+}
+
+/**
+ * Renders a human task's markdown body, mirroring the engine: embedded `${...}` expressions are resolved
+ * against the context (a failing or null expression renders empty), and an absent, blank or unparseable
+ * body falls back to the description. The result is raw, unescaped markdown.
+ *
+ * @param node the human-task node
+ * @param context the context at entry time
+ * @return the rendered body, or the description (`undefined` when neither is set)
+ */
+export function taskBody(node: WorkflowNode, context: Record<string, unknown>): string | undefined {
+    if (node.type !== 'human-task') return undefined;
+    const description = typeof node.config.description === 'string' ? node.config.description : undefined;
+    const source = node.config.body;
+    if (typeof source !== 'string' || source.trim() === '') return description;
+    try {
+        return renderTextTemplate(source, expression => {
+            try {
+                return resolveExpression(expression, { context });
+            } catch {
+                return null;
+            }
+        });
+    } catch {
+        return description;
+    }
 }
 
 /**

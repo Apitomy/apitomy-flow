@@ -3,6 +3,7 @@ import { type Workflow, type WorkflowEdge, type HumanTaskOutput, type ActionOutp
 import { type ValidationProblem, type ValidationSeverity } from '../types/validation.ts';
 import { analyzeParallelRegions } from '../simulation/parallelRegions.ts';
 import { classifyExpression } from '../simulation/elEvaluator.ts';
+import { classifyTextTemplate } from '../simulation/textTemplate.ts';
 import { normalizeWorkflow } from './workflowShape.ts';
 
 function problem(severity: ValidationSeverity, code: string, message: string, nodeId?: string, edgeId?: string): ValidationProblem {
@@ -338,6 +339,18 @@ function validateSemantics(workflow: Workflow, problems: ValidationProblem[]) {
 
   // Human task node validation
   for (const node of workflow.nodes.filter(n => n.type === 'human-task')) {
+    const body = node.config.body;
+    if (typeof body === 'string' && body.trim() !== '') {
+      // Warnings only: at runtime a broken body degrades to empty expressions or the description.
+      const syntax = classifyTextTemplate(body);
+      if (syntax === 'invalid') {
+        problems.push(problem('warning', 'INVALID_TASK_BODY_EXPRESSION',
+          'Human task body contains an invalid or unterminated ${...} expression', node.id));
+      } else if (syntax === 'unsupported') {
+        problems.push(problem('warning', 'UNSUPPORTED_EXPRESSION_DIALECT',
+          'Human task body uses syntax unsupported in the browser; validate with the Java engine', node.id));
+      }
+    }
     const title = node.config.title;
     if (typeof title === 'string' && title.trim() !== '') {
       // Warnings only: at runtime a failing title falls back to the node name.

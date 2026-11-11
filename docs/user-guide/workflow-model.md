@@ -60,18 +60,25 @@ Automated work delegated to a `NodeExecutor` provided by the host application.
 
 Blocks until a human responds. The engine sets the instance to `WAITING` status.
 
-- **Config**: The engine interprets four keys:
+- **Config**: The engine interprets five keys:
     - `title` (String, optional) — an EL expression computing the task title, e.g. the subject of the item
       in a task inbox. Join text and values with the EL string concatenation operator `+=`
       (e.g. `"'Review ' += context.cveId"`; note that `+` is numeric addition in EL). When the title is
       absent or blank, fails to evaluate, or yields `null`, the node name is used instead.
     - `description` (String) — instructions for the person completing the task
+    - `body` (String, optional) — a markdown template for rich task content, with EL expressions embedded
+      as `${...}` (e.g. `"## Review ${context.cveId}\n\nSeverity: **${context.severity}**"`). Each
+      expression is evaluated separately: one that fails or yields `null` renders as an empty string and
+      is logged. Write `\${` for a literal `${`. When the body is absent or blank, or cannot be parsed
+      (e.g. an unterminated `${`), the description is used instead. The result is raw markdown and is
+      **not escaped** — context values are inserted verbatim, so hosts must sanitize it when rendering.
     - `inputs` (Map<String, Object>) — expression strings or JSON literals, resolved on entry and info reads
       (e.g. `{"Credit Score": "context.creditScore"}`)
     - `outputs` (List of `{name, type, required}`) — defines the form schema for task completion
 
   The validator emits `MISSING_TASK_DESCRIPTION` and `MISSING_TASK_OUTPUTS` warnings when these are absent,
-  and an `INVALID_TASK_TITLE_EXPRESSION` warning when the title is not valid EL.
+  an `INVALID_TASK_TITLE_EXPRESSION` warning when the title is not valid EL, and an
+  `INVALID_TASK_BODY_EXPRESSION` warning when the body has an invalid or unterminated `${...}` expression.
 - **Behavior**: Completes when the host calls `completeNode` with the response (`completeCurrentNode` for
   one parked branch). The host validates the submitted form values.
 
@@ -200,7 +207,8 @@ At a parallel wait, `currentNodeId` is null; it is a convenience for the single-
 substitute for status and branch records. Each `HistoryEntry` has an optional `branchId` tagging its visit;
 a missing history branch ID denotes `root`. Entries also record, when the node is entered, the `input`
 values it received (declared workflow inputs for a start node, resolved inputs for action and human-task
-nodes) and, for human-task nodes, the computed task `title`; both are omitted when absent, so viewers can
+nodes) and, for human-task nodes, the computed task `title` and, when the node configures a `body`, the
+rendered `body`; all are omitted when absent, so viewers can
 show per-visit values even after later nodes change the context. Java timestamps serialize as ISO strings
 with the Jackson Java Time module. Old instances missing branch collections normalize to empty collections
 in Java; that alone does not synthesize parked branches for safe resume. Hosts must migrate legacy runtime
