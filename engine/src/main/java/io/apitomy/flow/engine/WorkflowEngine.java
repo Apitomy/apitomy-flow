@@ -318,7 +318,43 @@ public class WorkflowEngine {
         List<OutputDefinition> outputs = config.outputs().stream().map(values::humanTaskOutput).toList();
 
         return new HumanTaskInfo(node.id(), node.name(), description,
-            Collections.unmodifiableMap(resolvedInputs), outputs, taskTitle(node, config, instance.context()));
+            Collections.unmodifiableMap(resolvedInputs), outputs, taskTitle(node, config, instance.context()),
+            taskBody(node, config, instance.context()));
+    }
+
+    /**
+     * Renders a human task's markdown body template against the context. A missing or blank body, or a
+     * template that cannot be parsed, falls back to the description. Each embedded expression is evaluated
+     * independently: a failing or null expression renders as an empty string. Failures are logged, never
+     * raised, so a bad body cannot block a task. The result is raw markdown and is not escaped.
+     *
+     * @param node    the human-task node
+     * @param config  the node's typed configuration
+     * @param context the instance context
+     * @return the rendered body, or the description (possibly {@code null})
+     */
+    private String taskBody(WorkflowNode node, NodeConfig.HumanTask config, Map<String, Object> context) {
+        String source = config.body();
+        if (source == null || source.isBlank()) {
+            return config.description();
+        }
+        TextTemplate template;
+        try {
+            template = TextTemplate.parse(source);
+        } catch (IllegalArgumentException error) {
+            log.warn("Body template for human task {} cannot be parsed; using the description: {}",
+                node.id(), error.getMessage());
+            return config.description();
+        }
+        return template.render(expression -> {
+            try {
+                return conditionEvaluator.resolve(expression, context);
+            } catch (Exception error) {
+                log.warn("Body expression failed for human task {}; rendering it empty: {}",
+                    node.id(), error.getMessage());
+                return null;
+            }
+        });
     }
 
     /**
@@ -947,13 +983,17 @@ public class WorkflowEngine {
                                        WorkflowNode node, WorkflowEdge viaEdge, ParallelRegions regions,
                                        Deque<BranchWork> work) {
         Instant now = Instant.now();
+        NodeConfig.HumanTask taskConfig = node.type() == NodeType.HUMAN_TASK
+            ? (NodeConfig.HumanTask) node.typedConfig() : null;
+        String taskBody = taskConfig != null && taskConfig.body() != null && !taskConfig.body().isBlank()
+            ? taskBody(node, taskConfig, instance.context()) : null;
         instance = instance.toBuilder()
             .addHistory(new HistoryEntry(node.id(), node.name(),
                 viaEdge != null ? viaEdge.id() : null,
                 viaEdge != null ? viaEdge.condition() : null,
                 now, null, null, branchId, values.recordedInputs(node, instance.context()),
-                node.type() == NodeType.HUMAN_TASK
-                    ? taskTitle(node, (NodeConfig.HumanTask) node.typedConfig(), instance.context()) : null))
+                taskConfig != null ? taskTitle(node, taskConfig, instance.context()) : null,
+                taskBody))
             .updatedOn(now)
             .build();
         WorkflowInstance enteredInstance = instance;
@@ -1239,7 +1279,7 @@ public class WorkflowEngine {
             boolean sameBranch = Objects.equals(h.branchId(), branchId);
             if (sameBranch && h.nodeId().equals(nodeId) && h.completedOn() == null) {
                 history.set(i, new HistoryEntry(h.nodeId(), h.nodeName(), h.edgeId(), h.edgeCondition(),
-                    h.enteredOn(), completedOn, output != null ? output : h.output(), h.branchId(), h.input(), h.title()));
+                    h.enteredOn(), completedOn, output != null ? output : h.output(), h.branchId(), h.input(), h.title(), h.body()));
                 break;
             }
         }

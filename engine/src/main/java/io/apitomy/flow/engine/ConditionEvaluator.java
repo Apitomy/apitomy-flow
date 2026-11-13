@@ -81,4 +81,21 @@ public class ConditionEvaluator {
             return false;
         }
     }
+
+    /**
+     * Checks whether a text template (literal text with embedded {@code ${...}} expressions, as used by
+     * human-task bodies) parses and every embedded expression is syntactically valid EL.
+     *
+     * @param template the template source
+     * @return {@code true} if the template is valid
+     */
+    public boolean isValidTemplate(String template) {
+        try {
+            return TextTemplate.parse(template).segments().stream()
+                .filter(TextTemplate.Segment::expression)
+                .allMatch(segment -> isValid(segment.text()));
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
 }

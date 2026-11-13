@@ -58,6 +58,7 @@ export function normalizeWorkflow(raw: unknown): {
         if (node.type === 'human-task') {
             optionalString('title', 'INVALID_TASK_TITLE');
             optionalString('description', 'INVALID_TASK_DESCRIPTION');
+            optionalString('body', 'INVALID_TASK_BODY');
         }
         if (node.type === 'wait') optionalString('duration', 'INVALID_WAIT_DURATION');
         if (node.type === 'receive-event') {

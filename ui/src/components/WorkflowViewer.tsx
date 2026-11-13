@@ -457,6 +457,12 @@ function NodeDetail({ node, history, visits, visitsByBranch, visitIndex, onSelec
               <ValueDisplay value={taskSummary.description} title="Description" theme={theme} />
             </div>
           )}
+          {taskSummary?.body !== undefined && (
+            <div className="workflow-viewer__context-entry">
+              <span className="workflow-viewer__context-key">Body</span>
+              <ValueDisplay value={taskSummary.body} title="Body" theme={theme} />
+            </div>
+          )}
           {inputRows.length > 0 && (
             <>
               <div className="workflow-viewer__section-label">Inputs</div>

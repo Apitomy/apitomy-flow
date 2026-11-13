@@ -280,6 +280,36 @@ describe('validateWorkflow', () => {
       expect(hasProblem(validateWorkflow(w), 'EMPTY_TASK_INPUT_EXPRESSION')).toBe(false);
     });
 
+    it('INVALID_TASK_BODY_EXPRESSION warning for a malformed or unterminated body', () => {
+      for (const body of ["Hi ${'a' +=}", 'Hi ${context.name']) {
+        const w = workflow(
+          [
+            node('start', 'start'),
+            node('t', 'human-task', { body, description: 'd', outputs: [{ name: 'x', type: 'string', required: true }] }),
+            node('end', 'end'),
+          ],
+          [edge('e1', 'start', 't'), edge('e2', 't', 'end')],
+        );
+        const found = validateWorkflow(w).find(p => p.code === 'INVALID_TASK_BODY_EXPRESSION');
+        expect(found?.severity).toBe('warning');
+        expect(found?.nodeId).toBe('t');
+      }
+    });
+
+    it('accepts a valid markdown body template', () => {
+      const w = workflow(
+        [
+          node('start', 'start'),
+          node('t', 'human-task', { body: "## ${context.id}\n\n{braces} **${'x' += context.y}**", description: 'd', outputs: [{ name: 'x', type: 'string', required: true }] }),
+          node('end', 'end'),
+        ],
+        [edge('e1', 'start', 't'), edge('e2', 't', 'end')],
+      );
+      const codes = validateWorkflow(w).map(p => p.code);
+      expect(codes).not.toContain('INVALID_TASK_BODY_EXPRESSION');
+      expect(codes).not.toContain('UNSUPPORTED_EXPRESSION_DIALECT');
+    });
+
     it('INVALID_TASK_TITLE_EXPRESSION warning for malformed title', () => {
       const w = workflow(
         [

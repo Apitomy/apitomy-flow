@@ -415,6 +415,22 @@ export function PropertiesPanel(props: PropertiesPanelProps) {
               />
             </div>
             <div className="properties-panel__field">
+              <label htmlFor={`task-body-${selectedNode.id}`}>Body (markdown template)</label>
+              <textarea
+                id={`task-body-${selectedNode.id}`}
+                rows={6}
+                value={(selectedNode.data.config.body as string) || ''}
+                placeholder={'e.g. ## Review ${context.cveId}\n\nSeverity: **${context.severity}**'}
+                onChange={(e) => onNodeChange(selectedNode.id, {
+                  config: { ...selectedNode.data.config, body: e.target.value },
+                })}
+              />
+              <div className="properties-panel__hint">
+                Rich task content shown to the assignee. Embed EL with <code>{'${...}'}</code>. Leave blank to
+                use the description.
+              </div>
+            </div>
+            <div className="properties-panel__field">
               <label>Inputs (values to display)</label>
               <MapInputsEditor
                 map={selectedNode.data.config.inputs}

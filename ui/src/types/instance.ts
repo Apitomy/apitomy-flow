@@ -26,6 +26,11 @@ export interface HistoryEntry {
    */
   title?: string;
   /**
+   * The task body rendered when a human-task node with a configured `body` was entered (raw markdown).
+   * Absent for other node types and for human tasks without a body.
+   */
+  body?: string;
+  /**
    * The branch this visit belongs to. The root (non-parallel) branch uses `"root"`; a missing value
    * also denotes the root, preserving back-compat for existing linear histories.
    */

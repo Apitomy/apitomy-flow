@@ -397,6 +397,12 @@ public class WorkflowValidator {
                     problems.add(ValidationProblem.warning("INVALID_TASK_TITLE_EXPRESSION",
                         "Human task title is not valid EL: " + title, node.id()));
                 }
+                String body = config.body();
+                if (body != null && !body.isBlank() && !conditionEvaluator.isValidTemplate(body)) {
+                    // A warning: at runtime a broken body degrades (empty expressions or the description).
+                    problems.add(ValidationProblem.warning("INVALID_TASK_BODY_EXPRESSION",
+                        "Human task body contains an invalid or unterminated ${...} expression", node.id()));
+                }
                 if (!node.config().containsKey("description")) {
                     problems.add(ValidationProblem.warning("MISSING_TASK_DESCRIPTION",
                         "Human task node has no description", node.id()));

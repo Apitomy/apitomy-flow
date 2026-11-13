@@ -65,6 +65,8 @@ public sealed interface NodeConfig permits NodeConfig.Start, NodeConfig.End, Nod
         public String title() { return text(wire, "title"); }
         /** Returns task instructions, or null. */
         public String description() { return text(wire, "description"); }
+        /** Returns the markdown body template with embedded {@code ${...}} expressions, or null. */
+        public String body() { return text(wire, "body"); }
         /** Returns literal or expression-valued inputs; absent/null means empty. */
         public Map<String, Object> inputs() { return object(wire.get("inputs")); }
         /** Returns output declarations including presentation metadata. */
