@@ -437,6 +437,44 @@ describe('validateWorkflow', () => {
       );
       expect(hasProblem(validateWorkflow(w), 'DUPLICATE_EDGE')).toBe(true);
     });
+
+    it('no DUPLICATE_EDGE when a timeout edge shares a target with a normal edge', () => {
+      const w = workflow(
+        [node('start', 'start'), node('recv', 'receive-event', { timeout: 'PT5M' }), node('work', 'end')],
+        [
+          edge('e0', 'start', 'recv'),
+          edge('e1', 'recv', 'work', { isDefault: true }),
+          edge('e2', 'recv', 'work', { isTimeout: true }),
+        ],
+      );
+      expect(hasProblem(validateWorkflow(w), 'DUPLICATE_EDGE')).toBe(false);
+    });
+
+    it('no DUPLICATE_EDGE when the timeout edge comes first', () => {
+      const w = workflow(
+        [node('start', 'start'), node('recv', 'receive-event', { timeout: 'PT5M' }), node('work', 'end')],
+        [
+          edge('e0', 'start', 'recv'),
+          edge('e1', 'recv', 'work', { isTimeout: true }),
+          edge('e2', 'recv', 'work', { isDefault: true }),
+        ],
+      );
+      expect(hasProblem(validateWorkflow(w), 'DUPLICATE_EDGE')).toBe(false);
+    });
+
+    it('DUPLICATE_EDGE still reported for two normal edges alongside a timeout edge', () => {
+      const w = workflow(
+        [node('start', 'start'), node('recv', 'receive-event', { timeout: 'PT5M' }), node('work', 'end')],
+        [
+          edge('e0', 'start', 'recv'),
+          edge('e1', 'recv', 'work', { isTimeout: true }),
+          edge('e2', 'recv', 'work', { isDefault: true }),
+          edge('e3', 'recv', 'work'),
+        ],
+      );
+      const dupes = validateWorkflow(w).filter(p => p.code === 'DUPLICATE_EDGE');
+      expect(dupes.map(p => p.edgeId)).toEqual(['e3']);
+    });
   });
 
   describe('action type value', () => {

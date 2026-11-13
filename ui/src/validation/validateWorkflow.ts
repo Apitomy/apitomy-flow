@@ -96,10 +96,12 @@ function validateStructure(workflow: Workflow, problems: ValidationProblem[]) {
     }
   }
 
-  // Duplicate edges (same source and target)
+  // Duplicate edges (same source and target). Timeout edges are excluded: a receive-event node's timeout
+  // edge commonly targets the same node as its normal edge (e.g. "do the work whether or not the event
+  // arrives"). Multiple timeout edges are reported separately as MULTIPLE_TIMEOUT_EDGES.
   const edgePairs = new Set<string>();
   for (const edge of edges) {
-    if (edge.source && edge.target) {
+    if (edge.source && edge.target && !edge.isTimeout) {
       const pair = `${edge.source}->${edge.target}`;
       if (edgePairs.has(pair)) {
         problems.push(problem('warning', 'DUPLICATE_EDGE', `Duplicate edge from ${edge.source} to ${edge.target}`, undefined, edge.id));
